@@ -1,0 +1,170 @@
+[
+  {
+    "code": "SHI-W180I2",
+    "session": "t3",
+    "patient_name": "Trần Văn Test",
+    "department": "Tiêu hóa",
+    "department_code": "tieu_hoa",
+    "doctor": "BS. Phạm Quốc Dũng",
+    "doctor_id": "bs_th_01",
+    "date": "2026-06-17",
+    "time": "08:00",
+    "created_at": "2026-06-16T11:36:24",
+    "status": "confirmed",
+    "reminders_sent": [
+      "care_eat",
+      "remind_1d",
+      "remind_2h"
+    ]
+  },
+  {
+    "code": "SHI-L5B17E",
+    "session": "3dc23fea42cd4a8888517f56de27cbcf",
+    "patient_name": "HIẾU",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "08:30",
+    "created_at": "2026-06-16T11:40:02",
+    "status": "confirmed",
+    "reminders_sent": [
+      "care_eat",
+      "remind_1d",
+      "remind_2h"
+    ]
+  },
+  {
+    "code": "SHI-RIC20Z",
+    "session": "3dc23fea42cd4a8888517f56de27cbcf",
+    "patient_name": "HIEU",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-20",
+    "time": "15:00",
+    "created_at": "2026-06-16T12:25:08",
+    "status": "confirmed",
+    "reminders_sent": [
+      "care_eat",
+      "remind_1d",
+      "remind_2h"
+    ]
+  },
+  {
+    "code": "SHI-M261TL",
+    "session": "3dc23fea42cd4a8888517f56de27cbcf",
+    "patient_name": "HIEWU",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "14:30",
+    "created_at": "2026-06-16T12:33:55",
+    "status": "confirmed",
+    "reminders_sent": [
+      "care_eat",
+      "remind_1d",
+      "remind_2h"
+    ]
+  },
+  {
+    "code": "SHI-Q3QUKF",
+    "session": "push_test",
+    "patient_name": "Nguyễn Văn Test",
+    "department": "Tiêu hóa",
+    "department_code": "tieu_hoa",
+    "doctor": "BS. Phạm Quốc Dũng",
+    "doctor_id": "bs_th_01",
+    "date": "2026-06-17",
+    "time": "08:00",
+    "created_at": "2026-06-16T12:43:51",
+    "status": "confirmed",
+    "reminders_sent": [
+      "care_eat",
+      "remind_1d",
+      "remind_2h"
+    ]
+  },
+  {
+    "code": "SHI-GBVRQE",
+    "session": "dev-66b7lnegsggmqgaju5i",
+    "patient_name": "Hieu",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "08:00",
+    "created_at": "2026-06-16T14:07:34",
+    "status": "confirmed"
+  },
+  {
+    "code": "SHI-5X38HJ",
+    "session": "verify-appt-2",
+    "patient_name": "Test User",
+    "department": "Tiêu hóa",
+    "department_code": "tieu_hoa",
+    "doctor": "BS. Phạm Quốc Dũng",
+    "doctor_id": "bs_th_01",
+    "date": "2026-06-17",
+    "time": "08:00",
+    "created_at": "2026-06-16T14:12:00",
+    "status": "confirmed"
+  },
+  {
+    "code": "SHI-WHWKTF",
+    "session": "dev-66b7lnegsggmqgaju5i",
+    "patient_name": "Hieu",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "08:00",
+    "created_at": "2026-06-16T14:23:11",
+    "status": "confirmed"
+  },
+  {
+    "code": "SHI-RKFUG8",
+    "session": "dev-66b7lnegsggmqgaju5i",
+    "patient_name": "Hiệu tran",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "08:30",
+    "created_at": "2026-06-16T14:28:35",
+    "status": "confirmed"
+  },
+  {
+    "code": "SHI-G69N5Z",
+    "session": "dev-66b7lnegsggmqgaju5i",
+    "patient_name": "Hieu",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "09:00",
+    "created_at": "2026-06-16T14:37:58",
+    "status": "confirmed"
+  },
+  {
+    "code": "SHI-XHDDC4",
+    "session": "dev-66b7lnegsggmqgaju5i",
+    "patient_name": "Hiệu",
+    "department": "Hô hấp",
+    "department_code": "ho_hap",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_hh_01",
+    "date": "2026-06-17",
+    "time": "16:00",
+    "created_at": "2026-06-16T14:38:59",
+    "status": "confirmed"
+  }
+]

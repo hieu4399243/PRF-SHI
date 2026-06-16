@@ -1,0 +1,34 @@
+{
+  "expo": {
+    "name": "SHI Health Assistant",
+    "slug": "shi-health-assistant",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0e9b8e"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.shi.healthassistant",
+      "infoPlist": {
+        "NSCalendarsUsageDescription": "Ứng dụng cần quyền truy cập lịch để thêm lịch hẹn khám của bạn.",
+        "NSCalendarsFullAccessUsageDescription": "Ứng dụng cần quyền lịch để thêm lịch hẹn khám và đặt nhắc."
+      }
+    },
+    "android": {
+      "package": "com.shi.healthassistant",
+      "permissions": ["READ_CALENDAR", "WRITE_CALENDAR"]
+    },
+    "plugins": [
+      "expo-notifications",
+      ["expo-calendar", { "calendarPermission": "Ứng dụng cần quyền lịch để thêm lịch hẹn khám của bạn." }]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": ""
+      }
+    }
+  }
+}

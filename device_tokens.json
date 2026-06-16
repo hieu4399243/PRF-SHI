@@ -1,0 +1,11 @@
+{
+  "push_test": [
+    "DEMO-PHONE-TOKEN-123"
+  ],
+  "mobile-sim-001": [
+    "ExponentPushToken[FAKE123]"
+  ],
+  "dev-66b7lnegsggmqgaju5i": [
+    "DEMO-NO-PROJECTID-TOKEN"
+  ]
+}
