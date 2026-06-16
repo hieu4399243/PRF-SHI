@@ -100,7 +100,10 @@
     "date": "2026-06-17",
     "time": "08:00",
     "created_at": "2026-06-16T14:07:34",
-    "status": "confirmed"
+    "status": "confirmed",
+    "reminders_sent": [
+      "remind_1d"
+    ]
   },
   {
     "code": "SHI-5X38HJ",
@@ -113,7 +116,10 @@
     "date": "2026-06-17",
     "time": "08:00",
     "created_at": "2026-06-16T14:12:00",
-    "status": "confirmed"
+    "status": "confirmed",
+    "reminders_sent": [
+      "remind_1d"
+    ]
   },
   {
     "code": "SHI-WHWKTF",
@@ -126,7 +132,10 @@
     "date": "2026-06-17",
     "time": "08:00",
     "created_at": "2026-06-16T14:23:11",
-    "status": "confirmed"
+    "status": "confirmed",
+    "reminders_sent": [
+      "remind_1d"
+    ]
   },
   {
     "code": "SHI-RKFUG8",
@@ -139,7 +148,10 @@
     "date": "2026-06-17",
     "time": "08:30",
     "created_at": "2026-06-16T14:28:35",
-    "status": "confirmed"
+    "status": "confirmed",
+    "reminders_sent": [
+      "remind_1d"
+    ]
   },
   {
     "code": "SHI-G69N5Z",
@@ -152,7 +164,10 @@
     "date": "2026-06-17",
     "time": "09:00",
     "created_at": "2026-06-16T14:37:58",
-    "status": "confirmed"
+    "status": "confirmed",
+    "reminders_sent": [
+      "remind_1d"
+    ]
   },
   {
     "code": "SHI-XHDDC4",

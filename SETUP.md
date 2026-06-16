@@ -14,7 +14,7 @@ Dành cho mọi thành viên. Có **script tự động** `setup.sh` lo gần h�
 
 ## 1. Cài đặt (một lệnh)
 ```bash
-cd PRF
+cd ...
 ./setup.sh
 ```
 Script sẽ:
@@ -31,13 +31,13 @@ Script sẽ:
 
 **Terminal 1 — Backend (API):**
 ```bash
-cd PRF
+cd ...
 PORT=5001 ./.venv/bin/python app.py
 ```
 
 **Terminal 2 — Worker nhắc lịch (tùy chọn):**
 ```bash
-cd PRF
+cd ...
 ./.venv/bin/python reminder_worker.py --watch
 ```
 
