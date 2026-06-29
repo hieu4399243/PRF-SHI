@@ -19,11 +19,17 @@ AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "audit_log.jsonl")
 # 1) PHÁT HIỆN CẤP CỨU  -> hướng dẫn gọi 115, không tư vấn tiếp.
 # ---------------------------------------------------------------------------
 EMERGENCY_PATTERNS = [
+    # Cấp cứu chung (đe dọa tính mạng)
     "đau ngực dữ dội", "đau thắt ngực", "khó thở nặng", "không thở được",
-    "ngất", "bất tỉnh", "co giật", "tai biến", "đột quỵ", "méo miệng",
+    "ngất", "bất tỉnh", "co giật", "tai biến", "đột quỵ",
     "liệt nửa người", "chảy máu không cầm", "ho ra máu", "nôn ra máu",
     "tự tử", "muốn chết", "tự làm hại", "khó thở dữ dội", "tím tái",
     "đau ngực lan ra tay", "hôn mê",
+    # Cấp cứu nha khoa / hàm mặt
+    "sưng mặt lan", "sưng mặt to", "sưng to cả mặt", "khó nuốt", "khó há miệng",
+    "sốt cao kèm sưng", "chảy máu không ngừng sau nhổ răng", "máu chảy không ngừng",
+    "gãy xương hàm", "chấn thương hàm mặt", "răng bị văng ra", "rụng nguyên cái răng",
+    "tai nạn gãy răng",
 ]
 
 EMERGENCY_MESSAGE = (
@@ -61,9 +67,9 @@ DIAGNOSIS_REQUEST_PATTERNS = [
 ]
 
 DISCLAIMER = (
-    "<br><span class='disclaimer'>ℹ️ Lưu ý: Tôi chỉ hỗ trợ định hướng khoa khám "
+    "<br><span class='disclaimer'>ℹ️ Lưu ý: Tôi chỉ hỗ trợ chọn dịch vụ nha khoa "
     "và đặt lịch, <b>không chẩn đoán bệnh và không kê đơn thuốc</b>. "
-    "Chẩn đoán chính xác cần bác sĩ thăm khám trực tiếp.</span>"
+    "Chẩn đoán chính xác cần nha sĩ thăm khám trực tiếp.</span>"
 )
 
 

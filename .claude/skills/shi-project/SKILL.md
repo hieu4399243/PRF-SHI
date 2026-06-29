@@ -1,12 +1,14 @@
 ---
 name: shi-project
-description: Bản đồ & kiến thức dự án "AI Health Assistant (SHI)" — backend Flask + app native Expo (đặt lịch khám, triage triệu chứng, nhắc lịch qua push). Dùng skill này khi làm việc với repo PRF-SHI để khỏi đọc lại cả project: kiến trúc, sơ đồ file, API, cách chạy local, cách deploy/share, và các khoảng trống cần vá trước khi lên production hoặc lên store.
+description: Bản đồ & kiến thức dự án "Trợ lý Nha khoa SHI" — backend Flask + app native Expo (chọn dịch vụ nha khoa qua triage, đặt lịch, nhắc lịch qua push). Dùng skill này khi làm việc với repo PRF-SHI để khỏi đọc lại cả project: kiến trúc, sơ đồ file, API, cách chạy local, hệ thống đánh giá AI (eval/), cách deploy/share, và các khoảng trống cần vá trước khi lên production hoặc lên store.
 ---
 
-# AI Health Assistant (SHI)
+# Trợ lý Nha khoa SHI
 
-Trợ lý y tế hội thoại tiếng Việt: bệnh nhân chat mô tả triệu chứng → bot phân khoa
-(triage) → đặt lịch khám → nhắc lịch qua push/lịch .ics. Đề tài demo (PRF/SHI).
+Chatbot tiếng Việt cho MỘT phòng khám nha khoa: bệnh nhân mô tả triệu chứng răng miệng
+→ bot phân loại đúng **nhóm dịch vụ nha khoa** (triage) → đặt lịch → nhắc lịch qua
+push/lịch .ics. Đề tài demo (PRF/SHI). Có **hệ thống đánh giá AI** ở `eval/` +
+`BAOCAO_DANHGIA.md` (Precision/Recall/F1, so sánh v1 vs v2).
 
 ## Kiến trúc tổng quan
 
@@ -25,10 +27,12 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 |------|---------|
 | `app.py` | Flask app + routes. Chạy `host=0.0.0.0 port=5001 debug=True`. |
 | `chatbot.py` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
-| `triage.py` | "Hàm lượng AI": phân loại triệu chứng → khoa. Hiện là **rule-based scoring** theo keyword; có `classify_with_llm()` là điểm cắm LLM (vd Claude) sau này. |
+| `triage.py` | "Hàm lượng AI": phân loại triệu chứng → **dịch vụ nha khoa**. Rule-based scoring theo keyword, có **2 phiên bản** (`v1` có dấu, `v2` không phân biệt dấu — mặc định); khớp theo ranh giới từ. `classify_with_llm()` là điểm cắm LLM (Claude). |
 | `safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `audit_log.jsonl` (NĐ 13/2023). |
 | `booking.py` | Đặt lịch, lưu `appointments.json`, loại khung giờ đã đặt. |
-| `data.py` | Dữ liệu tĩnh: `DEPARTMENTS`, `DOCTORS`, sinh khung giờ trống. Thật thì thay bằng DB. |
+| `data.py` | `DEPARTMENTS` (9 **nhóm dịch vụ nha khoa**) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase** (`_load_catalog`), không thì dùng dict seed tĩnh `_SEED_*`. |
+| `storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
+| `eval/` | **Đánh giá AI**: `dataset.jsonl` (63 câu gán nhãn), `evaluate.py` (Precision/Recall/F1, v1 vs v2 → `results.md`), `rubric.md` (định tính). Báo cáo: `BAOCAO_DANHGIA.md`. |
 | `push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `device_tokens.json`. Không có token → ghi `outbox/push_outbox.jsonl`. |
 | `reminder_worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
 | `calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
@@ -68,10 +72,12 @@ Lưu ý: macOS chiếm cổng 5000 (AirPlay) → dùng 5001.
 
 ## Khoảng trống cần vá trước khi "lên thật" / production
 
-1. **Dev server + `debug=True`** (`app.py:85`) — production phải dùng `gunicorn` và tắt debug.
-2. **`secret_key` hard-code** (`app.py:20`) — đưa vào biến môi trường.
-3. **Lưu trữ là file JSON + session in-memory** — trên cloud sẽ **mất khi restart/scale**.
-   Cần DB (Postgres/SQLite-volume) cho `appointments`, `device_tokens`, session (Redis).
+1. **Dev server + `debug=True`** (`app.py`) — production phải dùng `gunicorn` và tắt debug.
+2. **`secret_key`** — đã đọc từ env `SECRET_KEY` (fallback demo key) trong `app.py`.
+3. **Lưu trữ:** `appointments` + `device_tokens` đã tách qua `storage.py` — có `DATABASE_URL`
+   thì dùng **Postgres/Supabase** (bền vững), không thì fallback **file JSON** (local).
+   Xem `DATABASE.md` + `scripts/migrate_to_supabase.py`. **Còn lại:** session hội thoại
+   vẫn **in-memory** (`chatbot.SESSIONS`) → cần Redis/DB khi scale nhiều worker.
 4. **CORS** — chưa cấu hình; khi backend khác origin với client web cần thêm.
 5. `API_BASE` đang là IP LAN — khi deploy phải đổi sang URL HTTPS công khai.
 

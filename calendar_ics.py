@@ -22,12 +22,12 @@ def build_ics(appointment: dict) -> str:
     end = start + timedelta(minutes=APPT_DURATION_MIN)
     now = datetime.now()
 
-    summary = f"Khám {appointment['department']} - {appointment['doctor']}"
+    summary = f"Nha khoa SHI: {appointment['department']} - {appointment['doctor']}"
     description = (
-        f"Lịch hẹn tại phòng khám SHI.\\n"
+        f"Lịch hẹn tại Nha khoa SHI.\\n"
         f"Mã lịch hẹn: {appointment['code']}\\n"
         f"Bệnh nhân: {appointment.get('patient_name', 'Khách')}\\n"
-        f"Khoa: {appointment['department']}\\n"
+        f"Dịch vụ: {appointment['department']}\\n"
         f"Bác sĩ: {appointment['doctor']}\\n"
         f"Lưu ý: vui lòng đến trước giờ hẹn 15 phút."
     )
@@ -35,7 +35,7 @@ def build_ics(appointment: dict) -> str:
     lines = [
         "BEGIN:VCALENDAR",
         "VERSION:2.0",
-        "PRODID:-//SHI//AI Health Assistant//VI",
+        "PRODID:-//SHI//Nha khoa SHI//VI",
         "CALSCALE:GREGORIAN",
         "METHOD:PUBLISH",
         # Khai báo múi giờ Việt Nam (+07, không có giờ mùa hè)
@@ -55,7 +55,7 @@ def build_ics(appointment: dict) -> str:
         f"DTEND;TZID=Asia/Ho_Chi_Minh:{_fmt(end)}",
         f"SUMMARY:{summary}",
         f"DESCRIPTION:{description}",
-        "LOCATION:Phòng khám SHI",
+        "LOCATION:Nha khoa SHI",
         "STATUS:CONFIRMED",
         # Nhắc trước 1 ngày
         "BEGIN:VALARM",
@@ -90,9 +90,9 @@ def google_calendar_link(appointment: dict) -> str:
 
     params = {
         "action": "TEMPLATE",
-        "text": f"Khám {appointment['department']} - {appointment['doctor']}",
+        "text": f"Nha khoa SHI: {appointment['department']} - {appointment['doctor']}",
         "dates": f"{_fmt(start_utc)}Z/{_fmt(end_utc)}Z",
-        "details": f"Mã lịch hẹn: {appointment['code']} - Phòng khám SHI",
-        "location": "Phòng khám SHI",
+        "details": f"Mã lịch hẹn: {appointment['code']} - Nha khoa SHI",
+        "location": "Nha khoa SHI",
     }
     return "https://calendar.google.com/calendar/render?" + urlencode(params)

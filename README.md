@@ -1,8 +1,12 @@
-# AI Health Assistant (SHI)
+# Trợ lý Nha khoa SHI
 
-Chatbot **phân loại bệnh nhân vào khoa** (triage) và **đặt lịch hẹn** với phòng khám.
+Chatbot tiếng Việt cho **một phòng khám nha khoa**: phân loại mô tả triệu chứng răng
+miệng → **đúng nhóm dịch vụ** (triage) và **đặt lịch hẹn**.
 Kiến trúc: **app native React Native (Expo)** làm giao diện + **backend Python (Flask)**
-làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch & nhắc ăn uống).
+làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
+
+> 📊 Phần **đánh giá hệ thống AI** (Precision/Recall/F1, so sánh phiên bản) nằm ở
+> `BAOCAO_DANHGIA.md` và thư mục `eval/`.
 
 ```
 ┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐
@@ -18,14 +22,15 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch & 
 
 | Khối | File | Mô tả |
 |------|------|-------|
-| **Triage engine** | `triage.py` | Phân loại triệu chứng tiếng Việt → đúng khoa (chấm điểm theo từ khóa; có chỗ cắm LLM Claude). |
-| **Booking** | `booking.py` | Đặt lịch hội thoại: chọn khoa → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `appointments.json`. |
+| **Triage engine** | `triage.py` | Phân loại triệu chứng răng miệng → đúng **dịch vụ** (chấm điểm từ khóa, có v1/v2; có chỗ cắm LLM Claude). |
+| **Booking** | `booking.py` | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `appointments.json`. |
 | **Safety / guardrails** | `safety.py` | Phát hiện **cấp cứu** (→ gọi 115), **lọc PII**, chặn **chẩn đoán/kê đơn**, **human handoff**, **audit log** (Nghị định 13/2023). |
 | **Conversational core** | `chatbot.py` | Máy trạng thái điều phối hội thoại, kết nối các khối. |
 | **Push** | `push.py` | Lưu device token + gửi push qua Expo Push Service. |
-| **Reminder worker** | `reminder_worker.py` | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ) + nhắc ăn uống. |
+| **Reminder worker** | `reminder_worker.py` | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ). |
 | **API server** | `app.py` | Flask API cho app native (`/api/start`, `/api/chat`, `/api/register-push`, `/api/ics`). |
-| **Dữ liệu** | `data.py` | Danh mục khoa, bác sĩ, khung giờ trống (thay bằng DB trong thực tế). |
+| **Dữ liệu** | `data.py` | Danh mục **dịch vụ nha khoa**, nha sĩ, khung giờ trống (thay bằng DB trong thực tế). |
+| **Đánh giá AI** | `eval/` | `dataset.jsonl` + `evaluate.py` (Precision/Recall/F1, v1 vs v2) + `rubric.md`; báo cáo ở `BAOCAO_DANHGIA.md`. |
 
 > Giao diện chính là **app native trong `mobile/`** (xem `mobile/README.md`).
 > File `templates/index.html` là bản web cũ, giữ lại để test nhanh trên trình duyệt.
@@ -56,11 +61,19 @@ Chi tiết: **`mobile/README.md`**.
 
 ## Thử nhanh
 
-- *“mấy hôm nay tôi ho và đau họng”* → gợi ý khoa Hô hấp / Tai Mũi Họng.
-- *“tôi đau bụng và ợ chua”* → khoa Tiêu hóa → đặt lịch.
-- *“tôi bị đau ngực dữ dội”* → cảnh báo **cấp cứu, gọi 115**.
+- *“răng tôi bị sâu và ê buốt khi ăn ngọt”* → dịch vụ **Trám răng / Sâu răng** → đặt lịch.
+- *“toi muon nieng rang”* (không dấu) → **Chỉnh nha** (nhờ engine v2 không phân biệt dấu).
+- *“chảy máu chân răng và hôi miệng”* → **Nha chu**.
+- *“mặt tôi sưng mặt lan và khó nuốt”* → cảnh báo **cấp cứu, gọi 115**.
 - *“cho tôi gặp nhân viên”* → **chuyển người thật** (handoff).
 - Gõ **“làm lại”** để bắt đầu phiên mới.
+
+## Đánh giá hệ thống AI
+```bash
+./.venv/bin/python eval/evaluate.py   # Accuracy/Macro-F1 cho v1 & v2 → ghi eval/results.md
+```
+Kết quả mới nhất: **v2 đạt Accuracy 98.4%, Macro-F1 0.99** (v1: 76.2% / 0.86).
+Chi tiết & phân tích trong `BAOCAO_DANHGIA.md`.
 
 ## File sinh ra khi chạy
 - `appointments.json` — lịch hẹn đã đặt.

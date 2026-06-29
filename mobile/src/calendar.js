@@ -55,10 +55,10 @@ export async function addAppointmentToCalendar(appt) {
   const end = new Date(start.getTime() + APPT_DURATION_MIN * 60 * 1000);
 
   const eventId = await Calendar.createEventAsync(cal.id, {
-    title: `Khám ${appt.department} - ${appt.doctor}`,
+    title: `Nha khoa SHI: ${appt.department} - ${appt.doctor}`,
     startDate: start,
     endDate: end,
-    location: "Phòng khám SHI",
+    location: "Nha khoa SHI",
     notes: `Mã lịch hẹn: ${appt.code}\nĐến trước giờ hẹn 15 phút.`,
     timeZone: "Asia/Ho_Chi_Minh",
     // Lịch tự nhắc trước 1 ngày và trước 2 giờ (thêm 1 lớp thông báo).

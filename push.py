@@ -20,43 +20,24 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
+import storage
+
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
-TOKENS_PATH = os.path.join(os.path.dirname(__file__), "device_tokens.json")
 OUTBOX_DIR = os.path.join(os.path.dirname(__file__), "outbox")
 OUTBOX_PATH = os.path.join(OUTBOX_DIR, "push_outbox.jsonl")
 
 
 # ---------------------------------------------------------------------------
 # LƯU / LẤY device token theo session (1 người có thể nhiều thiết bị)
+# Lưu trữ tách ra storage.py (JSON hoặc Postgres/Supabase tùy DATABASE_URL).
 # ---------------------------------------------------------------------------
-def _load_tokens():
-    if not os.path.exists(TOKENS_PATH):
-        return {}
-    try:
-        with open(TOKENS_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _save_tokens(data):
-    with open(TOKENS_PATH, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-
-
 def register_token(session_id: str, token: str):
     """App native gọi khi có token. Lưu (không trùng) theo session."""
-    if not token:
-        return
-    data = _load_tokens()
-    tokens = set(data.get(session_id, []))
-    tokens.add(token)
-    data[session_id] = sorted(tokens)
-    _save_tokens(data)
+    storage.add_token(session_id, token)
 
 
 def get_tokens(session_id: str):
-    return _load_tokens().get(session_id, [])
+    return storage.get_tokens(session_id)
 
 
 # ---------------------------------------------------------------------------

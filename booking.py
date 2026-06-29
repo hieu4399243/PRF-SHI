@@ -8,59 +8,47 @@ danh sách trống để tránh trùng lịch.
 (Phần đồng bộ Google Calendar là optional/stretch — xem ghi chú ở cuối file.)
 """
 
-import json
-import os
 import random
 import string
 from datetime import datetime
 
+import storage
 from data import DOCTORS, DEPARTMENTS, generate_available_slots
 
-APPOINTMENTS_PATH = os.path.join(os.path.dirname(__file__), "appointments.json")
 
-# Khung giờ trống được sinh 1 lần khi khởi động (in-memory).
-_AVAILABLE = generate_available_slots()
+def _build_availability():
+    """Sinh khung giờ trống, đã LOẠI các slot bị chiếm bởi lịch hẹn hiện có.
+
+    Nhờ vậy slot đã đặt không bị 'mọc lại' sau khi restart (đặc biệt khi dùng DB
+    Postgres/Supabase, dữ liệu lịch hẹn còn nguyên qua các lần khởi động).
+    """
+    slots = generate_available_slots()
+    for a in storage.list_appointments():
+        if a.get("status") != "confirmed":
+            continue
+        day = slots.get(a.get("date"))
+        if day and a.get("time") in day:
+            day.remove(a["time"])
+    return slots
 
 
-def _load_appointments():
-    if not os.path.exists(APPOINTMENTS_PATH):
-        return []
-    try:
-        with open(APPOINTMENTS_PATH, encoding="utf-8") as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return []
-
-
-def _save_appointments(items):
-    with open(APPOINTMENTS_PATH, "w", encoding="utf-8") as f:
-        json.dump(items, f, ensure_ascii=False, indent=2)
+# Khung giờ trống (in-memory) — tính 1 lần khi khởi động.
+_AVAILABLE = _build_availability()
 
 
 def get_appointment(code: str):
     """Tra cứu một lịch hẹn theo mã (vd. để sinh file .ics)."""
-    for a in _load_appointments():
-        if a["code"] == code:
-            return a
-    return None
+    return storage.get_appointment(code)
 
 
 def all_appointments():
     """Toàn bộ lịch hẹn (cho worker nhắc lịch)."""
-    return _load_appointments()
+    return storage.list_appointments()
 
 
 def mark_reminder_sent(code: str, reminder_key: str):
     """Đánh dấu một loại nhắc đã gửi cho lịch hẹn -> tránh gửi trùng."""
-    items = _load_appointments()
-    for a in items:
-        if a["code"] == code:
-            sent = set(a.get("reminders_sent", []))
-            sent.add(reminder_key)
-            a["reminders_sent"] = sorted(sent)
-            _save_appointments(items)
-            return True
-    return False
+    return storage.set_reminder_sent(code, reminder_key)
 
 
 def get_doctors(dept_code: str):
@@ -119,9 +107,7 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str, patie
     # Đánh dấu slot đã đặt -> loại khỏi danh sách trống
     _AVAILABLE[date_str].remove(time_str)
 
-    items = _load_appointments()
-    items.append(appointment)
-    _save_appointments(items)
+    storage.add_appointment(appointment)
 
     return True, appointment
 

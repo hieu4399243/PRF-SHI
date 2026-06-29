@@ -1,7 +1,7 @@
-# SHI Health Assistant — App native (React Native / Expo)
+# Nha khoa SHI — App native (React Native / Expo)
 
-Giao diện điện thoại cho chatbot phân loại khoa + đặt lịch, có **push notification**
-(xác nhận khi đặt lịch, nhắc lịch & nhắc ăn uống trước ngày khám).
+Giao diện điện thoại cho chatbot chọn dịch vụ nha khoa + đặt lịch, có **push notification**
+(xác nhận khi đặt lịch, nhắc lịch trước ngày khám).
 
 ## Yêu cầu
 - Node.js 18+ và npm

@@ -8,6 +8,7 @@ Web demo: http://127.0.0.1:5000
 App native (Expo) gọi cùng các endpoint /api/*, truyền "session" trong body.
 """
 
+import os
 import uuid
 from flask import Flask, render_template, request, jsonify, session, Response, abort
 
@@ -15,9 +16,13 @@ import chatbot
 import booking
 import calendar_ics
 import push
+import storage
 
 app = Flask(__name__)
-app.secret_key = "shi-ai-health-assistant-demo-key"  # demo; production dùng biến môi trường
+# Production: đặt biến môi trường SECRET_KEY. Demo: dùng key mặc định.
+app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
+
+print(f"[storage] Chế độ lưu trữ: {'Postgres/Supabase' if storage.USE_DB else 'file JSON (local)'}")
 
 
 def resolve_sid(data=None):

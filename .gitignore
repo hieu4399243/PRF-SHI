@@ -1,0 +1,13 @@
+# Bí mật / cấu hình môi trường
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Dữ liệu sinh ra khi chạy (tùy nhóm có muốn theo dõi không)
+outbox/
+
+# Node (mobile)
+mobile/node_modules/

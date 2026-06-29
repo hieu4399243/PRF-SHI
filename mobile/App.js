@@ -136,10 +136,10 @@ export default function App() {
 
       {/* Header */}
       <View style={styles.head}>
-        <View style={styles.avatar}><Text style={{ fontSize: 22 }}>🩺</Text></View>
+        <View style={styles.avatar}><Text style={{ fontSize: 22 }}>🦷</Text></View>
         <View style={{ flex: 1 }}>
-          <Text style={styles.headTitle}>AI Health Assistant</Text>
-          <Text style={styles.headSub}>Phòng khám SHI · Định hướng khoa & Đặt lịch</Text>
+          <Text style={styles.headTitle}>Trợ lý Nha khoa SHI</Text>
+          <Text style={styles.headSub}>Chọn dịch vụ nha khoa & Đặt lịch hẹn</Text>
         </View>
         <View style={styles.statusWrap}>
           <View style={styles.dot} />
@@ -197,7 +197,7 @@ export default function App() {
         <View style={styles.inputBar}>
           <TextInput
             style={styles.input}
-            placeholder="Nhập triệu chứng của bạn..."
+            placeholder="Mô tả vấn đề răng miệng của bạn..."
             placeholderTextColor="#9aa6a4"
             value={input}
             onChangeText={setInput}

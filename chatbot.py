@@ -46,9 +46,9 @@ def _reply(text, options=None, state=None, done=False, **extra):
 
 def greeting():
     return _reply(
-        "Xin chào 👋 Tôi là <b>AI Health Assistant</b> của phòng khám SHI.<br>"
-        "Tôi giúp bạn <b>định hướng khoa khám</b> phù hợp và <b>đặt lịch hẹn</b>.<br><br>"
-        "Bạn đang gặp triệu chứng gì? (ví dụ: <i>“mấy hôm nay tôi ho và đau họng”</i>)"
+        "Xin chào 👋 Tôi là <b>Trợ lý Nha khoa SHI</b>.<br>"
+        "Tôi giúp bạn <b>chọn đúng dịch vụ nha khoa</b> phù hợp và <b>đặt lịch hẹn</b>.<br><br>"
+        "Bạn đang gặp vấn đề gì về răng miệng? (ví dụ: <i>“răng tôi bị sâu và ê buốt khi ăn ngọt”</i>)"
         + safety.DISCLAIMER,
         state="TRIAGE",
     )
@@ -144,7 +144,7 @@ def _do_triage(sess, message):
     diag_note = ""
     if safety.is_diagnosis_request(message):
         diag_note = ("Mình <b>không thể chẩn đoán bệnh hay kê đơn</b>, nhưng có thể "
-                     "giúp bạn chọn đúng khoa khám. ")
+                     "giúp bạn chọn đúng dịch vụ nha khoa. ")
 
     results = triage.classify_symptoms(message)
     conf = triage.confidence_level(results)
@@ -163,23 +163,23 @@ def _do_triage(sess, message):
 
     if conf == "high":
         sess["dept_code"] = top["code"]
-        text = (diag_note + f"Dựa trên mô tả, bạn nên khám <b>khoa {top['name']}</b> "
-                f"<span class='muted'>({top['desc']})</span>.<br>Bạn có muốn đặt lịch khám khoa này không?")
+        text = (diag_note + f"Dựa trên mô tả, bạn nên dùng dịch vụ <b>{top['name']}</b> "
+                f"<span class='muted'>({top['desc']})</span>.<br>Bạn có muốn đặt lịch dịch vụ này không?")
         return _reply(
             safety.add_disclaimer(text),
             options=[
-                {"label": f"✅ Đặt lịch khoa {top['name']}", "value": "yes"},
+                {"label": f"✅ Đặt lịch: {top['name']}", "value": "yes"},
                 {"label": "🔁 Mô tả lại triệu chứng", "value": "no"},
             ],
             state="CONFIRM_DEPT",
         )
 
-    # medium -> đưa ra 2-3 khoa ứng viên để người dùng chọn.
-    options = [{"label": f"Khoa {r['name']}", "value": r["code"]} for r in results[:3]]
+    # medium -> đưa ra 2-3 dịch vụ ứng viên để người dùng chọn.
+    options = [{"label": r["name"], "value": r["code"]} for r in results[:3]]
     options.append({"label": "🔁 Mô tả lại", "value": "redo"})
     return _reply(
-        diag_note + "Triệu chứng của bạn có thể liên quan vài khoa. "
-        "Bạn muốn khám khoa nào dưới đây?",
+        diag_note + "Vấn đề của bạn có thể liên quan vài dịch vụ. "
+        "Bạn muốn dùng dịch vụ nào dưới đây?",
         options=options,
         state="CONFIRM_DEPT",
     )
@@ -193,14 +193,14 @@ def _confirm_dept(sess, message):
     if low == "yes" and sess["dept_code"]:
         return _start_doctor_pick(sess)
 
-    # message có thể là mã khoa (từ nút bấm) hoặc tên khoa.
+    # message có thể là mã dịch vụ (từ nút bấm) hoặc tên dịch vụ.
     from data import DEPARTMENTS
     for code, dept in DEPARTMENTS.items():
         if low == code or dept["name"].lower() in low:
             sess["dept_code"] = code
             return _start_doctor_pick(sess)
 
-    return _reply("Bạn vui lòng chọn một khoa ở các nút bên trên, hoặc gõ tên khoa nhé.",
+    return _reply("Bạn vui lòng chọn một dịch vụ ở các nút bên trên, hoặc gõ tên dịch vụ nhé.",
                   state="CONFIRM_DEPT")
 
 
@@ -213,7 +213,7 @@ def _start_doctor_pick(sess):
     dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
     options = [{"label": d["name"], "value": d["id"]} for d in doctors]
     return _reply(
-        f"Tuyệt vời! Bạn muốn đặt lịch với bác sĩ nào của <b>khoa {dept_name}</b>?",
+        f"Tuyệt vời! Bạn muốn đặt lịch với bác sĩ nào cho dịch vụ <b>{dept_name}</b>?",
         options=options,
         state="PICK_DOCTOR",
     )
@@ -277,7 +277,7 @@ def _ask_name(sess, message):
     summary = (
         "Vui lòng xác nhận lịch hẹn:<br>"
         f"• <b>Bệnh nhân:</b> {sess['patient_name']}<br>"
-        f"• <b>Khoa:</b> {dept_name}<br>"
+        f"• <b>Dịch vụ:</b> {dept_name}<br>"
         f"• <b>Bác sĩ:</b> {doctor_name}<br>"
         f"• <b>Thời gian:</b> {sess['time']} ngày {_format_date(sess['date'])}"
     )
@@ -326,7 +326,7 @@ def _confirm_booking(sess, message):
     return _reply(
         "🎉 <b>Đặt lịch thành công!</b><br>"
         f"• <b>Mã lịch hẹn:</b> {payload['code']}<br>"
-        f"• <b>Khoa:</b> {payload['department']} — {payload['doctor']}<br>"
+        f"• <b>Dịch vụ:</b> {payload['department']} — {payload['doctor']}<br>"
         f"• <b>Thời gian:</b> {payload['time']} ngày {_format_date(payload['date'])}<br><br>"
         "📅 <b>Thêm vào lịch của bạn để được nhắc tự động</b> (trước 1 ngày &amp; 1 giờ):<br>"
         f"<a class='cal-link' href='{ics_url}'>⬇️ Thêm vào Lịch (iPhone/Outlook/.ics)</a><br>"

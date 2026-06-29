@@ -1,4 +1,4 @@
-# Hướng dẫn cài đặt & chạy — AI Health Assistant (SHI)
+# Hướng dẫn cài đặt & chạy — Trợ lý Nha khoa SHI
 
 Dành cho mọi thành viên. Có **script tự động** `setup.sh` lo gần hết.
 
@@ -104,9 +104,17 @@ PRF/
 ├── setup.sh            # script cài đặt & cấu hình
 ├── app.py              # backend Flask (API)
 ├── triage.py booking.py safety.py chatbot.py push.py   # nghiệp vụ
+├── data.py             # danh mục DỊCH VỤ nha khoa + nha sĩ + khung giờ
 ├── reminder_worker.py  # worker nhắc lịch
 ├── requirements.txt
+├── eval/               # ĐÁNH GIÁ AI: dataset.jsonl, evaluate.py, rubric.md, results.md
+├── BAOCAO_DANHGIA.md   # báo cáo đánh giá (mục đích→mục tiêu→cách đo→kết quả→kết luận)
 └── mobile/             # app native (React Native / Expo)
     ├── App.js
     └── src/  (api.js, config.js, notify.js, calendar.js, ...)
+```
+
+## 7. Chạy đánh giá AI (triage engine)
+```bash
+./.venv/bin/python eval/evaluate.py    # in Accuracy/Macro-F1 v1 vs v2, ghi eval/results.md
 ```
