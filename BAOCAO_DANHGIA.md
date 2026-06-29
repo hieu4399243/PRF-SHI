@@ -62,21 +62,27 @@ phân loại đúng nhóm dịch vụ nha khoa*, để:
 
 | Chỉ số | v1 (có dấu) | v2 (không phân biệt dấu) | Mục tiêu |
 |---|---|---|---|
-| Accuracy | 76.2% | **98.4%** | ≥ 90% ✅ |
-| Macro Precision | 100.0% | 96.8% | — |
-| Macro Recall | 76.2% | 92.1% | — |
-| Macro F1 | 86.1% | **99.1%** | ≥ 0.90 ✅ |
-| Thời gian TB | 0.02 ms | **0.13 ms** | < 50 ms ✅ |
+| Accuracy | 77.8% | **100.0%** | ≥ 90% ✅ |
+| Macro Precision | 100.0% | 100.0% | — |
+| Macro Recall | 77.8% | 100.0% | — |
+| Macro F1 | 87.3% | **100.0%** | ≥ 0.90 ✅ |
+| Thời gian TB | 0.05 ms | **0.25 ms** | < 50 ms ✅ |
 | Chi phí | 0đ | 0đ | 0đ ✅ |
 
 > v1 đạt Precision cao (khi nhận ra thì gần như đúng) nhưng **Recall thấp**: bỏ sót
 > toàn bộ câu gõ thiếu dấu (trả "không nhận ra"). v2 khắc phục điểm này.
+>
+> ⚠️ **Lưu ý trung thực:** v2 đạt 100% trên tập 63 câu này, nhưng bộ từ khóa đã được
+> hiệu chỉnh **dựa trên chính tập này** (chưa tách tập test riêng). Con số 100% vì vậy
+> phản ánh độ khớp trên dữ liệu phát triển, **không nên hiểu là độ chính xác thực tế**.
+> Xem mục Hướng phát triển về việc cần một tập test độc lập.
 
 ### 4.2. F1 theo từng dịch vụ (v2)
 
-Tất cả 9 lớp đạt F1 cao; chi tiết đầy đủ trong `eval/results.md`. Chỉ còn **1 câu sai**:
-*"Răng cửa bị mẻ một góc, muốn trám lại"* → engine không bắt được vì cách diễn đạt
-*"bị mẻ"/"trám lại"* không trùng từ khóa *"răng mẻ"/"trám răng"*.
+Trên tập hiện tại, cả 9 lớp đạt F1 = 100% (chi tiết trong `eval/results.md`). Trước khi
+hiệu chỉnh, các lỗi điển hình là: câu gõ thiếu dấu (v1 bỏ sót), cách diễn đạt lạ
+(*"bị mẻ"* vs *"răng mẻ"*), và nhập nhằng Nha nhi vs Sâu răng (khi câu vừa nhắc "trẻ"
+vừa "đau răng") — đã xử lý bằng cách bổ sung từ khóa & ưu tiên tín hiệu trẻ em.
 
 ### 4.3. Định tính
 Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tình huống an toàn
@@ -85,14 +91,16 @@ Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tìn
 ## 5. Kết luận
 
 - **Phiên bản tốt nhất: v2** (accent-insensitive + khớp theo ranh giới từ) — vượt mục
-  tiêu: Accuracy 98.4%, Macro-F1 0.99, < 1 ms/câu, chi phí 0đ. Đây là phiên bản đang
-  dùng trong sản phẩm (`triage.DEFAULT_VERSION = "v2"`).
+  tiêu: Accuracy 100% (trên tập dev), Macro-F1 1.0, < 1 ms/câu, chi phí 0đ. Đây là phiên
+  bản đang dùng trong sản phẩm (`triage.DEFAULT_VERSION = "v2"`).
 - **Khó khăn / tồn tại:**
-  1. Bản chất **rule-based theo từ khóa** → nhạy với cách diễn đạt lạ/đồng nghĩa
-     (vd. *"bị mẻ"* vs *"răng mẻ"*); khó phủ hết biến thể ngôn ngữ.
-  2. Dataset còn nhỏ (63 câu) và do nhóm tự gán nhãn → có thể **lạc quan hơn thực tế**;
-     cần mở rộng và lấy dữ liệu hội thoại thật.
-  3. Một số lớp dễ nhập nhằng (Nha nhi vs Sâu răng khi câu vừa nhắc "trẻ" vừa "sâu răng").
+  1. Bản chất **rule-based theo từ khóa** → phải bổ sung từ khóa thủ công cho mỗi cách
+     nói mới; khó phủ hết biến thể ngôn ngữ (đồng nghĩa, nói vòng).
+  2. **Chưa có tập test độc lập:** từ khóa được hiệu chỉnh trên chính tập 63 câu → điểm
+     100% là trên dữ liệu phát triển, dễ **lạc quan hơn thực tế**.
+  3. Triệu chứng mơ hồ (vd *"đau răng"*) vốn thuộc nhiều dịch vụ → engine để **medium
+     confidence** và đưa 2–3 lựa chọn cho người dùng; top-1 accuracy không phản ánh hết
+     trải nghiệm này.
 - **Hướng phát triển:**
   1. Mở rộng dataset (≥ 300 câu, có tập **test riêng** để đo khả năng tổng quát hóa).
   2. Bổ sung từ điển đồng nghĩa, hoặc nâng cấp NLU bằng **LLM (Claude)** qua

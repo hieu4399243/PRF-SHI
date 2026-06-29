@@ -296,3 +296,37 @@ def seed_catalog(departments, doctors):
                 n_dr += cur.rowcount
         conn.commit()
     return (n_sv, n_dr)
+
+
+def sync_catalog(departments, doctors):
+    """ĐỒNG BỘ danh mục từ code (seed) -> DB, GHI ĐÈ bản trên DB.
+
+    Khác seed_catalog (chỉ thêm mới): hàm này cập nhật cả name/desc/keywords cho
+    dịch vụ đã có. Dùng khi bạn sửa danh mục trong data.py và muốn đẩy lên Supabase.
+    ⚠️ Sẽ ghi đè mọi chỉnh sửa thực hiện trực tiếp trên Supabase.
+    """
+    if not USE_DB:
+        return (0, 0)
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        for i, (code, d) in enumerate(departments.items()):
+            cur.execute(
+                "INSERT INTO services (code, name, descr, keywords, sort_order) "
+                "VALUES (%s,%s,%s,%s,%s) "
+                "ON CONFLICT (code) DO UPDATE SET "
+                "  name = EXCLUDED.name, descr = EXCLUDED.descr, "
+                "  keywords = EXCLUDED.keywords, sort_order = EXCLUDED.sort_order",
+                (code, d["name"], d.get("desc", ""), json.dumps(d.get("keywords", [])), i),
+            )
+        for scode, docs in doctors.items():
+            for j, doc in enumerate(docs):
+                cur.execute(
+                    "INSERT INTO doctors (id, service_code, name, sort_order) "
+                    "VALUES (%s,%s,%s,%s) "
+                    "ON CONFLICT (id) DO UPDATE SET "
+                    "  service_code = EXCLUDED.service_code, name = EXCLUDED.name, "
+                    "  sort_order = EXCLUDED.sort_order",
+                    (doc["id"], scode, doc["name"], j),
+                )
+        conn.commit()
+    return (len(departments), sum(len(v) for v in doctors.values()))

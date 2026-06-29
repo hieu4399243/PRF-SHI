@@ -8,6 +8,16 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 > 📊 Phần **đánh giá hệ thống AI** (Precision/Recall/F1, so sánh phiên bản) nằm ở
 > `BAOCAO_DANHGIA.md` và thư mục `eval/`.
 
+## 📚 Tài liệu
+| File | Nội dung |
+|------|----------|
+| [KIEN_TRUC.md](KIEN_TRUC.md) | Kiến trúc dự án: sơ đồ, luồng xử lý, bản đồ file, mô hình dữ liệu |
+| [HUONG_DAN_TU_DAU.md](HUONG_DAN_TU_DAU.md) | Dựng dự án từ đầu (máy trắng → chạy được), chi tiết cho người mới |
+| [DATABASE.md](DATABASE.md) | Lưu trữ JSON ↔ Supabase, cách đưa dữ liệu lên cloud |
+| [BAOCAO_DANHGIA.md](BAOCAO_DANHGIA.md) | Báo cáo đánh giá AI (mục đích→mục tiêu→cách đo→kết quả→kết luận) |
+| [hoc/](hoc/00-muc-luc.md) | Tự học: viết lại từng khối từ con số 0 |
+| [SETUP.md](SETUP.md) | Cài đặt & chạy nhanh (3 terminal) |
+
 ```
 ┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐
 │  App native (Expo)  │  ───────────────────► │  Backend Flask (Python)  │
@@ -72,8 +82,9 @@ Chi tiết: **`mobile/README.md`**.
 ```bash
 ./.venv/bin/python eval/evaluate.py   # Accuracy/Macro-F1 cho v1 & v2 → ghi eval/results.md
 ```
-Kết quả mới nhất: **v2 đạt Accuracy 98.4%, Macro-F1 0.99** (v1: 76.2% / 0.86).
-Chi tiết & phân tích trong `BAOCAO_DANHGIA.md`.
+Kết quả mới nhất (tập dev 63 câu): **v2 đạt Accuracy 100%, Macro-F1 1.0** (v1: 77.8% / 0.87).
+Lưu ý: từ khóa hiệu chỉnh trên chính tập này nên là số "lạc quan"; chi tiết & phân tích
+trung thực trong `BAOCAO_DANHGIA.md`.
 
 ## File sinh ra khi chạy
 - `appointments.json` — lịch hẹn đã đặt.

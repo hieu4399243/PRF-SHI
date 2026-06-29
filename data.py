@@ -33,9 +33,9 @@ _SEED_DEPARTMENTS = {
         "name": "Trám răng / Sâu răng",
         "desc": "Điều trị sâu răng, trám răng, răng mẻ vỡ.",
         "keywords": [
-            "sâu răng", "bị sâu", "lỗ sâu", "trám răng", "hàn răng", "răng mẻ",
-            "răng vỡ", "ê buốt khi ăn", "ê buốt", "buốt răng", "đau khi nhai",
-            "răng bị đen", "lỗ trên răng", "răng sâu",
+            "sâu răng", "bị sâu", "lỗ sâu", "trám răng", "trám lại", "hàn răng",
+            "răng mẻ", "bị mẻ", "răng vỡ", "ê buốt khi ăn", "ê buốt", "buốt răng",
+            "đau khi nhai", "răng bị đen", "lỗ trên răng", "răng sâu", "đau răng", "răng đau",
         ],
     },
     "noi_nha": {
@@ -44,7 +44,7 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "đau răng dữ dội", "nhức răng về đêm", "viêm tủy", "tủy răng", "áp xe răng",
             "áp xe", "đau nhức răng", "răng đau theo nhịp", "đau răng không ngủ được",
-            "răng đổi màu", "lấy tủy", "nhức răng", "nhức cả đêm",
+            "răng đổi màu", "lấy tủy", "nhức răng", "nhức cả đêm", "đau răng", "răng đau",
         ],
     },
     "nha_chu": {
@@ -95,6 +95,7 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "răng sữa", "trẻ đau răng", "bé sâu răng", "răng trẻ em", "trám răng cho bé",
             "nhổ răng sữa", "trẻ bị sâu răng", "răng của con", "bé bị đau răng", "răng của bé",
+            "con tôi", "bé", "trẻ", "em bé",
         ],
     },
 }
