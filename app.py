@@ -35,6 +35,7 @@ def resolve_sid(data=None):
     return sid
 
 
+
 @app.route("/")
 def index():
     if "sid" not in session:
