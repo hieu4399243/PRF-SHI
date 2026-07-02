@@ -131,21 +131,23 @@ export default function App() {
   }
 
   return (
-    <SafeAreaView style={styles.app}>
+    <View style={styles.app}>
       <StatusBar style="light" />
 
-      {/* Header */}
-      <View style={styles.head}>
-        <View style={styles.avatar}><Text style={{ fontSize: 22 }}>🦷</Text></View>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headTitle}>Trợ lý Nha khoa SHI</Text>
-          <Text style={styles.headSub}>Chọn dịch vụ nha khoa & Đặt lịch hẹn</Text>
+      {/* Header — kéo màu teal lên phủ hết vùng safe-area (tai thỏ / status bar) phía trên */}
+      <SafeAreaView style={styles.headSafe}>
+        <View style={styles.head}>
+          <View style={styles.avatar}><Text style={{ fontSize: 22 }}>🦷</Text></View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headTitle}>Trợ lý Nha khoa SHI</Text>
+            <Text style={styles.headSub}>Chọn dịch vụ nha khoa & Đặt lịch hẹn</Text>
+          </View>
+          <View style={styles.statusWrap}>
+            <View style={styles.dot} />
+            <Text style={styles.statusText}>Online</Text>
+          </View>
         </View>
-        <View style={styles.statusWrap}>
-          <View style={styles.dot} />
-          <Text style={styles.statusText}>Online</Text>
-        </View>
-      </View>
+      </SafeAreaView>
 
       <KeyboardAvoidingView
         style={{ flex: 1 }}
@@ -212,8 +214,11 @@ export default function App() {
             <Text style={{ color: "#fff", fontSize: 18 }}>➤</Text>
           </TouchableOpacity>
         </View>
+
+        {/* Đệm safe-area dưới (home indicator) — trắng cho khớp với ô nhập */}
+        <SafeAreaView style={styles.bottomSafe} />
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -223,6 +228,8 @@ const TEAL_TINT = "#e7f4f1";
 
 const styles = StyleSheet.create({
   app: { flex: 1, backgroundColor: "#f6f8f8" },
+  headSafe: { backgroundColor: TEAL },
+  bottomSafe: { backgroundColor: "#fff" },
   head: {
     backgroundColor: TEAL, flexDirection: "row", alignItems: "center",
     paddingHorizontal: 16, paddingVertical: 14, gap: 12,

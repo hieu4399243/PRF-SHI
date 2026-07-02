@@ -6,4 +6,4 @@
 // Tìm IP máy Mac: System Settings > Wi-Fi > Details, hoặc chạy `ipconfig getifaddr en0`.
 // Điện thoại và máy tính phải cùng một mạng Wi-Fi.
 
-export const API_BASE = "http://192.168.0.144:5001/";
+export const API_BASE = "http://10.97.138.166:5001/";

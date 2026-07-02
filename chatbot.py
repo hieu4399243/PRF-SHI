@@ -318,13 +318,13 @@ def _pick_date(sess, message):
     return _reply("Bạn chọn giúp mình một ngày ở các nút bên trên nhé.", state="PICK_DATE")
 
 
-def _start_time_pick(sess):
+def _start_time_pick(sess, prefix=""):
     times = booking.get_available_times(sess["date"])
     if not times:
         return _start_date_pick(sess)
     options = [{"label": t, "value": t} for t in times]
     return _reply(
-        f"Các khung giờ trống ngày <b>{_format_date(sess['date'])}</b>:",
+        prefix + f"Các khung giờ trống ngày <b>{_format_date(sess['date'])}</b>:",
         options=options,
         state="PICK_TIME",
     )
@@ -335,12 +335,28 @@ def _pick_time(sess, message):
     msg = message.strip()
     if msg in times:
         sess["time"] = msg
+        # Nếu đã có sẵn tên + SĐT (vd. chọn lại giờ sau khi slot bị chiếm) thì
+        # đi thẳng tới bước xác nhận, không hỏi lại tên/số.
+        if sess.get("patient_name") and sess.get("patient_phone"):
+            return _ask_confirm(sess)
         return _reply(
             "Cuối cùng, cho mình xin <b>họ tên</b> của bạn để ghi vào lịch hẹn nhé "
             "(bạn có thể gõ tên).",
             state="ASK_NAME",
         )
     return _reply("Bạn chọn giúp mình một khung giờ ở các nút bên trên nhé.", state="PICK_TIME")
+
+
+def _ask_confirm(sess):
+    """Hiển thị bản tóm tắt lịch hẹn kèm nút xác nhận / hủy."""
+    return _reply(
+        _booking_summary(sess),
+        options=[
+            {"label": "✅ Xác nhận đặt lịch", "value": "confirm"},
+            {"label": "❌ Hủy", "value": "cancel"},
+        ],
+        state="CONFIRM_BOOKING",
+    )
 
 
 def _ask_name(sess, message):
@@ -361,14 +377,7 @@ def _ask_phone(sess, message):
             state="ASK_PHONE",
         )
     sess["patient_phone"] = phone
-    return _reply(
-        _booking_summary(sess),
-        options=[
-            {"label": "✅ Xác nhận đặt lịch", "value": "confirm"},
-            {"label": "❌ Hủy", "value": "cancel"},
-        ],
-        state="CONFIRM_BOOKING",
-    )
+    return _ask_confirm(sess)
 
 
 def _booking_summary(sess):
@@ -406,7 +415,6 @@ def _finalize_booking(sess):
     )
     if not ok:
         if payload.get("duplicate"):
-            # Cùng SĐT đã đặt đúng khung giờ này -> hỏi hủy lịch cũ RỒI đặt tiếp lịch này.
             dup = payload["existing"]
             sess["cancel_code"] = dup["code"]
             sess["resume_booking"] = True
@@ -422,8 +430,8 @@ def _finalize_booking(sess):
                 ],
                 state="CANCEL_CONFIRM",
             )
-        # slot vừa bị đặt mất -> quay lại chọn giờ
-        return _reply(payload["error"] + " Mời bạn chọn lại khung giờ.", state="PICK_TIME")
+        # slot vừa bị đặt mất -> quay lại chọn giờ (hiển thị lại các khung giờ còn trống)
+        return _start_time_pick(sess, prefix=payload["error"] + " Mời bạn chọn lại khung giờ.<br><br>")
 
     # Bắn push xác nhận tới điện thoại của bệnh nhân (nếu app đã đăng ký token).
     import push

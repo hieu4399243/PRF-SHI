@@ -14,6 +14,15 @@ Bộ tài liệu tự học, mỗi file dạy 1 khối, **gõ tới đâu chạy
 | 7 | [07-app.md](07-app.md) | `app.py` | Cửa ngõ API (Flask) |
 | 8 | [08-storage-calendar-reminder.md](08-storage-calendar-reminder.md) | 3 file phụ trợ | Lưu trữ, file .ics, worker nhắc |
 
+## Có gì mới (cập nhật theo code 02/07/2026)
+Các bài đã được cập nhật cho khớp tính năng mới; phần thay đổi nằm ở mục
+"So với file thật" cuối mỗi bài:
+- **Hủy lịch hẹn** qua chat (tra theo SĐT) + xử lý **trùng SĐT** → bài [06](06-chatbot.md), [04](04-booking.md)
+- **Hỏi SĐT** khi đặt lịch (state `ASK_PHONE`) → bài [06](06-chatbot.md)
+- **Bỏ bảng slot in-memory** — DB là nguồn chân lý, kiểm tra lúc xác nhận → bài [04](04-booking.md), [08](08-storage-calendar-reminder.md)
+- **Fallback than phiền chung** + **câu hỏi thông tin dịch vụ** → bài [01](01-viet-triage-tu-dau.md), [06](06-chatbot.md)
+- **Safety pattern nạp từ Supabase** (bảng `safety_patterns`, seed fail-safe) → bài [03](03-safety.md), [08](08-storage-calendar-reminder.md)
+
 ## Bức tranh tổng (1 tin nhắn đi qua đâu)
 ```
 Người dùng → app.py → chatbot.py → (safety, triage, booking) → data.py / storage.py

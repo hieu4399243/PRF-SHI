@@ -300,6 +300,15 @@ File thật khác bản demo này ở chỗ:
 2. Tên trường tiếng Anh: `name`, `desc`, `keywords`, `code` (thay cho `ten`, `tu_khoa`, `ma`).
 3. Cụm từ dài được +2 điểm (đáng tin hơn từ đơn).
 4. Có thêm `confidence_level()` để chatbot biết khi nào nên hỏi lại.
+5. **Fallback "than phiền nha khoa chung"** — `mentions_dental_discomfort()`: câu có nhắc
+   **bộ phận** răng miệng ("răng", "nướu", "hàm"…) + một **cảm giác** khó chịu ("đau",
+   "ê", "nhức", "khi nhai"…) nhưng không trúng từ khóa dịch vụ nào → thay vì bó tay báo
+   "chưa rõ", chatbot đưa **danh sách dịch vụ** để người dùng tự chọn (hỏi có cấu trúc).
+6. **Câu hỏi thông tin** — `is_info_question()` + `find_service_mention()`: nhận ra
+   *"trám răng là khám gì?"*, *"nội nha gồm những gì?"* là câu **hỏi thông tin** (không
+   phải than phiền) → trả về **mô tả dịch vụ** đó thay vì cố phân loại triệu chứng.
+   Mẹo: so khớp bằng **tập token** đã bỏ các từ quá chung ("răng", "khám", "gì"…),
+   ưu tiên khớp có dấu trước ("trồng" ≠ "trong") rồi mới thử bản không dấu.
 
 Đối chiếu bản bạn vừa viết với [triage.py](../triage.py) — bạn sẽ thấy **cùng một ý tưởng**,
 chỉ "mặc áo chỉnh tề" hơn.

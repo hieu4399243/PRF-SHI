@@ -104,6 +104,35 @@ print("đã ghi log, mở hoc/audit_demo.jsonl xem")
 
 ---
 
+## Bước 5 — Pattern nạp từ Database, seed làm "lưới an toàn" (mới 02/07)
+
+File thật giờ **không hard-code** danh sách pattern nữa. Các list được đổi tên thành
+`_SEED_EMERGENCY_PATTERNS`, `_SEED_DIAGNOSIS_REQUEST_PATTERNS`, `_SEED_HANDOFF_PATTERNS`
+(seed = "hạt giống" dự phòng trong code), rồi khi khởi động:
+
+```python
+def _load_patterns():
+    seeds = {"emergency": _SEED_..., "diagnosis": _SEED_..., "handoff": _SEED_...}
+    try:
+        db = storage.list_safety_patterns() if storage.USE_DB else {}
+    except Exception:
+        db = {}                    # lỗi DB/mạng -> vẫn còn seed
+    # nhóm nào DB có thì dùng DB, nhóm rỗng thì quay về seed
+    return {kind: (db.get(kind) or seed) for kind, seed in seeds.items()}
+```
+
+**Ý tưởng cần nhớ (fail-safe):** guardrail là dữ liệu **an toàn** nên *không bao giờ được
+để trống*. DB (bảng `safety_patterns` trên Supabase, 2 cột `kind`, `pattern`) chỉ để
+**mở rộng/quản lý online**; nếu DB lỗi, rỗng, hay chưa cấu hình → tự động dùng seed trong
+code. So sánh với `data.py`: danh mục dịch vụ mà thiếu thì chỉ bất tiện, còn pattern cấp
+cứu mà thiếu thì **nguy hiểm** — vì vậy safety cần fallback theo *từng nhóm*.
+
+👉 `needs_human_handoff()` (bài tập 2 cũ) giờ cũng đọc từ `HANDOFF_PATTERNS` nạp theo cách này.
+
+---
+
 ## Bài tập
 1. Thêm mẫu CCCD (12 chữ số) vào `PII_PATTERNS`.
 2. Viết hàm `needs_human_handoff(text)` trả `True` nếu câu chứa "gặp nhân viên"/"người thật".
+3. (Mới) Giả lập `_load_patterns()`: cho `db = {"emergency": [], "handoff": ["chat với người"]}`
+   — nhóm nào dùng DB, nhóm nào rơi về seed? Vì sao `db.get(kind) or seed` làm được điều đó?

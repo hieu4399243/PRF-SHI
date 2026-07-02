@@ -28,6 +28,17 @@ Thử xem đang ở chế độ nào:
 ./.venv/bin/python -c "import storage; print('DB' if storage.USE_DB else 'JSON')"
 ```
 
+**Hiện có 5 bảng** (cập nhật 02/07): `appointments`, `device_tokens`, `services`,
+`doctors`, và mới nhất **`safety_patterns`** (kind, pattern) — cho phép quản lý từ khóa
+cấp cứu / chẩn đoán / handoff online (xem bài 03, phần fail-safe).
+
+**Các hàm mới đáng chú ý:**
+- `set_status(code, status)` — đổi trạng thái lịch hẹn (luồng **hủy lịch** dùng
+  `status="cancelled"`; không xóa bản ghi, giữ lại để tra cứu/audit).
+- `list_safety_patterns()` / `seed_safety_patterns(...)` — đọc/nạp bộ pattern an toàn.
+- `get_appointment(code)` đọc **thẳng storage** — vì thiết kế mới coi **DB là nguồn chân
+  lý duy nhất** cho slot trống (xem bài 04): không còn bảng giờ trống in-memory.
+
 Chi tiết cấu hình Supabase: xem [DATABASE.md](../DATABASE.md).
 
 ---

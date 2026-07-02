@@ -90,16 +90,38 @@ print("Giờ còn trống ngày đó:", get_available_times("2026-07-01"))  # 08
 
 ---
 
-## Bước 4 — Hiểu phần "lưu trữ" ở file thật
+## Bước 4 — File thật khác demo thế nào? (đã đổi thiết kế 02/07)
 
-Bản demo lưu trong biến `AVAILABLE` (mất khi tắt chương trình). File [booking.py](../booking.py)
-thật gọi `storage.add_appointment(appt)` → ghi vào **file JSON hoặc Supabase**, nên lịch
-**còn nguyên sau khi restart**. Ngoài ra nó còn:
-- `_build_availability()`: sinh giờ trống rồi **trừ đi các slot đã đặt** đọc từ storage.
-- Kiểm tra bác sĩ tồn tại trước khi đặt.
+Bản demo giữ bảng giờ trống trong biến `AVAILABLE` và `remove()` slot khi đặt. File
+[booking.py](../booking.py) thật **từng làm y hệt**, nhưng giờ đã đổi thiết kế:
 
-Ý tưởng thì y hệt bản bạn vừa viết.
+**Không còn bảng slot in-memory — DB là "nguồn chân lý" duy nhất.**
+- `get_available_times(ngay)` trả **đầy đủ** khung giờ theo lịch làm việc, *không* lọc sẵn.
+- Việc "giờ này có ai đặt chưa" được kiểm tra **ngay tại bước xác nhận**, bằng cách đọc
+  thẳng storage: hàm `_confirmed_at(ngay, gio)` tìm lịch `confirmed` đang chiếm đúng khung đó.
+
+Vì sao đổi? Bảng in-memory tính 1 lần lúc khởi động sẽ **lệch** khi: (a) restart server,
+(b) chạy nhiều tiến trình cùng lúc, (c) một lịch bị **hủy** — slot phải trống trở lại.
+Đọc DB lúc xác nhận thì cả 3 trường hợp đều đúng tự nhiên.
+
+**3 khả năng khi bấm xác nhận** (`book_appointment` trả `(ok, payload)`):
+
+| Tình huống | payload | Chatbot xử lý |
+|-----------|---------|----------------|
+| Khung trống | dict lịch hẹn (`ok=True`) | báo thành công + push |
+| Người **khác** vừa đặt mất | `{"error": ...}` | mời chọn lại giờ |
+| **Chính SĐT này** đã đặt khung đó | `{"duplicate": True, "existing": {...}}` | hỏi có hủy lịch cũ để đặt lịch mới không |
+
+**Các hàm mới** (phục vụ luồng hủy lịch — xem bài 06):
+- Lịch hẹn giờ có thêm trường `patient_phone` (SĐT là "chìa khóa" tra cứu).
+- `upcoming_by_phone(phone)`: các lịch `confirmed` sắp tới của 1 SĐT, sớm nhất trước.
+- `cancel_appointment(code)`: đặt `status="cancelled"` (gọi `storage.set_status`) —
+  **không xóa** bản ghi, chỉ đổi trạng thái; nhờ `_confirmed_at` chỉ đếm lịch `confirmed`
+  nên khung giờ tự trống lại, khỏi phải "trả slot" thủ công.
 
 ## Bài tập
 1. Thêm tham số `doctor_id` vào `book_appointment` và đưa vào dict `appt`.
 2. Viết hàm `get_appointment(code)` tìm trong 1 list lịch hẹn theo mã (gợi ý: vòng `for` + `if a["code"] == code`).
+3. (Mới) Bỏ `AVAILABLE.remove()` trong demo, thay bằng list `APPOINTMENTS` + hàm
+   `_confirmed_at(ngay, gio)`; cho `book_appointment` từ chối khi khung đã có người —
+   rồi viết `cancel(code)` đổi status và thử đặt lại đúng khung vừa hủy (phải thành công).

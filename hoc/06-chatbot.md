@@ -148,20 +148,59 @@ Thử lần lượt: `tôi bị sâu răng` → `yes` → `lại` → `niềng r
 
 ---
 
-## So với `chatbot.py` thật
+## So với `chatbot.py` thật (cập nhật 02/07)
 
-Cùng tư duy, chỉ nhiều ô hơn:
-`GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE → PICK_TIME → ASK_NAME → CONFIRM_BOOKING → DONE`
+Cùng tư duy, chỉ nhiều ô hơn. Luồng đặt lịch chính (có thêm **ASK_PHONE** — hỏi SĐT sau tên):
 
-Và **ưu tiên guardrail trước mọi ô**:
-```python
-if safety.check_emergency(message): ...   # cấp cứu chặn hết
-if safety.needs_human_handoff(message): ...
 ```
-File thật còn gọi `triage` (có độ tin cậy → khi mơ hồ thì đưa 2–3 lựa chọn), `booking` để
-lưu lịch, `push` để gửi thông báo. Mở [chatbot.py](../chatbot.py) đối chiếu hàm
-`handle_message` — bạn sẽ nhận ra đúng khung `xu_ly` bạn vừa viết.
+GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE → PICK_TIME
+      → ASK_NAME → ASK_PHONE → CONFIRM_BOOKING → DONE
+```
+
+Và một **nhánh hủy lịch** riêng (vào từ câu "hủy lịch", "muốn hủy lịch hẹn"…):
+
+```
+CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM → DONE
+(hỏi SĐT đã đặt)   (chọn lịch     (chắc chắn hủy?
+                    nào để hủy)    → set cancelled + push)
+```
+
+### Thứ tự ưu tiên trong `handle_message` (quan trọng!)
+
+Trước khi định tuyến theo state, mỗi tin nhắn đi qua các "cổng" theo đúng thứ tự:
+
+```python
+1. "/reset" / "làm lại"          -> reset phiên
+2. safety.check_emergency(...)    -> cảnh báo 115, GIỮ NGUYÊN state
+3. safety.needs_human_handoff(...)-> chuyển state HANDOFF
+4. _is_cancel_request(...)        -> vào nhánh hủy lịch      ┐ chỉ nhận ở state
+5. triage.info_question_service() -> trả mô tả dịch vụ       ┘ nhập TỰ DO
+6. if state == ... (định tuyến như demo của bạn)
+```
+
+👉 Cổng 4–5 chỉ bật ở các state nhập **tự do** (`TRIAGE`, `CONFIRM_DEPT`, `DONE`) — nếu
+bật cả lúc đang bấm chọn giờ/nhập tên thì chữ "hủy" (nghĩa là hủy *thao tác*) sẽ bị hiểu
+nhầm thành hủy *lịch hẹn*. Đây là bài học hay về **ngữ cảnh quyết định nghĩa**.
+
+### 3 tình huống "đời thật" file mới xử lý
+
+1. **Trùng SĐT** — bấm xác nhận nhưng chính SĐT này đã đặt đúng khung giờ đó
+   (`booking` trả `{"duplicate": True, "existing": ...}`): bot hỏi *"hủy lịch cũ rồi đặt
+   lịch này nhé?"* — cờ `sess["resume_booking"] = True` để sau khi hủy xong **đặt tiếp
+   lịch đang dở**, không bắt người dùng làm lại từ đầu.
+2. **Slot vừa bị người khác chiếm**: quay về `PICK_TIME` và **hiện lại** danh sách giờ
+   còn trống (`_start_time_pick(prefix=...)`), không chỉ báo lỗi suông.
+3. **Fallback than phiền chung** — "đau răng quá" không trúng dịch vụ nào nhưng
+   `triage.mentions_dental_discomfort()` nhận ra là chuyện răng miệng → `_dental_followup()`
+   đưa danh sách dịch vụ để chọn, thay vì "mình chưa hiểu".
+
+File thật còn gọi `triage` (độ tin cậy → mơ hồ thì đưa 2–3 lựa chọn), `booking` để lưu
+lịch, `push` gửi thông báo. Mở [chatbot.py](../chatbot.py) đối chiếu `handle_message` —
+bạn sẽ nhận ra đúng khung `xu_ly` bạn vừa viết.
 
 ## Bài tập
 1. Thêm ô `ASK_NAME`: sau khi `yes`, hỏi tên rồi mới `DONE` (nhớ lưu `sess["ten"]`).
 2. Thêm guardrail: nếu message chứa "khó thở" → trả cảnh báo gọi 115, **không** đổi state.
+3. (Mới) Thêm nhánh hủy mini: ở `DONE`, gõ "hủy" → hỏi "chắc không?" (`CANCEL_CONFIRM`),
+   trả lời `yes` thì xóa `sess["dich_vu"]` và về `TRIAGE`. Chú ý: đừng bắt chữ "hủy"
+   khi đang ở `CONFIRM` — thử giải thích vì sao.
