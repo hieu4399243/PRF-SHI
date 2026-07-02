@@ -76,6 +76,11 @@ CREATE TABLE IF NOT EXISTS doctors (
     name         TEXT,
     sort_order   INT DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS safety_patterns (
+    kind    TEXT NOT NULL,   -- 'emergency' | 'diagnosis' | 'handoff'
+    pattern TEXT NOT NULL,
+    PRIMARY KEY (kind, pattern)
+);
 """
 
 _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
@@ -291,6 +296,43 @@ def list_doctors():
     for did, scode, name in rows:
         out.setdefault(scode, []).append({"id": did, "name": name})
     return out
+
+
+def list_safety_patterns():
+    """Trả về dict {kind: [pattern, ...]} của guardrail. Rỗng -> {} để safety.py
+    fallback sang seed tĩnh trong code (đảm bảo guardrail không bao giờ trống)."""
+    if not USE_DB:
+        return {}
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute("SELECT kind, pattern FROM safety_patterns ORDER BY kind, pattern")
+        rows = cur.fetchall()
+    out = {}
+    for kind, pattern in rows:
+        out.setdefault(kind, []).append(pattern)
+    return out
+
+
+def seed_safety_patterns(patterns_by_kind):
+    """Nạp bộ pattern an toàn lên DB (idempotent: trùng (kind, pattern) -> bỏ qua).
+
+    Trả về số dòng thêm mới.
+    """
+    if not USE_DB:
+        return 0
+    init_schema()
+    n = 0
+    with _connect() as conn, conn.cursor() as cur:
+        for kind, patterns in patterns_by_kind.items():
+            for p in patterns:
+                cur.execute(
+                    "INSERT INTO safety_patterns (kind, pattern) VALUES (%s, %s) "
+                    "ON CONFLICT (kind, pattern) DO NOTHING",
+                    (kind, p),
+                )
+                n += cur.rowcount
+        conn.commit()
+    return n
 
 
 def seed_catalog(departments, doctors):

@@ -76,7 +76,7 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 | 3 | **Hội thoại theo máy trạng thái** | Luồng đặt lịch: `GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE → PICK_TIME → ASK_NAME → ASK_PHONE → CONFIRM_BOOKING → DONE`. Thêm nhánh **hủy lịch** `CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM`. |
 | 4 | **Đặt lịch chống trùng (đối chiếu DB)** | Khung giờ **luôn hiển thị đầy đủ**; tới bước xác nhận mới **đối chiếu trực tiếp DB** (`_confirmed_at`): khung đã có người khác đặt → mời chọn giờ khác; cùng SĐT đã đặt đúng khung → hỏi hủy lịch cũ. Sinh mã `SHI-XXXXXX`, lưu bền vững. DB là nguồn chân lý duy nhất. |
 | 4b | **Thu thập & xác nhận số điện thoại** | Bước `ASK_PHONE` bắt buộc SĐT, có chuẩn hóa/kiểm tra (10 số, chấp nhận `+84`/khoảng trắng); dùng để nhắc lịch và nhận diện đặt trùng. |
-| 5 | **Guardrails an toàn y tế** | Phát hiện cấp cứu → gọi 115; chặn yêu cầu chẩn đoán/kê đơn; human handoff; gắn disclaimer. |
+| 5 | **Guardrails an toàn y tế** | Phát hiện cấp cứu → gọi 115; chặn yêu cầu chẩn đoán/kê đơn; human handoff; gắn disclaimer. Bộ pattern quản lý online ở DB (`safety_patterns`) nhưng **fail-safe** (rỗng/mất DB → dùng seed code). |
 | 6 | **Bảo vệ dữ liệu cá nhân** | Ẩn PII (SĐT, email, CCCD) và ghi **audit log** `audit_log.jsonl` cho mỗi lượt hội thoại. |
 | 7 | **Push notification (Expo)** | Bắn thông báo xác nhận đặt lịch + nhắc lịch, miễn phí, không cần API key. |
 | 8 | **Worker nhắc lịch** | Nhắc trước **1 ngày**, **tối hôm trước** (chăm sóc), **2 giờ**; mỗi loại gửi đúng 1 lần. |
@@ -273,6 +273,26 @@ def audit(session_id, role, message, meta=None):
 **Giải thích:** đây là điểm phân biệt một chatbot y tế "thật". Mọi lượt hội thoại được ghi log
 nhưng **PII luôn bị ẩn trước khi ghi** (tuân thủ NĐ 13/2023). Cấp cứu/handoff/chặn chẩn đoán
 được kiểm tra ở tầng cao nhất trong `chatbot.py`.
+
+**Nơi lưu bộ pattern & nguyên tắc fail-safe.** Ba bộ từ khóa guardrail — `emergency` (cấp cứu),
+`diagnosis` (chặn chẩn đoán/kê đơn), `handoff` (chuyển người thật) — được đưa lên **Supabase**
+(bảng `safety_patterns`) để quản trị online, đồng bộ với cách làm của `services`/`doctors`.
+Tuy nhiên khác dữ liệu nghiệp vụ ở một điểm cốt lõi: **guardrail phải fail-safe**. Vì đây là an
+toàn tính mạng/pháp lý, `safety.py` giữ một bộ **seed baseline trong code** và hợp nhất theo
+nhóm:
+
+```python
+def _load_patterns():
+    seeds = {"emergency": _SEED_EMERGENCY_PATTERNS, "diagnosis": ..., "handoff": ...}
+    db = storage.list_safety_patterns() if storage.USE_DB else {}   # lỗi/không DB -> {}
+    # mỗi nhóm ưu tiên DB, nhóm nào rỗng -> fallback seed (không bao giờ để trống)
+    return {kind: (db.get(kind) or seed) for kind, seed in seeds.items()}
+```
+
+Nhờ vậy: DB là nguồn chính và **sửa online được**, nhưng nếu mất mạng / DB rỗng / ai đó lỡ
+xóa một nhóm thì khả năng chặn cấp cứu, chặn chẩn đoán **không biến mất** — DB chỉ được **mở
+rộng**, không thể làm trống guardrail. Seed lên DB bằng `scripts/migrate_to_supabase.py`
+(`storage.seed_safety_patterns`, idempotent).
 
 ### 7.3. Điều phối hội thoại — guardrails ưu tiên trước routing (`chatbot.py`)
 

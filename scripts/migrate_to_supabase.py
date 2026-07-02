@@ -38,6 +38,15 @@ def main():
     n_sv, n_dr = storage.seed_catalog(data._SEED_DEPARTMENTS, data._SEED_DOCTORS)
     print(f"✅ Đã nạp danh mục: {n_sv} dịch vụ, {n_dr} nha sĩ (bỏ qua phần đã có).")
 
+    # Bộ pattern an toàn (guardrail): cấp cứu / chặn chẩn đoán / human handoff
+    import safety
+    n_sp = storage.seed_safety_patterns({
+        "emergency": safety._SEED_EMERGENCY_PATTERNS,
+        "diagnosis": safety._SEED_DIAGNOSIS_REQUEST_PATTERNS,
+        "handoff": safety._SEED_HANDOFF_PATTERNS,
+    })
+    print(f"✅ Đã nạp {n_sp} pattern an toàn (bỏ qua phần đã có).")
+
     # Lịch hẹn
     appts = json.load(open(APPTS, encoding="utf-8")) if os.path.exists(APPTS) else []
     existing = {a["code"] for a in storage.list_appointments()}

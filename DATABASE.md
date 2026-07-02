@@ -55,13 +55,22 @@ Mở **Supabase → Table editor** để xem/sửa lịch hẹn & token online.
 ## Sơ đồ bảng
 ```sql
 appointments(
-  code PK, session, patient_name, department, department_code,
+  code PK, session, patient_name, patient_phone, department, department_code,
   doctor, doctor_id, date, time, created_at, status, reminders_sent jsonb
-)
+)  -- status: 'confirmed' | 'cancelled'
 device_tokens(session, token, PRIMARY KEY(session, token))
 services(code PK, name, descr, keywords jsonb, sort_order)   -- danh mục dịch vụ nha khoa
 doctors(id PK, service_code -> services.code, name, sort_order)
+safety_patterns(kind, pattern, PRIMARY KEY(kind, pattern))   -- guardrail an toàn y tế
 ```
+
+## Guardrail an toàn (`safety_patterns`) — có fallback
+- `kind` ∈ `emergency` (cấp cứu → 115), `diagnosis` (chặn chẩn đoán/kê đơn), `handoff`
+  (chuyển người thật). Sửa/thêm pattern trực tiếp trong **Supabase → Table editor**.
+- App nạp lúc khởi động (`safety._load_patterns`); đổi online xong cần **restart backend**.
+- ⚠️ **Khác danh mục ở chỗ luôn fail-safe:** đây là dữ liệu an toàn tính mạng, nên nếu
+  không có DB / một nhóm bị rỗng / lỗi kết nối → nhóm đó **tự dùng seed baseline** trong
+  `safety.py` (guardrail không bao giờ biến mất). DB chỉ để **mở rộng**, không thể làm trống.
 
 ## Quản trị danh mục dịch vụ / nha sĩ online
 - Danh mục (services, doctors) đã được seed lên Supabase từ `data._SEED_DEPARTMENTS` /

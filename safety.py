@@ -18,7 +18,7 @@ AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "audit_log.jsonl")
 # ---------------------------------------------------------------------------
 # 1) PHÁT HIỆN CẤP CỨU  -> hướng dẫn gọi 115, không tư vấn tiếp.
 # ---------------------------------------------------------------------------
-EMERGENCY_PATTERNS = [
+_SEED_EMERGENCY_PATTERNS = [
     # Cấp cứu chung (đe dọa tính mạng)
     "đau ngực dữ dội", "đau thắt ngực", "khó thở nặng", "không thở được",
     "ngất", "bất tỉnh", "co giật", "tai biến", "đột quỵ",
@@ -60,11 +60,46 @@ def mask_pii(text: str) -> str:
 # ---------------------------------------------------------------------------
 # 3) CHẶN YÊU CẦU CHẨN ĐOÁN / KÊ ĐƠN  -> chuyển hướng an toàn.
 # ---------------------------------------------------------------------------
-DIAGNOSIS_REQUEST_PATTERNS = [
+_SEED_DIAGNOSIS_REQUEST_PATTERNS = [
     "tôi bị bệnh gì", "bị bệnh gì", "chẩn đoán", "có phải ung thư",
     "uống thuốc gì", "kê đơn", "dùng thuốc gì", "thuốc nào", "liều lượng",
     "có nguy hiểm không", "có sao không", "đơn thuốc",
 ]
+
+# Từ khóa cho biết người dùng muốn gặp NHÂN VIÊN THẬT (human handoff).
+_SEED_HANDOFF_PATTERNS = [
+    "gặp người", "nhân viên", "tư vấn viên", "gọi cho tôi",
+    "khiếu nại", "không hài lòng", "nói chuyện với người thật",
+]
+
+
+# ---------------------------------------------------------------------------
+# NẠP BỘ PATTERN: Supabase (nguồn chính) + seed trong code (fail-safe).
+# Guardrail là dữ liệu AN TOÀN nên KHÔNG bao giờ để trống: nếu DB không có / một
+# nhóm rỗng / lỗi kết nối -> tự dùng seed baseline của nhóm đó. DB chỉ MỞ RỘNG.
+# Quản lý online tại Supabase bảng `safety_patterns` (kind, pattern).
+# ---------------------------------------------------------------------------
+def _load_patterns():
+    seeds = {
+        "emergency": _SEED_EMERGENCY_PATTERNS,
+        "diagnosis": _SEED_DIAGNOSIS_REQUEST_PATTERNS,
+        "handoff": _SEED_HANDOFF_PATTERNS,
+    }
+    db = {}
+    try:
+        import storage
+        if storage.USE_DB:
+            db = storage.list_safety_patterns() or {}
+    except Exception:
+        db = {}  # lỗi DB/mạng -> dùng seed, KHÔNG để guardrail biến mất
+    # Mỗi nhóm ưu tiên DB; nhóm nào rỗng -> fallback seed (không bao giờ để trống).
+    return {kind: (db.get(kind) or seed) for kind, seed in seeds.items()}
+
+
+_PATTERNS = _load_patterns()
+EMERGENCY_PATTERNS = _PATTERNS["emergency"]
+DIAGNOSIS_REQUEST_PATTERNS = _PATTERNS["diagnosis"]
+HANDOFF_PATTERNS = _PATTERNS["handoff"]
 
 DISCLAIMER = (
     "<br><span class='disclaimer'>ℹ️ Lưu ý: Tôi chỉ hỗ trợ chọn dịch vụ nha khoa "
@@ -88,9 +123,7 @@ def is_diagnosis_request(text: str) -> bool:
 def needs_human_handoff(text: str) -> bool:
     """Phát hiện yêu cầu gặp người thật / tình huống nhạy cảm."""
     low = text.lower()
-    triggers = ["gặp người", "nhân viên", "tư vấn viên", "gọi cho tôi",
-                "khiếu nại", "không hài lòng", "nói chuyện với người thật"]
-    return any(t in low for t in triggers)
+    return any(t in low for t in HANDOFF_PATTERNS)
 
 
 def add_disclaimer(reply: str) -> str:

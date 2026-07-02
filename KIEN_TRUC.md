@@ -83,7 +83,7 @@ Nhánh hủy lịch:   CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM → D
 | `app.py` | Cửa ngõ API Flask: `/api/start`, `/api/chat`, `/api/register-push`, `/api/ics/<code>` | chatbot, booking, storage |
 | `chatbot.py` | **Máy trạng thái** điều phối hội thoại (gồm nhánh đặt lịch, hủy lịch, hỏi thông tin) | triage, booking, safety, push |
 | `triage.py` | **AI** phân loại triệu chứng → dịch vụ (v1 có dấu / v2 không dấu); fallback than phiền chung; nhận câu hỏi thông tin dịch vụ | data |
-| `safety.py` | Guardrails: cấp cứu→115, ẩn PII, chặn chẩn đoán, audit log | — |
+| `safety.py` | Guardrails: cấp cứu→115, ẩn PII, chặn chẩn đoán, audit log. Bộ pattern nạp từ DB (`safety_patterns`) + seed code làm fail-safe | storage |
 | `booking.py` | Đặt lịch & **hủy lịch**; **kiểm tra trùng (giờ/SĐT) trực tiếp với DB lúc xác nhận**; sinh mã lịch hẹn | data, storage |
 | `push.py` | Gửi thông báo qua Expo Push; token qua storage | storage |
 | `data.py` | Danh mục dịch vụ/nha sĩ (seed + nạp từ DB), **mô tả dịch vụ (`SERVICE_INFO`)**, khung giờ | storage |
@@ -124,6 +124,7 @@ appointments(code PK, session, patient_name, patient_phone, department, departme
 device_tokens(session, token, PRIMARY KEY(session, token))
 services(code PK, name, descr, keywords jsonb, sort_order)
 doctors(id PK, service_code → services.code, name, sort_order)
+safety_patterns(kind, pattern, PRIMARY KEY(kind, pattern))  -- guardrail (emergency/diagnosis/handoff)
 ```
 **Fallback file JSON** — khi không có DB: `appointments.json`, `device_tokens.json`, danh mục
 lấy từ dict `_SEED_*` trong `data.py`. Xem chi tiết: [DATABASE.md](DATABASE.md).
@@ -186,3 +187,5 @@ PRF-SHI/
    booking/push.
 4. **Chạy được ngay (offline-first):** không có DB/LLM vẫn chạy nhờ fallback → dễ demo, dễ chấm.
 5. **An toàn là bắt buộc:** guardrail (cấp cứu, PII, chống chẩn đoán) ưu tiên cao nhất.
+   Bộ pattern quản lý online ở DB (`safety_patterns`) nhưng **fail-safe**: DB chỉ mở rộng,
+   nhóm rỗng/mất kết nối → tự dùng seed trong `safety.py` → guardrail không bao giờ biến mất.
