@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     code            TEXT PRIMARY KEY,
     session         TEXT,
     patient_name    TEXT,
+    patient_phone   TEXT,
     department      TEXT,
     department_code TEXT,
     doctor          TEXT,
@@ -56,6 +57,7 @@ CREATE TABLE IF NOT EXISTS appointments (
     status          TEXT,
     reminders_sent  JSONB NOT NULL DEFAULT '[]'::jsonb
 );
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_phone TEXT;
 CREATE TABLE IF NOT EXISTS device_tokens (
     session TEXT,
     token   TEXT,
@@ -76,9 +78,9 @@ CREATE TABLE IF NOT EXISTS doctors (
 );
 """
 
-_APPT_COLS = ["code", "session", "patient_name", "department", "department_code",
-              "doctor", "doctor_id", "date", "time", "created_at", "status",
-              "reminders_sent"]
+_APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
+              "department_code", "doctor", "doctor_id", "date", "time", "created_at",
+              "status", "reminders_sent"]
 
 
 def init_schema():
@@ -153,11 +155,12 @@ def add_appointment(appt):
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(
                 "INSERT INTO appointments "
-                "(code, session, patient_name, department, department_code, doctor, "
-                " doctor_id, date, time, created_at, status, reminders_sent) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                "(code, session, patient_name, patient_phone, department, department_code, "
+                " doctor, doctor_id, date, time, created_at, status, reminders_sent) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (appt["code"], appt.get("session"), appt.get("patient_name"),
-                 appt.get("department"), appt.get("department_code"), appt.get("doctor"),
+                 appt.get("patient_phone"), appt.get("department"),
+                 appt.get("department_code"), appt.get("doctor"),
                  appt.get("doctor_id"), appt.get("date"), appt.get("time"),
                  appt.get("created_at"), appt.get("status"),
                  json.dumps(appt["reminders_sent"])),
@@ -195,6 +198,27 @@ def set_reminder_sent(code, reminder_key):
             _json_save(APPOINTMENTS_PATH, items)
             return True
     return False
+
+
+def set_status(code, status):
+    """Cập nhật trạng thái một lịch hẹn (vd. 'cancelled'). True nếu có cập nhật."""
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute("UPDATE appointments SET status = %s WHERE code = %s",
+                        (status, code))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    items = _json_load(APPOINTMENTS_PATH, [])
+    changed = False
+    for a in items:
+        if a["code"] == code:
+            a["status"] = status
+            changed = True
+    if changed:
+        _json_save(APPOINTMENTS_PATH, items)
+    return changed
 
 
 # ===========================================================================

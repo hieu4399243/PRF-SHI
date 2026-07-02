@@ -88,6 +88,21 @@ vừa "đau răng") — đã xử lý bằng cách bổ sung từ khóa & ưu ti
 Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tình huống an toàn
 (cấp cứu → 115, từ chối chẩn đoán/kê đơn, human handoff) và ẩn PII trong `audit_log.jsonl`.
 
+### 4.4. Năng lực NLU bổ sung (định tính — chưa đưa vào tập định lượng)
+
+Ngoài phân loại top-1, triage engine được bổ sung 2 hành vi giúp trải nghiệm thực tế
+tốt hơn. Đây là bổ sung **định tính**, **chưa** có trong tập 63 câu nên không làm thay
+đổi số liệu ở mục 4.1:
+
+| Năng lực | Hàm | Ví dụ đầu vào → xử lý |
+|---|---|---|
+| **Fallback than phiền chung** | `mentions_dental_discomfort()` | *"khó chịu ở răng khi ăn cơm"* (không trúng từ khóa dịch vụ nào) → nhận ra có **bộ phận răng miệng + cảm giác khó chịu** → đưa 4 lựa chọn có cấu trúc thay vì báo "chưa rõ". |
+| **Hỏi–đáp thông tin dịch vụ** | `info_question_service()` | *"nội nha khám gì?"*, *"trồng răng là gì?"* → nhận diện (cụm hỏi + tên/từ khóa dịch vụ, khớp có dấu ưu tiên rồi mới bỏ dấu) → trả **mô tả dịch vụ** (`data.SERVICE_INFO`) + mời đặt lịch. |
+
+Cả hai đều **khớp không phân biệt dấu** như v2. Việc đo định lượng riêng cho 2 năng lực
+này (độ chính xác nhận đúng dịch vụ được hỏi, tỷ lệ cứu được câu mơ hồ) được để trong
+Hướng phát triển — cần một tập dữ liệu gán nhãn riêng cho intent.
+
 ## 5. Kết luận
 
 - **Phiên bản tốt nhất: v2** (accent-insensitive + khớp theo ranh giới từ) — vượt mục
@@ -107,3 +122,5 @@ Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tìn
      `triage.classify_with_llm()` rồi đánh giá lại bằng đúng quy trình này (thêm cột
      "v3 = LLM" vào bảng so sánh) — cân nhắc trade-off độ chính xác vs chi phí/độ trễ.
   3. Thêm đánh giá top-2/top-3 accuracy (vì bot vốn cho người dùng chọn trong vài gợi ý).
+  4. Gán nhãn tập riêng cho **intent** (hỏi thông tin dịch vụ, than phiền chung, hủy lịch)
+     để đo định lượng các năng lực NLU ở mục 4.4.

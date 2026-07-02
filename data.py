@@ -35,7 +35,8 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "sâu răng", "bị sâu", "lỗ sâu", "trám răng", "trám lại", "hàn răng",
             "răng mẻ", "bị mẻ", "răng vỡ", "ê buốt khi ăn", "ê buốt", "buốt răng",
-            "đau khi nhai", "răng bị đen", "lỗ trên răng", "răng sâu", "đau răng", "răng đau",
+            "đau khi nhai", "đau khi ăn", "cộm", "răng bị đen", "lỗ trên răng",
+            "răng sâu", "đau răng", "răng đau",
         ],
     },
     "noi_nha": {
@@ -99,6 +100,47 @@ _SEED_DEPARTMENTS = {
         ],
     },
 }
+
+# ---------------------------------------------------------------------------
+# MÔ TẢ ĐẦY ĐỦ CHO TỪNG DỊCH VỤ — dùng để trả lời câu hỏi "X là khám gì / là gì".
+# Khóa theo MÃ dịch vụ (ổn định dù danh mục nạp từ DB hay seed) nên overlay được
+# lên cả hai chế độ mà không cần thêm cột trên Supabase. Thiếu mã -> fallback 'desc'.
+# ---------------------------------------------------------------------------
+SERVICE_INFO = {
+    "kham_tong_quat":
+        "Khám tổng quát & cạo vôi là kiểm tra sức khỏe răng miệng định kỳ: bác sĩ soi "
+        "toàn bộ răng – nướu, lấy cao/vôi răng, đánh bóng và tư vấn cách vệ sinh. Nên làm "
+        "khoảng 6 tháng/lần để phát hiện sớm sâu răng, viêm nướu.",
+    "sau_rang":
+        "Trám răng / sâu răng là điều trị các lỗ sâu, răng mẻ vỡ hoặc ê buốt: bác sĩ làm "
+        "sạch phần mô sâu rồi trám lại bằng vật liệu thẩm mỹ để phục hồi hình dạng và khả "
+        "năng ăn nhai của răng.",
+    "noi_nha":
+        "Nội nha (điều trị tủy) xử lý khi tủy răng bị viêm/nhiễm trùng gây đau nhức dữ dội, "
+        "ê buốt kéo dài hoặc áp xe: bác sĩ lấy tủy, làm sạch và trám bít ống tủy để giữ lại "
+        "răng thật thay vì phải nhổ.",
+    "nha_chu":
+        "Nha chu điều trị bệnh lý ở nướu/lợi và mô quanh răng: chảy máu chân răng, sưng "
+        "nướu, tụt lợi, răng lung lay, hôi miệng — bằng cạo vôi sâu, làm sạch túi nha chu "
+        "và hướng dẫn chăm sóc.",
+    "nho_rang":
+        "Tiểu phẫu / nhổ răng gồm nhổ răng hư không giữ được, răng khôn mọc lệch/mọc ngầm "
+        "và các tiểu phẫu vùng miệng, được thực hiện nhẹ nhàng có gây tê.",
+    "chinh_nha":
+        "Chỉnh nha (niềng răng) sắp xếp lại răng hô, móm, khấp khểnh, thưa hoặc lệch khớp "
+        "cắn bằng mắc cài hoặc khay trong suốt (Invisalign) để có hàm răng đều và khớp cắn "
+        "đúng.",
+    "phuc_hinh":
+        "Phục hình / trồng răng phục hồi răng đã mất hoặc hư nặng: cấy ghép Implant, làm "
+        "cầu răng, răng giả tháo lắp hoặc bọc răng sứ, giúp ăn nhai và thẩm mỹ.",
+    "tham_my":
+        "Nha khoa thẩm mỹ giúp răng trắng đẹp hơn: tẩy trắng răng, dán sứ Veneer và chỉnh "
+        "sửa hình dáng răng để cải thiện nụ cười.",
+    "nha_nhi":
+        "Nha khoa trẻ em khám và điều trị cho bé: sâu răng sữa, trám/nhổ răng sữa và hướng "
+        "dẫn chăm sóc răng cho trẻ trong môi trường thân thiện.",
+}
+
 
 # ---------------------------------------------------------------------------
 # DANH SÁCH BÁC SĨ (nha sĩ) theo dịch vụ

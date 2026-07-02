@@ -16,24 +16,10 @@ import storage
 from data import DOCTORS, DEPARTMENTS, generate_available_slots
 
 
-def _build_availability():
-    """Sinh khung giờ trống, đã LOẠI các slot bị chiếm bởi lịch hẹn hiện có.
-
-    Nhờ vậy slot đã đặt không bị 'mọc lại' sau khi restart (đặc biệt khi dùng DB
-    Postgres/Supabase, dữ liệu lịch hẹn còn nguyên qua các lần khởi động).
-    """
-    slots = generate_available_slots()
-    for a in storage.list_appointments():
-        if a.get("status") != "confirmed":
-            continue
-        day = slots.get(a.get("date"))
-        if day and a.get("time") in day:
-            day.remove(a["time"])
-    return slots
-
-
-# Khung giờ trống (in-memory) — tính 1 lần khi khởi động.
-_AVAILABLE = _build_availability()
+# LƯU Ý THIẾT KẾ: không còn bảng slot in-memory. Danh sách khung giờ luôn hiển thị
+# ĐẦY ĐỦ theo lịch làm việc; việc một khung đã bị đặt hay chưa được kiểm tra TRỰC
+# TIẾP VỚI DB ngay tại bước xác nhận (xem book_appointment). Nhờ vậy DB là nguồn
+# chân lý duy nhất, không lệch khi chạy nhiều tiến trình / nhiều ngày / sau restart.
 
 
 def get_appointment(code: str):
@@ -64,36 +50,91 @@ def get_doctor_name(dept_code: str, doctor_id: str):
 
 
 def get_available_dates():
-    """Danh sách ngày còn ít nhất một khung giờ trống."""
-    return [d for d, slots in _AVAILABLE.items() if slots]
+    """Danh sách ngày làm việc sắp tới (tính trực tiếp từ lịch làm việc hiện tại)."""
+    return list(generate_available_slots().keys())
 
 
 def get_available_times(date_str: str):
-    """Khung giờ trống của một ngày."""
-    return list(_AVAILABLE.get(date_str, []))
+    """Khung giờ chuẩn của một ngày — KHÔNG lọc sẵn slot đã đặt.
+
+    Người dùng vẫn thấy/chọn được mọi khung; việc trùng lịch để bước xác nhận đối
+    chiếu DB (xem book_appointment). Trả [] nếu không phải ngày làm việc.
+    """
+    return list(generate_available_slots().get(date_str, []))
 
 
 def _generate_code():
     return "SHI-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
 
 
-def book_appointment(session_id, dept_code, doctor_id, date_str, time_str, patient_name=""):
+def upcoming_by_phone(phone):
+    """Các lịch hẹn 'confirmed' sắp tới (từ hôm nay) của một SĐT, sớm nhất trước."""
+    if not phone:
+        return []
+    from datetime import date
+    today = date.today().isoformat()
+    out = [a for a in storage.list_appointments()
+           if a.get("status") == "confirmed"
+           and a.get("patient_phone") == phone
+           and a.get("date", "") >= today]
+    out.sort(key=lambda a: (a.get("date", ""), a.get("time", "")))
+    return out
+
+
+def cancel_appointment(code):
+    """Hủy một lịch hẹn (đặt status='cancelled'). Trả về appt đã hủy, hoặc None.
+
+    Chỉ hủy lịch đang 'confirmed'; sau khi hủy, khung giờ tự trống lại vì
+    _confirmed_at chỉ tính lịch 'confirmed'.
+    """
+    appt = storage.get_appointment(code)
+    if not appt or appt.get("status") != "confirmed":
+        return None
+    storage.set_status(code, "cancelled")
+    appt["status"] = "cancelled"
+    return appt
+
+
+def _confirmed_at(date_str, time_str):
+    """Lịch hẹn 'confirmed' đang chiếm đúng khung ngày+giờ (nếu có). Đối chiếu DB."""
+    for a in storage.list_appointments():
+        if (a.get("status") == "confirmed"
+                and a.get("date") == date_str
+                and a.get("time") == time_str):
+            return a
+    return None
+
+
+def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
+                     patient_name="", patient_phone=""):
     """Ghi nhận lịch hẹn. Trả về (ok, payload).
 
     payload là dict thông tin lịch nếu thành công, hoặc {error: ...} nếu lỗi.
+    Khung giờ đã bị chiếm (đối chiếu DB lúc xác nhận):
+      - cùng SĐT   -> {duplicate: True, existing: {...}} (chính người này đã đặt).
+      - người khác -> {error: ...} (mời chọn giờ khác).
     """
-    # Kiểm tra slot còn trống không (tránh trùng lịch)
-    if time_str not in _AVAILABLE.get(date_str, []):
-        return False, {"error": "Khung giờ này vừa được đặt hoặc không hợp lệ. Vui lòng chọn giờ khác."}
+    # Khung giờ phải hợp lệ theo lịch làm việc.
+    if time_str not in generate_available_slots().get(date_str, []):
+        return False, {"error": "Khung giờ không hợp lệ. Vui lòng chọn giờ khác."}
 
     doctor_name = get_doctor_name(dept_code, doctor_id)
     if not doctor_name:
         return False, {"error": "Không tìm thấy bác sĩ phù hợp."}
 
+    # NGUỒN CHÂN LÝ = DB: kiểm tra ngay lúc xác nhận xem khung giờ đã bị đặt chưa.
+    taken = _confirmed_at(date_str, time_str)
+    if taken:
+        if patient_phone and taken.get("patient_phone") == patient_phone:
+            return False, {"duplicate": True, "existing": taken,
+                           "error": "Bạn đã đặt lịch vào khung giờ này rồi."}
+        return False, {"error": "Khung giờ này vừa có người đặt. Vui lòng chọn giờ khác."}
+
     appointment = {
         "code": _generate_code(),
         "session": session_id,
         "patient_name": patient_name or "Khách",
+        "patient_phone": patient_phone,
         "department": DEPARTMENTS.get(dept_code, {}).get("name", dept_code),
         "department_code": dept_code,
         "doctor": doctor_name,
@@ -103,9 +144,6 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str, patie
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "status": "confirmed",
     }
-
-    # Đánh dấu slot đã đặt -> loại khỏi danh sách trống
-    _AVAILABLE[date_str].remove(time_str)
 
     storage.add_appointment(appointment)
 

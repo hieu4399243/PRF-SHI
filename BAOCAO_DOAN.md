@@ -53,7 +53,8 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 1. **Triage chính xác**: phân loại mô tả triệu chứng (kể cả gõ thiếu dấu) vào đúng 1 trong
    9 nhóm dịch vụ nha khoa.
 2. **Hội thoại có dẫn dắt**: máy trạng thái đưa người dùng đi tuần tự từ mô tả triệu chứng →
-   xác nhận dịch vụ → chọn bác sĩ → chọn ngày/giờ → xác nhận đặt lịch.
+   xác nhận dịch vụ → chọn bác sĩ → chọn ngày/giờ → nhập tên & số điện thoại → xác nhận đặt
+   lịch; hỗ trợ **hỏi thông tin dịch vụ** và **hủy lịch** đã đặt.
 3. **An toàn y tế (guardrails)**: phát hiện cấp cứu (gọi 115), **không chẩn đoán/không kê đơn**,
    chuyển người thật khi cần, ẩn PII và ghi audit log.
 4. **Nhắc lịch chủ động**: bắn push xác nhận khi đặt thành công và nhắc trước 1 ngày / 2 giờ;
@@ -72,8 +73,9 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 |---|-----------|-------|
 | 1 | **Triage theo từ khóa, 2 phiên bản** | Phân loại triệu chứng → nhóm dịch vụ bằng chấm điểm từ khóa. `v1` so khớp có dấu; `v2` (mặc định) **không phân biệt dấu**, bắt được cả văn bản thiếu dấu. Cụm từ có trọng số cao hơn từ đơn. |
 | 2 | **Đánh giá độ tin cậy** | `confidence_level()` trả `high/medium/low` để quyết định: tự đề xuất, đưa nhiều lựa chọn, hay hỏi follow-up. |
-| 3 | **Hội thoại theo máy trạng thái** | 8 trạng thái: `GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE → PICK_TIME → ASK_NAME → CONFIRM_BOOKING → DONE`. |
-| 4 | **Đặt lịch chống trùng** | Loại bỏ khung giờ đã đặt, sinh mã lịch hẹn `SHI-XXXXXX`, lưu bền vững. |
+| 3 | **Hội thoại theo máy trạng thái** | Luồng đặt lịch: `GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE → PICK_TIME → ASK_NAME → ASK_PHONE → CONFIRM_BOOKING → DONE`. Thêm nhánh **hủy lịch** `CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM`. |
+| 4 | **Đặt lịch chống trùng (đối chiếu DB)** | Khung giờ **luôn hiển thị đầy đủ**; tới bước xác nhận mới **đối chiếu trực tiếp DB** (`_confirmed_at`): khung đã có người khác đặt → mời chọn giờ khác; cùng SĐT đã đặt đúng khung → hỏi hủy lịch cũ. Sinh mã `SHI-XXXXXX`, lưu bền vững. DB là nguồn chân lý duy nhất. |
+| 4b | **Thu thập & xác nhận số điện thoại** | Bước `ASK_PHONE` bắt buộc SĐT, có chuẩn hóa/kiểm tra (10 số, chấp nhận `+84`/khoảng trắng); dùng để nhắc lịch và nhận diện đặt trùng. |
 | 5 | **Guardrails an toàn y tế** | Phát hiện cấp cứu → gọi 115; chặn yêu cầu chẩn đoán/kê đơn; human handoff; gắn disclaimer. |
 | 6 | **Bảo vệ dữ liệu cá nhân** | Ẩn PII (SĐT, email, CCCD) và ghi **audit log** `audit_log.jsonl` cho mỗi lượt hội thoại. |
 | 7 | **Push notification (Expo)** | Bắn thông báo xác nhận đặt lịch + nhắc lịch, miễn phí, không cần API key. |
@@ -82,6 +84,10 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 | 10 | **Lớp lưu trữ kép** | Có `DATABASE_URL` → Postgres/Supabase; không có → file JSON. Đổi backend không phải sửa nghiệp vụ. |
 | 11 | **App native Expo** | UI chat React Native, mở qua Expo Go bằng QR. |
 | 12 | **Hệ thống đánh giá AI** | `eval/` với 63 câu gán nhãn, tính Precision/Recall/F1, so sánh v1 vs v2 → `results.md`, `BAOCAO_DANHGIA.md`. |
+| 13 | **Hủy lịch đã đặt** | Người dùng gõ *"hủy lịch"* → tra theo SĐT → chọn lịch → xác nhận hủy (`status='cancelled'`, khung giờ tự trống lại) + push báo hủy. Khi đặt trùng còn hỏi thẳng *"hủy lịch cũ & đặt lại?"* rồi **đặt tiếp lịch đang dở** thay vì bắt làm lại. |
+| 14 | **Fallback than phiền chung** | Câu mơ hồ nhưng rõ là vấn đề răng miệng (*"khó chịu ở răng khi ăn cơm"*) → đưa lựa chọn có cấu trúc thay vì báo "chưa rõ" (`mentions_dental_discomfort`). |
+| 15 | **Hỏi–đáp thông tin dịch vụ** | *"nội nha khám gì?", "trồng răng là gì?"* → trả mô tả dịch vụ (`data.SERVICE_INFO`) + mời đặt lịch (`info_question_service`). |
+| 16 | **Web demo toàn màn hình** | `templates/index.html` bố cục chat trải kín viewport (header/ô nhập full-width, cột hội thoại căn giữa) thay cho khung nổi nhỏ. |
 
 ---
 
@@ -138,9 +144,13 @@ Bệnh nhân (web / app Expo)
 **Tóm tắt một phiên đặt lịch:**
 1. App gọi `/api/start` → nhận lời chào + `session`.
 2. Người dùng mô tả triệu chứng → `/api/chat` → triage chọn dịch vụ, hỏi xác nhận.
-3. Chọn bác sĩ → ngày → giờ → nhập tên → xác nhận.
-4. Hệ thống tạo lịch, bắn push xác nhận, trả link `.ics`/Google Calendar.
+   (Có thể hỏi *"dịch vụ X là gì"* để xem mô tả trước khi đặt.)
+3. Chọn bác sĩ → ngày → giờ → nhập **tên** → nhập **số điện thoại** → xác nhận.
+4. Khi xác nhận, hệ thống **đối chiếu DB**: nếu khung giờ đã bị đặt hoặc SĐT đã có lịch
+   trùng thì báo lại (và cho **hủy lịch cũ để đặt tiếp**); nếu trống thì tạo lịch, bắn
+   push xác nhận, trả link `.ics`/Google Calendar.
 5. `reminder_worker.py` quét nền và nhắc khi tới hạn.
+6. Muốn hủy: gõ *"hủy lịch"* → tra theo SĐT → chọn lịch → xác nhận (`status='cancelled'`).
 
 ### 6.2. Cấu trúc thư mục
 
@@ -150,8 +160,8 @@ PRF-SHI/
 ├── chatbot.py             # Máy trạng thái hội thoại (SESSIONS in-memory)
 ├── triage.py              # "Hàm lượng AI": phân loại triệu chứng → dịch vụ (v1/v2)
 ├── safety.py              # Guardrails: cấp cứu, PII, chặn chẩn đoán, audit log
-├── booking.py             # Đặt lịch, chống trùng giờ, sinh mã lịch hẹn
-├── data.py                # 9 nhóm dịch vụ + bác sĩ + khung giờ (seed / Supabase)
+├── booking.py             # Đặt lịch & hủy lịch; chống trùng đối chiếu DB; sinh mã lịch hẹn
+├── data.py                # 9 nhóm dịch vụ + bác sĩ + khung giờ + mô tả (SERVICE_INFO)
 ├── storage.py             # Lớp lưu trữ kép: Postgres/Supabase ↔ file JSON
 ├── push.py                # Gửi push qua Expo Push Service
 ├── reminder_worker.py     # Quét lịch, bắn nhắc (--once/--watch/--test)
@@ -301,21 +311,51 @@ if conf == "high":
 **Giải thích:** kết quả triage được "dịch" thành câu trả lời thân thiện kèm **disclaimer**;
 nếu độ tin cậy trung bình thì đưa 2–3 lựa chọn, nếu thấp thì hỏi follow-up.
 
-### 7.4. Đặt lịch chống trùng (`booking.py`)
+### 7.4. Đặt lịch chống trùng — đối chiếu DB lúc xác nhận (`booking.py`)
 
 ```python
-def book_appointment(session_id, dept_code, doctor_id, date_str, time_str, patient_name=""):
-    if time_str not in _AVAILABLE.get(date_str, []):
-        return False, {"error": "Khung giờ này vừa được đặt hoặc không hợp lệ..."}
-    ...
-    _AVAILABLE[date_str].remove(time_str)   # loại slot khỏi danh sách trống
-    storage.add_appointment(appointment)
+def _confirmed_at(date_str, time_str):
+    """Lịch 'confirmed' đang chiếm đúng khung ngày+giờ (nếu có). Đối chiếu DB."""
+    for a in storage.list_appointments():
+        if a.get("status") == "confirmed" and a.get("date") == date_str \
+                and a.get("time") == time_str:
+            return a
+    return None
+
+def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
+                     patient_name="", patient_phone=""):
+    if time_str not in generate_available_slots().get(date_str, []):
+        return False, {"error": "Khung giờ không hợp lệ..."}
+    taken = _confirmed_at(date_str, time_str)          # NGUỒN CHÂN LÝ = DB
+    if taken:
+        if patient_phone and taken.get("patient_phone") == patient_phone:
+            return False, {"duplicate": True, "existing": taken}   # chính người này đã đặt
+        return False, {"error": "Khung giờ này vừa có người đặt..."}
+    storage.add_appointment(appointment)               # còn trống → ghi lịch
     return True, appointment
 ```
 
-**Giải thích:** kiểm tra slot còn trống ngay trước khi ghi → tránh đặt trùng giờ. Khung giờ
-trống được dựng lúc khởi động và **đã trừ các lịch đã `confirmed`** (`_build_availability`),
-nên slot không "mọc lại" sau restart khi dùng DB.
+**Giải thích:** không còn bảng khung giờ in-memory. Danh sách giờ **luôn hiển thị đầy đủ**;
+việc một khung đã bị đặt hay chưa được **kiểm tra trực tiếp với DB ngay lúc xác nhận** — nhờ
+vậy DB là nguồn chân lý duy nhất, không lệch khi chạy nhiều tiến trình / qua nhiều ngày / sau
+restart. Nếu trùng cùng SĐT → trả `duplicate` để hội thoại hỏi **hủy lịch cũ rồi đặt tiếp**.
+
+### 7.4b. Hủy lịch (`booking.py` + `storage.py`)
+
+```python
+def cancel_appointment(code):
+    """Hủy lịch (đặt status='cancelled'); khung giờ tự trống lại vì _confirmed_at
+    chỉ tính lịch 'confirmed'. Trả appt đã hủy, hoặc None nếu không hợp lệ."""
+    appt = storage.get_appointment(code)
+    if not appt or appt.get("status") != "confirmed":
+        return None
+    storage.set_status(code, "cancelled")
+    return appt
+```
+
+**Giải thích:** hủy = đổi trạng thái, không xóa dữ liệu (giữ vết cho audit). Vì khung bận chỉ
+tính lịch `confirmed`, hủy xong slot lập tức đặt lại được. `upcoming_by_phone(phone)` liệt kê
+lịch sắp tới của một SĐT để người dùng chọn lịch cần hủy.
 
 ### 7.5. Lớp lưu trữ kép (`storage.py`)
 
@@ -380,7 +420,9 @@ bệnh, không kê đơn", và mời người dùng mô tả triệu chứng.
 
 **Hình 3 — Chọn bác sĩ → ngày → khung giờ.**
 `![Đặt lịch](screenshots/03-booking-steps.png)`
-*Chú thích:* Các bước chọn được hiển thị dưới dạng nút bấm; khung giờ đã đặt bị loại khỏi danh sách.
+*Chú thích:* Các bước chọn được hiển thị dưới dạng nút bấm; khung giờ luôn hiển thị đầy đủ,
+việc trùng giờ được đối chiếu với DB ở bước xác nhận. Sau khi chọn giờ, bot hỏi thêm **tên**
+và **số điện thoại**.
 
 **Hình 4 — Đặt lịch thành công + link lịch.**
 `![Thành công](screenshots/04-success.png)`
@@ -411,7 +453,10 @@ màn hình. Hình 7 có thể chụp trực tiếp bảng trong `eval/results.md
 | Mục tiêu | Trạng thái | Bằng chứng |
 |----------|:----------:|-----------|
 | Triage chính xác (kể cả thiếu dấu) | ✅ Hoàn thành | `triage.py` v2; eval 63 mẫu đạt F1 = 100% |
-| Hội thoại dẫn dắt đặt lịch | ✅ Hoàn thành | Máy trạng thái 8 bước trong `chatbot.py` |
+| Hội thoại dẫn dắt đặt lịch | ✅ Hoàn thành | Máy trạng thái trong `chatbot.py` (đặt lịch + nhánh hủy lịch) |
+| Thu thập SĐT & chống đặt trùng | ✅ Hoàn thành | Bước `ASK_PHONE`; `book_appointment` đối chiếu DB (trùng giờ/SĐT) |
+| Hủy lịch đã đặt | ✅ Hoàn thành | `cancel_appointment` + nhánh `CANCEL_*`; `status='cancelled'` |
+| Hỏi–đáp thông tin dịch vụ | ✅ Hoàn thành | `triage.info_question_service` + `data.SERVICE_INFO` |
 | Guardrails an toàn y tế | ✅ Hoàn thành | `safety.py`: cấp cứu, chặn chẩn đoán, PII, audit |
 | Nhắc lịch chủ động | ✅ Hoàn thành | `reminder_worker.py` + `push.py` + `.ics` |
 | Đa nền tảng (web + app) | ✅ Hoàn thành | REST API dùng chung; `mobile/` (Expo) |

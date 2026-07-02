@@ -11,19 +11,24 @@
     --user:#0e9b8e; --warn:#b25a2b;
   }
   *{box-sizing:border-box}
+  :root{ --col:860px; }  /* bề rộng cột hội thoại trên màn hình lớn */
   body{
     margin:0; background:var(--bg); color:var(--body); height:100vh;
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-    display:flex; align-items:center; justify-content:center; padding:18px;
+    display:flex; flex-direction:column;
   }
+  /* Toàn màn hình: khung chat trải kín viewport, không bo góc/đổ bóng. */
   .app{
-    width:100%; max-width:480px; height:min(760px,95vh); background:var(--paper);
-    border-radius:18px; box-shadow:0 10px 40px rgba(20,30,28,.16);
+    width:100%; height:100vh; height:100dvh; background:var(--paper);
     display:flex; flex-direction:column; overflow:hidden;
   }
+  /* Bọc giữ nội dung căn giữa theo cột dễ đọc trên màn hình rộng. */
+  .wrap{width:100%; max-width:var(--col); margin:0 auto}
   /* Header */
   .head{
     background:linear-gradient(135deg,var(--teal),var(--teal-deep)); color:#fff;
+  }
+  .head .wrap{
     padding:16px 20px; display:flex; align-items:center; gap:12px;
   }
   .avatar{
@@ -36,7 +41,12 @@
   .dot{width:8px; height:8px; border-radius:50%; background:#7CFFB2; box-shadow:0 0 0 3px rgba(124,255,178,.25)}
 
   /* Messages */
-  .msgs{flex:1; overflow-y:auto; padding:18px 16px; display:flex; flex-direction:column; gap:12px; background:#f6f8f8}
+  .msgs{
+    flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; background:#f6f8f8;
+    padding:18px 16px;
+    /* Căn giữa cột hội thoại: chừa lề hai bên khi màn hình rộng hơn --col. */
+    padding-inline:max(16px, calc((100% - var(--col)) / 2));
+  }
   .row{display:flex; gap:8px; max-width:88%}
   .row.bot{align-self:flex-start}
   .row.user{align-self:flex-end; flex-direction:row-reverse}
@@ -78,7 +88,8 @@
   @keyframes bounce{0%,60%,100%{transform:translateY(0);opacity:.5}30%{transform:translateY(-5px);opacity:1}}
 
   /* Input */
-  .input{display:flex; gap:8px; padding:12px 14px; border-top:1px solid var(--line); background:#fff}
+  .input{border-top:1px solid var(--line); background:#fff}
+  .input .wrap{display:flex; gap:8px; padding:12px 16px}
   .input input{
     flex:1; border:1.5px solid var(--line); border-radius:22px; padding:11px 16px;
     font-size:14px; outline:none; font-family:inherit;
@@ -95,19 +106,23 @@
 <body>
   <div class="app">
     <div class="head">
-      <div class="avatar">🦷</div>
-      <div>
-        <h1>Trợ lý Nha khoa SHI</h1>
-        <p>Chọn dịch vụ nha khoa &amp; Đặt lịch hẹn</p>
+      <div class="wrap">
+        <div class="avatar">🦷</div>
+        <div>
+          <h1>Trợ lý Nha khoa SHI</h1>
+          <p>Chọn dịch vụ nha khoa &amp; Đặt lịch hẹn</p>
+        </div>
+        <div class="status"><span class="dot"></span> Online</div>
       </div>
-      <div class="status"><span class="dot"></span> Online</div>
     </div>
 
     <div class="msgs" id="msgs"></div>
 
     <form class="input" id="form" autocomplete="off">
-      <input id="text" placeholder="Mô tả vấn đề răng miệng của bạn..." />
-      <button class="send" id="send" type="submit">➤</button>
+      <div class="wrap">
+        <input id="text" placeholder="Mô tả vấn đề răng miệng của bạn..." />
+        <button class="send" id="send" type="submit">➤</button>
+      </div>
     </form>
   </div>
 

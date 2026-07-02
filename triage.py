@@ -88,6 +88,94 @@ def best_department(text: str, version: str = DEFAULT_VERSION):
     return results[0] if results else None
 
 
+# Bộ phát hiện "than phiền nha khoa chung": câu có nhắc BỘ PHẬN răng miệng kèm một
+# CẢM GIÁC khó chịu, nhưng không trúng từ khóa dịch vụ cụ thể nào. Khi đó nên đưa
+# ra lựa chọn có cấu trúc để chốt dịch vụ, thay vì bó tay báo "chưa rõ triệu chứng".
+_DENTAL_PARTS = ["răng", "nướu", "lợi", "hàm", "chân răng", "hàm răng"]
+_DISCOMFORT = ["đau", "khó chịu", "ê", "ê buốt", "buốt", "nhức", "cộm",
+               "khi ăn", "khi nhai", "nhai", "sưng", "chảy máu", "nhạy cảm", "khó ăn"]
+
+
+def mentions_dental_discomfort(text: str) -> bool:
+    """True nếu câu nhắc tới bộ phận răng miệng + một cảm giác khó chịu.
+
+    Dùng cho fallback khi classify_symptoms không đủ điểm: vẫn nhận ra đây là vấn
+    đề răng miệng để hỏi có cấu trúc. Khớp KHÔNG phân biệt dấu (bắt cả gõ thiếu dấu).
+    """
+    norm_na = _strip_accents(_normalize(text))
+    has_part = any(_contains_word(norm_na, _strip_accents(p)) for p in _DENTAL_PARTS)
+    has_feel = any(_contains_word(norm_na, _strip_accents(f)) for f in _DISCOMFORT)
+    return has_part and has_feel
+
+
+# ---------------------------------------------------------------------------
+# CÂU HỎI THÔNG TIN: "trám răng là khám gì?", "nội nha khám gì?", "niềng răng là gì?"
+# -> nhận diện (cụm hỏi thông tin) + (tên/từ khóa dịch vụ) để trả về mô tả dịch vụ.
+# ---------------------------------------------------------------------------
+# Các cụm cho thấy người dùng đang HỎI THÔNG TIN (không dấu). Cố ý bỏ "làm gì"
+# vì dễ trùng câu than phiền ("đau quá không biết làm gì").
+_INFO_TRIGGERS = [
+    "kham gi", "kham nhung gi", "kham the nao", "kham nhu the nao",
+    "la gi", "la benh gi", "la dich vu gi", "gom gi", "gom nhung gi",
+    "bao gom gi", "dieu tri gi", "dieu tri nhung gi", "chua gi",
+    "nhu the nao", "de lam gi", "co tac dung gi",
+]
+
+# Token quá chung -> bỏ khi so khớp tên/từ khóa dịch vụ (tránh nhiễu).
+_MENTION_STOP = set(
+    "rang kham gi la lam nha khoa va cho bi dieu tri chua cua nhung the nao nhu "
+    "ban toi o khi mot cac dich vu benh vung de co tac dung gom bao".split()
+)
+
+
+def is_info_question(text: str) -> bool:
+    """Câu có mang ý HỎI THÔNG TIN về một dịch vụ? (khớp không phân biệt dấu)."""
+    na = _strip_accents(_normalize(text))
+    return any(t in na for t in _INFO_TRIGGERS)
+
+
+def _mention_tokens(phrases, strip: bool) -> set:
+    """Tập token đặc trưng từ các cụm, đã bỏ token chung (lọc theo bản không dấu).
+
+    strip=False giữ token CÓ DẤU (để phân biệt 'trồng' vs 'trong'); strip=True bỏ
+    dấu (bắt cả khi người dùng gõ thiếu dấu).
+    """
+    toks = set()
+    for phrase in phrases:
+        for t in _normalize(phrase).split():
+            base = _strip_accents(t)
+            if not base or base in _MENTION_STOP:
+                continue
+            toks.add(base if strip else t)
+    return toks
+
+
+def find_service_mention(text: str):
+    """Tìm mã dịch vụ được nhắc tới trong câu (khớp tên/từ khóa). None nếu không rõ.
+
+    Ưu tiên khớp CÓ DẤU; nếu không ra kết quả mới thử bản bỏ dấu.
+    """
+    for strip in (False, True):
+        msg = _mention_tokens([text], strip)
+        best, best_score = None, 0
+        for code, dept in DEPARTMENTS.items():
+            dept_tokens = _mention_tokens(
+                [dept.get("name", "")] + list(dept.get("keywords", [])), strip)
+            score = len(msg & dept_tokens)
+            if score > best_score:
+                best, best_score = code, score
+        if best_score > 0:
+            return best
+    return None
+
+
+def info_question_service(text: str):
+    """Nếu câu là câu hỏi thông tin VỀ một dịch vụ cụ thể -> trả mã dịch vụ, else None."""
+    if not is_info_question(text):
+        return None
+    return find_service_mention(text)
+
+
 def confidence_level(results) -> str:
     """Ước lượng độ tin cậy để quyết định có cần hỏi thêm hay không.
 

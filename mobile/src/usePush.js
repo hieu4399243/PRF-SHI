@@ -11,9 +11,13 @@ import * as Notifications from "expo-notifications";
 import { registerPush } from "./api";
 
 // Hiển thị thông báo cả khi app đang mở.
+// SDK 54 (expo-notifications 0.32): shouldShowAlert bị deprecated -> phải dùng
+// shouldShowBanner + shouldShowList thì banner mới hiện lúc app đang mở (foreground).
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
-    shouldShowAlert: true,
+    shouldShowBanner: true,
+    shouldShowList: true,
+    shouldShowAlert: true, // giữ để tương thích bản cũ
     shouldPlaySound: true,
     shouldSetBadge: false,
   }),

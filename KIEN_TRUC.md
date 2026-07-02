@@ -46,11 +46,17 @@ app.py ──► resolve_sid() xác định "ai đang nói"
 chatbot.handle_message(sid, message)
    ├─ safety.audit()            ghi log (đã ẩn PII)
    ├─ safety.check_emergency()  cấp cứu? → chặn, khuyên gọi 115
+   ├─ ở bước nhập tự do (TRIAGE/CONFIRM_DEPT/DONE) còn bắt:
+   │     • câu hỏi thông tin "X là khám gì?" → triage.info_question_service() → mô tả dịch vụ
+   │     • ý định "hủy lịch" → nhánh CANCEL_*
    ├─ định tuyến theo STATE:
-   │     TRIAGE → triage.classify_symptoms()  (đọc DEPARTMENTS)
-   │     PICK_* → booking.get_doctors/dates/times()
-   │     CONFIRM_BOOKING → booking.book_appointment() → storage → (Supabase/JSON)
-   │                       + push.send_push() + calendar_ics
+   │     TRIAGE → triage.classify_symptoms() (đọc DEPARTMENTS); mơ hồ mà rõ là vấn đề
+   │              răng miệng → mentions_dental_discomfort() → cho chọn có cấu trúc
+   │     PICK_* → booking.get_doctors/dates/times()  (khung giờ luôn hiển thị đầy đủ)
+   │     ASK_NAME → ASK_PHONE (bắt buộc SĐT, có chuẩn hóa/kiểm tra)
+   │     CONFIRM_BOOKING → booking.book_appointment() → ĐỐI CHIẾU DB (trùng giờ / trùng
+   │                       SĐT) → storage → (Supabase/JSON) + push.send_push() + calendar_ics
+   │     CANCEL_* → booking.upcoming_by_phone()/cancel_appointment() (status='cancelled')
    └─ trả {reply, options, state, appointment?}
    ▼
 app.py → jsonify → Client hiển thị bong bóng chat + nút bấm
@@ -59,8 +65,12 @@ app.py → jsonify → Client hiển thị bong bóng chat + nút bấm
 **Máy trạng thái (state machine) của hội thoại:**
 ```
 GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE
-      → PICK_TIME → ASK_NAME → CONFIRM_BOOKING → DONE
-(bất kỳ lúc nào: EMERGENCY / HANDOFF được ưu tiên)
+      → PICK_TIME → ASK_NAME → ASK_PHONE → CONFIRM_BOOKING → DONE
+
+Nhánh hủy lịch:   CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM → DONE
+(khi đặt trùng, CONFIRM_BOOKING cũng rẽ sang CANCEL_CONFIRM: hủy lịch cũ rồi đặt tiếp)
+
+Ưu tiên mọi lúc: EMERGENCY / HANDOFF.
 ```
 
 ---
@@ -71,12 +81,12 @@ GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE
 | File | Vai trò | Phụ thuộc |
 |------|---------|-----------|
 | `app.py` | Cửa ngõ API Flask: `/api/start`, `/api/chat`, `/api/register-push`, `/api/ics/<code>` | chatbot, booking, storage |
-| `chatbot.py` | **Máy trạng thái** điều phối hội thoại | triage, booking, safety, push |
-| `triage.py` | **AI** phân loại triệu chứng → dịch vụ (v1 có dấu / v2 không dấu) | data |
+| `chatbot.py` | **Máy trạng thái** điều phối hội thoại (gồm nhánh đặt lịch, hủy lịch, hỏi thông tin) | triage, booking, safety, push |
+| `triage.py` | **AI** phân loại triệu chứng → dịch vụ (v1 có dấu / v2 không dấu); fallback than phiền chung; nhận câu hỏi thông tin dịch vụ | data |
 | `safety.py` | Guardrails: cấp cứu→115, ẩn PII, chặn chẩn đoán, audit log | — |
-| `booking.py` | Đặt lịch, quản lý khung giờ trống, sinh mã lịch hẹn | data, storage |
+| `booking.py` | Đặt lịch & **hủy lịch**; **kiểm tra trùng (giờ/SĐT) trực tiếp với DB lúc xác nhận**; sinh mã lịch hẹn | data, storage |
 | `push.py` | Gửi thông báo qua Expo Push; token qua storage | storage |
-| `data.py` | Danh mục dịch vụ/nha sĩ (seed + nạp từ DB), khung giờ | storage |
+| `data.py` | Danh mục dịch vụ/nha sĩ (seed + nạp từ DB), **mô tả dịch vụ (`SERVICE_INFO`)**, khung giờ | storage |
 | `storage.py` | **Lớp lưu trữ**: Supabase (Postgres) ↔ file JSON theo `DATABASE_URL` | psycopg (khi dùng DB) |
 | `calendar_ics.py` | Sinh file `.ics` (có lời nhắc) để thêm vào Lịch | — |
 | `reminder_worker.py` | Tiến trình nền quét lịch hẹn → bắn nhắc (1 ngày/2 giờ) | booking, push |
@@ -108,8 +118,9 @@ GREET → TRIAGE → CONFIRM_DEPT → PICK_DOCTOR → PICK_DATE
 
 **Supabase (Postgres)** — khi có `DATABASE_URL`:
 ```sql
-appointments(code PK, session, patient_name, department, department_code,
+appointments(code PK, session, patient_name, patient_phone, department, department_code,
              doctor, doctor_id, date, time, created_at, status, reminders_sent jsonb)
+             -- status: 'confirmed' | 'cancelled'; slot chỉ bị coi là bận khi 'confirmed'
 device_tokens(session, token, PRIMARY KEY(session, token))
 services(code PK, name, descr, keywords jsonb, sort_order)
 doctors(id PK, service_code → services.code, name, sort_order)
@@ -126,7 +137,7 @@ lấy từ dict `_SEED_*` trong `data.py`. Xem chi tiết: [DATABASE.md](DATABAS
 | Mảng | Công nghệ |
 |------|-----------|
 | Backend | Python 3, **Flask** |
-| AI/NLU | Rule-based scoring (từ khóa, không dấu) — có chỗ cắm LLM Claude |
+| AI/NLU | Rule-based scoring (từ khóa, không dấu) + fallback than phiền chung + Q&A "dịch vụ là gì" — có chỗ cắm LLM Claude |
 | Database | **Supabase (Postgres)** qua `psycopg`; fallback JSON |
 | Thông báo | **Expo Push Service** + local notification + file `.ics` |
 | Mobile | **React Native / Expo (SDK 54)** |

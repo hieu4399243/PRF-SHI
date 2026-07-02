@@ -12,7 +12,7 @@
 | Macro Precision | 100.0% | **100.0%** |
 | Macro Recall |  77.8% | **100.0%** |
 | Macro F1 |  87.3% | **100.0%** |
-| Thời gian TB (ms/câu) | 0.049 | 0.253 |
+| Thời gian TB (ms/câu) | 0.057 | 0.335 |
 
 ## 2. Precision / Recall / F1 theo từng dịch vụ (v2)
 

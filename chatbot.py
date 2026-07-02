@@ -4,7 +4,7 @@ Conversational core — máy trạng thái điều phối hội thoại của AI
 Kết nối 3 khối: triage (phân khoa), booking (đặt lịch) và safety (guardrails).
 Mỗi phiên (session) giữ trạng thái riêng để dẫn dắt bệnh nhân qua các bước:
     GREET -> TRIAGE -> CONFIRM_DEPT -> PICK_DOCTOR -> PICK_DATE
-          -> PICK_TIME -> ASK_NAME -> CONFIRM_BOOKING -> DONE
+          -> PICK_TIME -> ASK_NAME -> ASK_PHONE -> CONFIRM_BOOKING -> DONE
 Bất kỳ lúc nào, guardrails (cấp cứu / handoff / chặn chẩn đoán) đều được ưu tiên.
 """
 
@@ -24,7 +24,11 @@ def _new_session():
         "date": None,
         "time": None,
         "patient_name": "",
+        "patient_phone": "",
         "candidates": [],  # các khoa ứng viên từ triage
+        "cancel_phone": "",  # SĐT dùng khi tra cứu để hủy lịch
+        "cancel_code": None,  # mã lịch hẹn đang chờ xác nhận hủy
+        "resume_booking": False,  # hủy lịch trùng xong thì đặt tiếp lịch đang dở
     }
 
 
@@ -102,6 +106,26 @@ def handle_message(session_id: str, raw_message: str):
         safety.audit(session_id, "bot", resp["reply"], {"flag": "handoff"})
         return resp
 
+    # --- Ý định HỦY lịch đã đặt ("hủy lịch", "muốn hủy lịch hẹn"...) ---
+    # Chỉ nhận ở bước nhập tự do; trong lúc đang đặt, "hủy" mang nghĩa hủy thao tác.
+    if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"} and _is_cancel_request(message):
+        resp = _start_cancel(sess)
+        sess["state"] = resp["state"]
+        safety.audit(session_id, "bot", resp["reply"],
+                     {"state": resp["state"], "intent": "cancel"})
+        return resp
+
+    # --- Câu hỏi thông tin về dịch vụ ("X là khám gì / là gì / gồm gì") ---
+    # Chỉ nhận ở các bước nhập tự do (tránh cướp lượt khi đang bấm chọn giờ/nhập tên).
+    if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"}:
+        info_code = triage.info_question_service(message)
+        if info_code:
+            resp = _describe_service(sess, info_code)
+            sess["state"] = resp["state"]
+            safety.audit(session_id, "bot", resp["reply"],
+                         {"state": resp["state"], "intent": "info"})
+            return resp
+
     # --- Định tuyến theo trạng thái ---
     state = sess["state"]
     if state == "GREET":
@@ -118,8 +142,16 @@ def handle_message(session_id: str, raw_message: str):
         resp = _pick_time(sess, message)
     elif state == "ASK_NAME":
         resp = _ask_name(sess, message)
+    elif state == "ASK_PHONE":
+        resp = _ask_phone(sess, message)
     elif state == "CONFIRM_BOOKING":
         resp = _confirm_booking(sess, message)
+    elif state == "CANCEL_ASK_PHONE":
+        resp = _cancel_ask_phone(sess, message)
+    elif state == "CANCEL_PICK":
+        resp = _cancel_pick(sess, message)
+    elif state == "CANCEL_CONFIRM":
+        resp = _cancel_confirm(sess, message)
     elif state == "DONE":
         resp = _reply(
             "Lịch hẹn của bạn đã hoàn tất. Gõ <b>“làm lại”</b> nếu muốn đặt lịch mới "
@@ -150,7 +182,11 @@ def _do_triage(sess, message):
     conf = triage.confidence_level(results)
 
     if conf == "low":
-        # Không nhận ra triệu chứng -> hỏi follow-up có cấu trúc.
+        # Không trúng từ khóa dịch vụ cụ thể, NHƯNG câu vẫn cho thấy vấn đề răng
+        # miệng (bộ phận + cảm giác khó chịu) -> đưa lựa chọn có cấu trúc để chốt.
+        if triage.mentions_dental_discomfort(message):
+            return _dental_followup(diag_note)
+        # Không nhận ra gì -> hỏi follow-up có cấu trúc.
         return _reply(
             diag_note + "Mình chưa rõ triệu chứng của bạn. "
             + triage.FOLLOWUP_QUESTIONS[0]
@@ -181,6 +217,44 @@ def _do_triage(sess, message):
         diag_note + "Vấn đề của bạn có thể liên quan vài dịch vụ. "
         "Bạn muốn dùng dịch vụ nào dưới đây?",
         options=options,
+        state="CONFIRM_DEPT",
+    )
+
+
+def _dental_followup(diag_note=""):
+    """Câu mơ hồ nhưng rõ là vấn đề răng miệng -> cho chọn mô tả gần nhất.
+
+    Mỗi lựa chọn ánh xạ thẳng sang một mã dịch vụ; _confirm_dept xử lý tiếp.
+    """
+    return _reply(
+        diag_note + "Mình hiểu bạn đang khó chịu ở răng miệng. Để hỗ trợ đúng, "
+        "bạn chọn mô tả <b>gần nhất</b> nhé:",
+        options=[
+            {"label": "Ê buốt / đau khi ăn nóng–lạnh–ngọt", "value": "sau_rang"},
+            {"label": "Đau nhức dữ dội / theo nhịp / về đêm", "value": "noi_nha"},
+            {"label": "Chảy máu / sưng nướu, hôi miệng", "value": "nha_chu"},
+            {"label": "Chỉ khó chịu nhẹ — muốn khám tổng quát", "value": "kham_tong_quat"},
+            {"label": "🔁 Mô tả lại triệu chứng", "value": "redo"},
+        ],
+        state="CONFIRM_DEPT",
+    )
+
+
+def _describe_service(sess, code, diag_note=""):
+    """Trả lời câu hỏi 'X là khám gì / là gì' bằng mô tả dịch vụ + mời đặt lịch."""
+    from data import DEPARTMENTS, SERVICE_INFO
+    dept = DEPARTMENTS.get(code, {})
+    name = dept.get("name", code)
+    info = SERVICE_INFO.get(code) or dept.get("desc", "")
+    sess["dept_code"] = code  # để nút "Đặt lịch" (yes) dùng ngay dịch vụ này
+    text = (diag_note + f"<b>{name}</b><br>{info}<br><br>"
+            "Bạn có muốn đặt lịch dịch vụ này không?")
+    return _reply(
+        safety.add_disclaimer(text),
+        options=[
+            {"label": f"✅ Đặt lịch: {name}", "value": "yes"},
+            {"label": "🔁 Mô tả triệu chứng của tôi", "value": "no"},
+        ],
         state="CONFIRM_DEPT",
     )
 
@@ -271,18 +345,24 @@ def _pick_time(sess, message):
 
 def _ask_name(sess, message):
     sess["patient_name"] = message[:60] if message else "Khách"
-    from data import DEPARTMENTS
-    dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
-    doctor_name = booking.get_doctor_name(sess["dept_code"], sess["doctor_id"])
-    summary = (
-        "Vui lòng xác nhận lịch hẹn:<br>"
-        f"• <b>Bệnh nhân:</b> {sess['patient_name']}<br>"
-        f"• <b>Dịch vụ:</b> {dept_name}<br>"
-        f"• <b>Bác sĩ:</b> {doctor_name}<br>"
-        f"• <b>Thời gian:</b> {sess['time']} ngày {_format_date(sess['date'])}"
-    )
     return _reply(
-        summary,
+        "Cảm ơn bạn. Cho mình xin thêm <b>số điện thoại</b> để xác nhận và nhắc lịch nhé "
+        "(vd. <i>0912 345 678</i>).",
+        state="ASK_PHONE",
+    )
+
+
+def _ask_phone(sess, message):
+    phone = _normalize_phone(message)
+    if not phone:
+        return _reply(
+            "Số điện thoại chưa hợp lệ. Bạn nhập giúp mình số di động Việt Nam "
+            "gồm <b>10 số</b> (bắt đầu bằng 0, vd. <i>0912345678</i>) nhé.",
+            state="ASK_PHONE",
+        )
+    sess["patient_phone"] = phone
+    return _reply(
+        _booking_summary(sess),
         options=[
             {"label": "✅ Xác nhận đặt lịch", "value": "confirm"},
             {"label": "❌ Hủy", "value": "cancel"},
@@ -291,12 +371,30 @@ def _ask_name(sess, message):
     )
 
 
+def _booking_summary(sess):
+    from data import DEPARTMENTS
+    dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
+    doctor_name = booking.get_doctor_name(sess["dept_code"], sess["doctor_id"])
+    return (
+        "Vui lòng xác nhận lịch hẹn:<br>"
+        f"• <b>Bệnh nhân:</b> {sess['patient_name']}<br>"
+        f"• <b>Điện thoại:</b> {sess['patient_phone']}<br>"
+        f"• <b>Dịch vụ:</b> {dept_name}<br>"
+        f"• <b>Bác sĩ:</b> {doctor_name}<br>"
+        f"• <b>Thời gian:</b> {sess['time']} ngày {_format_date(sess['date'])}"
+    )
+
+
 def _confirm_booking(sess, message):
     low = message.lower()
     if low in {"cancel", "hủy", "huỷ", "không"}:
         return _reply("Đã hủy thao tác đặt lịch. Gõ <b>“làm lại”</b> nếu bạn muốn bắt đầu lại nhé.",
                       state="DONE")
+    return _finalize_booking(sess)
 
+
+def _finalize_booking(sess):
+    """Ghi nhận lịch từ dữ liệu trong phiên. Dùng lại được sau khi hủy lịch trùng."""
     ok, payload = booking.book_appointment(
         session_id=sess.get("_id", "anon"),
         dept_code=sess["dept_code"],
@@ -304,8 +402,26 @@ def _confirm_booking(sess, message):
         date_str=sess["date"],
         time_str=sess["time"],
         patient_name=sess["patient_name"],
+        patient_phone=sess["patient_phone"],
     )
     if not ok:
+        if payload.get("duplicate"):
+            # Cùng SĐT đã đặt đúng khung giờ này -> hỏi hủy lịch cũ RỒI đặt tiếp lịch này.
+            dup = payload["existing"]
+            sess["cancel_code"] = dup["code"]
+            sess["resume_booking"] = True
+            return _reply(
+                "⚠️ <b>Bạn đã đặt lịch vào đúng khung giờ này rồi.</b><br>"
+                f"• <b>Mã lịch hẹn:</b> {dup['code']}<br>"
+                f"• <b>Dịch vụ:</b> {dup['department']} — {dup['doctor']}<br>"
+                f"• <b>Thời gian:</b> {dup['time']} ngày {_format_date(dup['date'])}<br><br>"
+                "Bạn có muốn <b>hủy lịch đặt trước đó</b> và đặt lại không?",
+                options=[
+                    {"label": "🗑️ Hủy lịch cũ & đặt lại", "value": "confirm"},
+                    {"label": "↩️ Giữ lịch cũ", "value": "back"},
+                ],
+                state="CANCEL_CONFIRM",
+            )
         # slot vừa bị đặt mất -> quay lại chọn giờ
         return _reply(payload["error"] + " Mời bạn chọn lại khung giờ.", state="PICK_TIME")
 
@@ -348,6 +464,145 @@ def _confirm_booking(sess, message):
 
 
 # ---------------------------------------------------------------------------
+# HỦY LỊCH ĐÃ ĐẶT
+# ---------------------------------------------------------------------------
+# Nhận diện ý định hủy (khớp cả khi gõ thiếu dấu). Yêu cầu có "lịch/hẹn" để không
+# nhầm với nút "hủy" (hủy thao tác) trong lúc đang đặt.
+_CANCEL_PATTERNS = ["huy lich", "huy dat lich", "huy lich hen", "huy hen",
+                    "huy cuoc hen", "muon huy", "bo lich hen", "xoa lich hen",
+                    "cancel lich"]
+
+
+def _is_cancel_request(message: str) -> bool:
+    na = triage._strip_accents((message or "").lower())
+    return any(p in na for p in _CANCEL_PATTERNS)
+
+
+def _appt_label(a):
+    """Nhãn ngắn gọn cho một lịch hẹn trên nút chọn."""
+    return f"{a['department']} • {a['time']} {_format_date(a['date'])}"
+
+
+def _start_cancel(sess):
+    sess["cancel_phone"] = ""
+    sess["cancel_code"] = None
+    return _reply(
+        "Bạn muốn <b>hủy lịch hẹn</b>. Cho mình xin <b>số điện thoại</b> đã dùng khi đặt "
+        "để tra cứu nhé (vd. <i>0912345678</i>).",
+        state="CANCEL_ASK_PHONE",
+    )
+
+
+def _cancel_ask_phone(sess, message):
+    phone = _normalize_phone(message)
+    if not phone:
+        return _reply(
+            "Số điện thoại chưa hợp lệ. Bạn nhập lại số 10 số (vd. <i>0912345678</i>) nhé.",
+            state="CANCEL_ASK_PHONE",
+        )
+    appts = booking.upcoming_by_phone(phone)
+    if not appts:
+        return _reply(
+            "Mình không tìm thấy lịch hẹn sắp tới nào với số này. Bạn kiểm tra lại số "
+            "điện thoại, hoặc gõ <b>“làm lại”</b> để đặt lịch mới nhé.",
+            state="DONE",
+        )
+    sess["cancel_phone"] = phone
+    options = [{"label": _appt_label(a), "value": a["code"]} for a in appts]
+    options.append({"label": "↩️ Không hủy nữa", "value": "back"})
+    return _reply("Bạn muốn hủy lịch hẹn nào dưới đây?", options=options, state="CANCEL_PICK")
+
+
+def _cancel_pick(sess, message):
+    low = message.strip().lower()
+    if low in {"back", "không", "khong", "thôi", "thoi"}:
+        return _reply("Đã giữ nguyên lịch hẹn của bạn. Gõ <b>“làm lại”</b> nếu cần đặt lịch mới nhé.",
+                      state="DONE")
+    appts = booking.upcoming_by_phone(sess.get("cancel_phone", ""))
+    chosen = next((a for a in appts if a["code"].lower() == low), None)
+    if not chosen:
+        return _reply("Bạn chọn giúp mình một lịch ở các nút bên trên nhé.", state="CANCEL_PICK")
+    sess["cancel_code"] = chosen["code"]
+    return _reply(
+        "Bạn chắc chắn muốn <b>hủy</b> lịch hẹn này?<br>"
+        f"• <b>Mã:</b> {chosen['code']}<br>"
+        f"• <b>Dịch vụ:</b> {chosen['department']} — {chosen['doctor']}<br>"
+        f"• <b>Thời gian:</b> {chosen['time']} ngày {_format_date(chosen['date'])}",
+        options=[
+            {"label": "✅ Hủy lịch này", "value": "confirm"},
+            {"label": "↩️ Không hủy", "value": "back"},
+        ],
+        state="CANCEL_CONFIRM",
+    )
+
+
+def _cancel_confirm(sess, message):
+    low = message.strip().lower()
+    resume = sess.get("resume_booking", False)
+    if low in {"back", "không", "khong", "thôi", "thoi", "cancel"}:
+        sess["cancel_code"] = None
+        sess["resume_booking"] = False
+        if resume:
+            # Đang đặt lịch mà gặp trùng, chọn GIỮ lịch cũ -> không tạo thêm lịch trùng.
+            return _reply(
+                "Được, mình <b>giữ nguyên lịch cũ</b> và không đặt thêm lịch trùng nhé. "
+                "Gõ <b>“làm lại”</b> nếu bạn muốn đặt một lịch khác.",
+                state="DONE",
+            )
+        return _reply("Đã giữ nguyên lịch hẹn. Gõ <b>“làm lại”</b> nếu cần nhé.", state="DONE")
+
+    appt = booking.cancel_appointment(sess.get("cancel_code")) if sess.get("cancel_code") else None
+    sess["cancel_code"] = None
+    if not appt:
+        sess["resume_booking"] = False
+        return _reply(
+            "Lịch hẹn này không còn để hủy (có thể đã được hủy trước đó). "
+            "Gõ <b>“làm lại”</b> nếu cần nhé.",
+            state="DONE",
+        )
+
+    if resume:
+        # Đã hủy lịch cũ (giải phóng khung giờ) -> đặt tiếp lịch đang dở, không bắt làm lại.
+        sess["resume_booking"] = False
+        return _finalize_booking(sess)
+
+    # Hủy chủ động: báo push + xác nhận đã hủy.
+    import push
+    tokens = push.get_tokens(sess.get("_id", "anon"))
+    push.send_push(
+        tokens,
+        title="🗑️ Đã hủy lịch hẹn",
+        body=f"{appt['department']} lúc {appt['time']} ngày {_format_date(appt['date'])} đã được hủy.",
+        data={"type": "booking_cancelled", "code": appt["code"]},
+    )
+    return _reply(
+        "✅ <b>Đã hủy lịch hẹn.</b><br>"
+        f"Mã {appt['code']} — {appt['department']} lúc {appt['time']} ngày "
+        f"{_format_date(appt['date'])} đã được hủy, khung giờ này đã trống trở lại.<br>"
+        "<i>Gõ “làm lại” nếu bạn muốn đặt lịch mới.</i>",
+        state="DONE",
+    )
+
+
+# ---------------------------------------------------------------------------
+import re
+
+_PHONE_RE = re.compile(r"^0\d{9}$")
+
+
+def _normalize_phone(raw: str):
+    """Chuẩn hóa & kiểm tra SĐT di động VN. Trả chuỗi 10 số (0xxxxxxxxx) hoặc "" nếu sai.
+
+    Chấp nhận có khoảng trắng/dấu chấm/gạch, và đầu số +84/84 -> quy về 0xxxxxxxxx.
+    """
+    digits = re.sub(r"[\s.\-()]", "", raw or "")
+    if digits.startswith("+84"):
+        digits = "0" + digits[3:]
+    elif digits.startswith("84") and len(digits) == 11:
+        digits = "0" + digits[2:]
+    return digits if _PHONE_RE.match(digits) else ""
+
+
 def _format_date(iso: str):
     """YYYY-MM-DD -> 'Thứ X, dd/mm'."""
     from datetime import date
