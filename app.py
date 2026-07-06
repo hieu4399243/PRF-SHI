@@ -22,6 +22,9 @@ app = Flask(__name__)
 # Production: đặt biến môi trường SECRET_KEY. Demo: dùng key mặc định.
 app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
 
+# Khóa truy cập trang quản trị (admin/bác sĩ). Production: đặt ADMIN_KEY trong .env.
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "shi-admin-demo")
+
 print(f"[storage] Chế độ lưu trữ: {'Postgres/Supabase' if storage.USE_DB else 'file JSON (local)'}")
 
 
@@ -83,6 +86,72 @@ def download_ics(code):
         mimetype="text/calendar",
         headers={"Content-Disposition": f'attachment; filename="{code}.ics"'},
     )
+
+
+# ===========================================================================
+# KHU VỰC QUẢN TRỊ (admin / bác sĩ) — chỉ ĐỌC lịch đã đặt & lịch làm việc.
+# Bảo vệ bằng khóa ADMIN_KEY (header 'X-Admin-Key' hoặc query '?key='). Đây là
+# lớp bảo vệ tối thiểu cho demo; production nên thay bằng đăng nhập thật + vai trò.
+# ===========================================================================
+def _check_admin():
+    key = request.headers.get("X-Admin-Key") or request.args.get("key", "")
+    return key == ADMIN_KEY
+
+
+@app.route("/admin")
+def admin_page():
+    return render_template("admin.html")
+
+
+@app.route("/api/admin/appointments")
+def admin_appointments():
+    if not _check_admin():
+        abort(401)
+    appts = booking.query_appointments(
+        date=request.args.get("date") or None,
+        doctor_id=request.args.get("doctor_id") or None,
+        dept_code=request.args.get("dept_code") or None,
+        phone=request.args.get("phone") or None,
+        status=request.args.get("status") or None,
+    )
+    return jsonify({"appointments": appts, "count": len(appts)})
+
+
+@app.route("/api/admin/schedule")
+def admin_schedule():
+    """Lịch làm việc của 1 bác sĩ trong 1 ngày (khung bận/rảnh)."""
+    if not _check_admin():
+        abort(401)
+    doctor_id = request.args.get("doctor_id", "")
+    date_str = request.args.get("date", "")
+    if not doctor_id or not date_str:
+        return jsonify({"error": "Cần doctor_id và date"}), 400
+    return jsonify({"doctor_id": doctor_id, "date": date_str,
+                    "slots": booking.doctor_day_schedule(doctor_id, date_str)})
+
+
+@app.route("/api/admin/meta")
+def admin_meta():
+    """Danh sách bác sĩ + ngày làm việc + thống kê nhanh cho trang quản trị."""
+    if not _check_admin():
+        abort(401)
+    return jsonify({
+        "doctors": booking.all_doctors(),
+        "dates": booking.known_dates(),
+        "summary": booking.admin_summary(),
+    })
+
+
+@app.route("/api/admin/cancel", methods=["POST"])
+def admin_cancel():
+    """Admin hủy một lịch hẹn (đổi status='cancelled')."""
+    if not _check_admin():
+        abort(401)
+    data = request.get_json(force=True, silent=True) or {}
+    appt = booking.cancel_appointment(data.get("code", ""))
+    if not appt:
+        return jsonify({"ok": False, "error": "Không tìm thấy lịch 'confirmed'."}), 404
+    return jsonify({"ok": True, "appointment": appt})
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ import string
 from datetime import datetime
 
 import storage
-from data import DOCTORS, DEPARTMENTS, generate_available_slots
+from data import DOCTORS, DEPARTMENTS, WORK_SLOTS, generate_available_slots
 
 
 # LƯU Ý THIẾT KẾ: không còn bảng slot in-memory. Danh sách khung giờ luôn hiển thị
@@ -124,11 +124,13 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
 
     # NGUỒN CHÂN LÝ = DB: kiểm tra ngay lúc xác nhận xem khung giờ đã bị đặt chưa.
     taken = _confirmed_at(date_str, time_str)
+    
     if taken:
         if patient_phone and taken.get("patient_phone") == patient_phone:
             return False, {"duplicate": True, "existing": taken,
                            "error": "Bạn đã đặt lịch vào khung giờ này rồi."}
         return False, {"error": "Khung giờ này vừa có người đặt. Vui lòng chọn giờ khác."}
+   
 
     appointment = {
         "code": _generate_code(),
@@ -148,6 +150,94 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
     storage.add_appointment(appointment)
 
     return True, appointment
+
+
+# ---------------------------------------------------------------------------
+# TRA CỨU CHO ADMIN / BÁC SĨ (read-only trên DB, không đổi nghiệp vụ đặt lịch)
+# Bệnh nhân dùng chatbot để ĐẶT lịch; admin/bác sĩ dùng các hàm dưới để XEM lại
+# lịch đã đặt và lịch làm việc. Tất cả đọc qua storage nên đúng cả JSON lẫn Postgres.
+# ---------------------------------------------------------------------------
+def all_doctors():
+    """Danh sách phẳng mọi bác sĩ kèm dịch vụ phụ trách (cho bộ lọc ở trang admin)."""
+    out = []
+    for dept_code, docs in DOCTORS.items():
+        for d in docs:
+            out.append({
+                "id": d["id"],
+                "name": d["name"],
+                "dept_code": dept_code,
+                "dept_name": DEPARTMENTS.get(dept_code, {}).get("name", dept_code),
+            })
+    return out
+
+
+def query_appointments(date=None, doctor_id=None, dept_code=None,
+                       phone=None, status=None):
+    """Lọc lịch hẹn theo nhiều tiêu chí, sắp theo ngày rồi giờ.
+
+    Tiêu chí nào để None thì bỏ qua. Dùng cho màn hình quản trị: xem lịch theo
+    ngày, theo bác sĩ, theo trạng thái (confirmed/cancelled) hoặc theo SĐT bệnh nhân.
+    """
+    out = storage.list_appointments()
+    if status:
+        out = [a for a in out if a.get("status") == status]
+    if date:
+        out = [a for a in out if a.get("date") == date]
+    if doctor_id:
+        out = [a for a in out if a.get("doctor_id") == doctor_id]
+    if dept_code:
+        out = [a for a in out if a.get("department_code") == dept_code]
+    if phone:
+        out = [a for a in out if a.get("patient_phone") == phone]
+    out.sort(key=lambda a: (a.get("date", ""), a.get("time", "")))
+    return out
+
+
+def doctor_day_schedule(doctor_id, date_str):
+    """Lịch làm việc của MỘT bác sĩ trong MỘT ngày.
+
+    Trả về danh sách theo từng khung giờ chuẩn: {time, appt} — appt là lịch hẹn
+    'confirmed' đang chiếm khung đó (nếu có), None nếu còn trống. Nhờ đó bác sĩ
+    thấy ngay mình bận/rảnh khung nào, ai đặt.
+
+    Ngày trong cửa sổ làm việc sắp tới dùng khung giờ trống thực tế; ngày ngoài
+    cửa sổ (vd. lịch quá khứ để tra cứu) fallback về khung giờ chuẩn `WORK_SLOTS`
+    để vẫn hiển thị được lưới bận/trống.
+    """
+    slots = generate_available_slots().get(date_str) or list(WORK_SLOTS)
+    booked = {a["time"]: a for a in query_appointments(
+        date=date_str, doctor_id=doctor_id, status="confirmed")}
+    return [{"time": s, "appt": booked.get(s)} for s in slots]
+
+
+def known_dates():
+    """Các ngày admin có thể lọc/xem: gộp ngày làm việc sắp tới + ngày ĐÃ có lịch.
+
+    Nhờ vậy dropdown ngày ở trang quản trị hiển thị được cả lịch quá khứ (không chỉ
+    5 ngày làm việc sắp tới), tránh cảm giác 'lọc theo ngày không ra gì'.
+    """
+    working = set(get_available_dates())
+    booked = {a.get("date") for a in storage.list_appointments() if a.get("date")}
+    return sorted(working | booked, reverse=True)
+
+
+def admin_summary():
+    """Thống kê nhanh cho trang quản trị: tổng số lịch theo trạng thái + theo dịch vụ."""
+    appts = storage.list_appointments()
+    by_status, by_dept = {}, {}
+    for a in appts:
+        st = a.get("status", "?")
+        by_status[st] = by_status.get(st, 0) + 1
+        if st == "confirmed":
+            dn = a.get("department", a.get("department_code", "?"))
+            by_dept[dn] = by_dept.get(dn, 0) + 1
+    return {
+        "total": len(appts),
+        "confirmed": by_status.get("confirmed", 0),
+        "cancelled": by_status.get("cancelled", 0),
+        "by_status": by_status,
+        "by_department": by_dept,
+    }
 
 
 # ---------------------------------------------------------------------------

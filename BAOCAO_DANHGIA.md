@@ -26,101 +26,147 @@ phân loại đúng nhóm dịch vụ nha khoa*, để:
 
 | Mục tiêu | Chỉ số | Ngưỡng đặt ra |
 |---|---|---|
-| Phân loại đúng dịch vụ | Accuracy | **≥ 90%** |
+| Phân loại đúng dịch vụ | Accuracy (top-1) | **≥ 90%** |
 | Cân bằng giữa các lớp | Macro-F1 | **≥ 0.90** |
+| Gợi ý đúng trong vài lựa chọn | Accuracy (top-2) | **≥ 95%** |
 | Hiểu cả tiếng Việt không dấu | Accuracy trên mẫu không dấu | **≥ 85%** |
+| Xử lý câu **ghép nhiều ý** | Top-2 chấp nhận được | **≥ 90%** |
 | Phản hồi nhanh (trải nghiệm chat) | Thời gian xử lý/câu | **< 50 ms** |
 | Chi phí vận hành | Chi phí/1.000 lượt | **= 0đ** (rule-based, không gọi API) |
 | Chất lượng hội thoại (định tính) | Điểm rubric trung bình | **≥ 4.0/5** |
 
 ## 3. Cách thức đánh giá
 
-### 3.1. Phương pháp định lượng
-- **Bộ dữ liệu (dataset):** `eval/dataset.jsonl` — **63 câu** mô tả triệu chứng có gán
-  nhãn dịch vụ đúng, **7 câu/lớp × 9 lớp** (cân bằng). Trong đó cố ý đưa ~**18 câu gõ
-  thiếu dấu** (vd. *"toi muon nieng rang"*) để kiểm tra khả năng chịu lỗi chính tả.
-- **Phương pháp:** so dự đoán **top-1** của engine với nhãn vàng; tính **Precision,
-  Recall, F1** cho từng lớp, **Macro-average**, **Accuracy** tổng thể và **thời gian
-  trung bình** mỗi câu.
-- **Công thức:**
-  - Precision = TP / (TP + FP)
-  - Recall = TP / (TP + FN)
-  - F1 = 2·Precision·Recall / (Precision + Recall)
-  - Macro-F1 = trung bình F1 của 9 lớp
-- **So sánh 2 phiên bản engine:**
-  - **v1** — khớp từ khóa có dấu, theo ranh giới từ.
-  - **v2** — như v1 nhưng **không phân biệt dấu** (accent-insensitive) → bắt được
-    cả khi người dùng gõ thiếu dấu.
+### 3.1. Dữ liệu đánh giá (hai tập)
 
-### 3.2. Phương pháp định tính
-- Rubric 6 tiêu chí (Đúng dịch vụ, An toàn, Robustness, Hoàn tất tác vụ, Tự nhiên,
-  Quyền riêng tư), chấm thang 1–5 trên bộ kịch bản mẫu — xem `eval/rubric.md`.
+Để trả lời góp ý "tập test còn ít, cần câu phức tạp/đa dạng hơn", nhóm dùng **hai tập**:
+
+**(a) Tập câu ĐƠN-Ý** — `eval/dataset.jsonl`: **90 câu** mô tả triệu chứng, mỗi câu ứng với
+**đúng 1 dịch vụ**, cân bằng **10 câu/lớp × 9 lớp**. Trong đó cố ý đưa:
+- ~**25 câu gõ thiếu dấu** (vd. *"toi muon nieng rang"*) để kiểm tra khả năng chịu lỗi chính tả;
+- nhiều câu **khẩu ngữ/nói vòng** (vd. *"Ăn kẹo xong thấy nhói một chiếc răng"*) để tập không
+  "quá dễ" với bộ từ khóa.
+
+**(b) Tập câu PHỨC TẠP** — `eval/dataset_complex.jsonl`: **20 câu ghép 2-3 ý** trong một câu
+(vd. *"Răng khôn mọc lệch đau quá, nhổ xong tôi muốn niềng cho đều"* nhắc **cả nhổ răng lẫn
+chỉnh nha**). Mỗi câu có:
+- `label` — dịch vụ **chính** (ưu tiên định tuyến);
+- `accept` — **tập mọi dịch vụ hợp lệ** được nhắc tới.
+
+### 3.2. Phương pháp định lượng
+
+**Với tập đơn-ý:** so dự đoán của engine với nhãn vàng, tính **Precision, Recall, F1** cho
+từng lớp, **Macro-average**, **Accuracy** và **thời gian trung bình** mỗi câu. Đo cả:
+- **Accuracy top-1** — dự đoán hạng 1 đúng nhãn;
+- **Accuracy top-2** — nhãn đúng nằm trong 2 gợi ý đầu (vì chatbot cho người dùng chọn trong
+  vài gợi ý khi độ tin cậy chưa cao).
+
+**Với tập phức tạp:** một câu nhắc nhiều dịch vụ nên "top-1 đúng nhãn chính" là chưa đủ; nhóm
+đo thêm hai chỉ số sát trải nghiệm thực:
+- **Top-1 chấp nhận được** — top-1 rơi vào **một** dịch vụ hợp lệ (`accept`);
+- **Top-2 chấp nhận được** — có **ít nhất một** dịch vụ hợp lệ trong 2 gợi ý đầu.
+
+**Công thức (tập đơn-ý):**
+- Precision = TP / (TP + FP); Recall = TP / (TP + FN)
+- F1 = 2·P·R / (P + R); Macro-F1 = trung bình F1 của 9 lớp
+
+**So sánh 2 phiên bản engine:** **v1** (khớp có dấu) vs **v2** (không phân biệt dấu → bắt cả
+câu thiếu dấu).
+
+### 3.3. Phương pháp định tính
+Rubric 6 tiêu chí (Đúng dịch vụ, An toàn, Robustness, Hoàn tất tác vụ, Tự nhiên, Quyền riêng
+tư), chấm thang 1–5 trên bộ kịch bản mẫu — xem `eval/rubric.md`.
 
 ## 4. Kết quả đánh giá
 
-### 4.1. So sánh tổng thể (định lượng)
+### 4.1. So sánh tổng thể — tập đơn-ý (định lượng)
 
 | Chỉ số | v1 (có dấu) | v2 (không phân biệt dấu) | Mục tiêu |
 |---|---|---|---|
-| Accuracy | 77.8% | **100.0%** | ≥ 90% ✅ |
-| Macro Precision | 100.0% | 100.0% | — |
-| Macro Recall | 77.8% | 100.0% | — |
-| Macro F1 | 87.3% | **100.0%** | ≥ 0.90 ✅ |
-| Thời gian TB | 0.05 ms | **0.25 ms** | < 50 ms ✅ |
+| Accuracy (top-1) | 73.3% | **97.8%** | ≥ 90% ✅ |
+| Accuracy (top-2) | 74.4% | **98.9%** | ≥ 95% ✅ |
+| Macro Precision | 98.6% | 99.0% | — |
+| Macro Recall | 73.3% | **97.8%** | — |
+| Macro F1 | 83.9% | **98.3%** | ≥ 0.90 ✅ |
+| Thời gian TB | 0.07 ms | **0.18 ms** | < 50 ms ✅ |
 | Chi phí | 0đ | 0đ | 0đ ✅ |
 
-> v1 đạt Precision cao (khi nhận ra thì gần như đúng) nhưng **Recall thấp**: bỏ sót
-> toàn bộ câu gõ thiếu dấu (trả "không nhận ra"). v2 khắc phục điểm này.
+> v1 đạt Precision cao (khi nhận ra thì gần như đúng) nhưng **Recall thấp**: bỏ sót phần lớn
+> câu gõ thiếu dấu (trả "không nhận ra"). v2 khắc phục điểm này, tăng Accuracy top-1 từ 73.3%
+> lên 97.8% — chứng minh **xử lý không dấu là cải tiến then chốt**.
 >
-> ⚠️ **Lưu ý trung thực:** v2 đạt 100% trên tập 63 câu này, nhưng bộ từ khóa đã được
-> hiệu chỉnh **dựa trên chính tập này** (chưa tách tập test riêng). Con số 100% vì vậy
-> phản ánh độ khớp trên dữ liệu phát triển, **không nên hiểu là độ chính xác thực tế**.
-> Xem mục Hướng phát triển về việc cần một tập test độc lập.
+> ⚠️ **Lưu ý trung thực:** bộ từ khóa được hiệu chỉnh **dựa trên chính tập phát triển này**
+> (chưa tách tập test riêng). Con số 97.8% phản ánh độ khớp trên dữ liệu phát triển, **không
+> nên hiểu là độ chính xác thực tế**. Xem mục Hướng phát triển về việc cần một tập test độc lập.
 
-### 4.2. F1 theo từng dịch vụ (v2)
+### 4.2. F1 theo từng dịch vụ (v2, tập đơn-ý)
 
-Trên tập hiện tại, cả 9 lớp đạt F1 = 100% (chi tiết trong `eval/results.md`). Trước khi
-hiệu chỉnh, các lỗi điển hình là: câu gõ thiếu dấu (v1 bỏ sót), cách diễn đạt lạ
-(*"bị mẻ"* vs *"răng mẻ"*), và nhập nhằng Nha nhi vs Sâu răng (khi câu vừa nhắc "trẻ"
-vừa "đau răng") — đã xử lý bằng cách bổ sung từ khóa & ưu tiên tín hiệu trẻ em.
+Đa số lớp đạt F1 = 100%; ba lớp còn lỗi lẻ (chi tiết trong `eval/results.md`):
 
-### 4.3. Định tính
-Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tình huống an toàn
-(cấp cứu → 115, từ chối chẩn đoán/kê đơn, human handoff) và ẩn PII trong `audit_log.jsonl`.
+| Dịch vụ | Precision | Recall | F1 |
+|---|---|---|---|
+| Trám răng / Sâu răng | 90.9% | 100.0% | 95.2% |
+| Phục hình / Trồng răng | 100.0% | 90.0% | 94.7% |
+| Nha khoa trẻ em | 100.0% | 90.0% | 94.7% |
+| *(6 lớp còn lại)* | 100.0% | 100.0% | 100.0% |
 
-### 4.4. Năng lực NLU bổ sung (định tính — chưa đưa vào tập định lượng)
+### 4.3. Phân tích lỗi (error analysis, tập đơn-ý)
 
-Ngoài phân loại top-1, triage engine được bổ sung 2 hành vi giúp trải nghiệm thực tế
-tốt hơn. Đây là bổ sung **định tính**, **chưa** có trong tập 63 câu nên không làm thay
-đổi số liệu ở mục 4.1:
+Chỉ **2/90 câu** sai — và đều nằm ở các "vùng mờ" đã biết:
 
-| Năng lực | Hàm | Ví dụ đầu vào → xử lý |
-|---|---|---|
-| **Fallback than phiền chung** | `mentions_dental_discomfort()` | *"khó chịu ở răng khi ăn cơm"* (không trúng từ khóa dịch vụ nào) → nhận ra có **bộ phận răng miệng + cảm giác khó chịu** → đưa 4 lựa chọn có cấu trúc thay vì báo "chưa rõ". |
-| **Hỏi–đáp thông tin dịch vụ** | `info_question_service()` | *"nội nha khám gì?"*, *"trồng răng là gì?"* → nhận diện (cụm hỏi + tên/từ khóa dịch vụ, khớp có dấu ưu tiên rồi mới bỏ dấu) → trả **mô tả dịch vụ** (`data.SERVICE_INFO`) + mời đặt lịch. |
+| Câu nhập | Nhãn đúng | Dự đoán | Nguyên nhân |
+|---|---|---|---|
+| "Muốn làm **cầu răng sứ** cho chỗ **răng đã mất**" | Phục hình / Trồng răng | (không nhận ra) | Thiếu từ khóa "cầu răng sứ"; "răng đã mất" không khớp trọn từ "mất răng". |
+| "**Bé** 6 tuổi bị **sâu răng sữa** nhiều cái" | Nha khoa trẻ em | Trám răng / Sâu răng | Tín hiệu trẻ em ("bé") và sâu răng cùng xuất hiện → điểm nghiêng về Sâu răng. |
 
-Cả hai đều **khớp không phân biệt dấu** như v2. Việc đo định lượng riêng cho 2 năng lực
-này (độ chính xác nhận đúng dịch vụ được hỏi, tỷ lệ cứu được câu mơ hồ) được để trong
-Hướng phát triển — cần một tập dữ liệu gán nhãn riêng cho intent.
+Cả hai lỗi khớp đúng **hạn chế cố hữu của rule-based**: phụ thuộc bộ từ khóa và ranh giới
+**Nha nhi ↔ Sâu răng**. Hướng khắc phục: bổ sung từ khóa ("cầu răng sứ") và **ưu tiên tín
+hiệu trẻ em** khi câu có cả "bé/con" lẫn triệu chứng chung.
+
+### 4.4. Kết quả trên tập câu PHỨC TẠP (ghép 2-3 ý)
+
+| Chỉ số | Ý nghĩa | Kết quả (v2) | Mục tiêu |
+|---|---|---|---|
+| Top-1 đúng nhãn chính | top-1 == dịch vụ chính | 55.0% | — |
+| Top-1 chấp nhận được | top-1 là một dịch vụ hợp lệ | **90.0%** | — |
+| Top-2 chấp nhận được | có dịch vụ hợp lệ trong top-2 | **100.0%** | ≥ 90% ✅ |
+
+**Diễn giải.** Với câu ghép nhiều ý, "top-1 đúng nhãn chính" thấp (55%) là **hợp lý**: khi
+người dùng nói cùng lúc *"nhổ răng khôn"* và *"niềng cho đều"*, việc engine chọn "nhổ răng" hay
+"chỉnh nha" làm hạng 1 đều **không sai** — cả hai đều là dịch vụ đúng. Vì thế hai chỉ số phù hợp
+hơn là **top-1 chấp nhận được (90%)** và **top-2 chấp nhận được (100%)**: engine **luôn** đưa ít
+nhất một dịch vụ đúng vào 2 gợi ý đầu. Điều này khớp đúng thiết kế hội thoại: khi câu mơ hồ/đa ý,
+bot để **medium confidence** và **hiển thị 2–3 lựa chọn** cho người dùng chốt, thay vì đoán cứng.
+
+Hai câu top-1 chưa "chấp nhận được" đều rơi vào ranh giới **Nha nhi ↔ Sâu răng** (câu vừa nhắc
+"con/bé" vừa "sâu răng") — cùng nguyên nhân với mục 4.3, nhưng **top-2 vẫn cứu đúng**.
+
+### 4.5. Định tính
+Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tình huống an toàn (cấp cứu → 115,
+từ chối chẩn đoán/kê đơn, human handoff) và ẩn PII trong `audit_log.jsonl`.
+
+### 4.6. Năng lực NLU bổ sung (định tính)
+Ngoài phân loại top-1, engine còn có **fallback than phiền chung** (`mentions_dental_discomfort`)
+và **hỏi–đáp thông tin dịch vụ** (`info_question_service`). Đây là bổ sung định tính, đo định
+lượng riêng được để trong Hướng phát triển (cần tập gán nhãn intent riêng).
 
 ## 5. Kết luận
 
-- **Phiên bản tốt nhất: v2** (accent-insensitive + khớp theo ranh giới từ) — vượt mục
-  tiêu: Accuracy 100% (trên tập dev), Macro-F1 1.0, < 1 ms/câu, chi phí 0đ. Đây là phiên
-  bản đang dùng trong sản phẩm (`triage.DEFAULT_VERSION = "v2"`).
+- **Phiên bản tốt nhất: v2** (accent-insensitive + khớp theo ranh giới từ) — đạt/vượt mục tiêu:
+  Accuracy top-1 97.8%, top-2 98.9%, Macro-F1 0.983, < 1 ms/câu, chi phí 0đ. Trên câu ghép
+  nhiều ý, **top-2 chấp nhận được 100%**. Đây là phiên bản đang dùng trong sản phẩm
+  (`triage.DEFAULT_VERSION = "v2"`).
 - **Khó khăn / tồn tại:**
-  1. Bản chất **rule-based theo từ khóa** → phải bổ sung từ khóa thủ công cho mỗi cách
-     nói mới; khó phủ hết biến thể ngôn ngữ (đồng nghĩa, nói vòng).
-  2. **Chưa có tập test độc lập:** từ khóa được hiệu chỉnh trên chính tập 63 câu → điểm
-     100% là trên dữ liệu phát triển, dễ **lạc quan hơn thực tế**.
-  3. Triệu chứng mơ hồ (vd *"đau răng"*) vốn thuộc nhiều dịch vụ → engine để **medium
-     confidence** và đưa 2–3 lựa chọn cho người dùng; top-1 accuracy không phản ánh hết
-     trải nghiệm này.
+  1. Bản chất **rule-based theo từ khóa** → phải bổ sung từ khóa thủ công cho mỗi cách nói mới;
+     khó phủ hết biến thể ngôn ngữ (thấy rõ ở 2 lỗi mục 4.3).
+  2. **Chưa có tập test độc lập:** từ khóa hiệu chỉnh trên chính tập phát triển → số liệu dễ
+     lạc quan hơn thực tế.
+  3. Ranh giới **Nha nhi ↔ Sâu răng** và câu ghép nhiều ý cần top-2/hội thoại xác nhận, không
+     nên chỉ nhìn top-1.
 - **Hướng phát triển:**
   1. Mở rộng dataset (≥ 300 câu, có tập **test riêng** để đo khả năng tổng quát hóa).
   2. Bổ sung từ điển đồng nghĩa, hoặc nâng cấp NLU bằng **LLM (Claude)** qua
-     `triage.classify_with_llm()` rồi đánh giá lại bằng đúng quy trình này (thêm cột
-     "v3 = LLM" vào bảng so sánh) — cân nhắc trade-off độ chính xác vs chi phí/độ trễ.
-  3. Thêm đánh giá top-2/top-3 accuracy (vì bot vốn cho người dùng chọn trong vài gợi ý).
-  4. Gán nhãn tập riêng cho **intent** (hỏi thông tin dịch vụ, than phiền chung, hủy lịch)
-     để đo định lượng các năng lực NLU ở mục 4.4.
+     `triage.classify_with_llm()` rồi đánh giá lại bằng đúng quy trình này (thêm cột "v3 = LLM").
+  3. Ưu tiên tín hiệu trẻ em để gỡ ranh giới Nha nhi ↔ Sâu răng; bổ sung từ khóa còn thiếu.
+  4. Gán nhãn tập riêng cho **intent** (hỏi thông tin dịch vụ, than phiền chung, hủy lịch) để đo
+     định lượng các năng lực NLU ở mục 4.6.

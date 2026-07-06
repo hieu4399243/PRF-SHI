@@ -1,0 +1,20 @@
+{"text": "Tôi bị chảy máu chân răng, muốn cạo vôi và khám tổng quát luôn", "label": "nha_chu", "accept": ["nha_chu", "kham_tong_quat"]}
+{"text": "Răng khôn mọc lệch đau quá, nhổ xong tôi muốn niềng cho đều", "label": "nho_rang", "accept": ["nho_rang", "chinh_nha"]}
+{"text": "Con tôi bị sâu răng sữa, tiện thể tôi muốn tẩy trắng răng", "label": "nha_nhi", "accept": ["nha_nhi", "tham_my"]}
+{"text": "Răng cửa bị mẻ và ố vàng, muốn trám lại và làm trắng răng", "label": "sau_rang", "accept": ["sau_rang", "tham_my"]}
+{"text": "Tôi bị mất một răng hàm và mấy răng còn lại lung lay do viêm nướu", "label": "phuc_hinh", "accept": ["phuc_hinh", "nha_chu"]}
+{"text": "Răng sâu đau nhức dữ dội cả đêm, chắc phải lấy tủy", "label": "noi_nha", "accept": ["noi_nha", "sau_rang"]}
+{"text": "Muốn niềng răng nhưng trước tiên cần cạo vôi và trám chỗ sâu", "label": "chinh_nha", "accept": ["chinh_nha", "kham_tong_quat", "sau_rang"]}
+{"text": "Bị hôi miệng, chảy máu lợi và răng hơi lung lay", "label": "nha_chu", "accept": ["nha_chu"]}
+{"text": "Tôi muốn tẩy trắng răng và dán sứ veneer cho răng cửa", "label": "tham_my", "accept": ["tham_my"]}
+{"text": "Con tôi đau răng sữa và tôi cũng bị sâu răng muốn khám cùng", "label": "nha_nhi", "accept": ["nha_nhi", "sau_rang"]}
+{"text": "Răng khôn sưng đau, kèm chảy máu nướu xung quanh", "label": "nho_rang", "accept": ["nho_rang", "nha_chu"]}
+{"text": "Mất răng lâu ngày muốn trồng implant và niềng cho đều hàm còn lại", "label": "phuc_hinh", "accept": ["phuc_hinh", "chinh_nha"]}
+{"text": "Răng vừa hô vừa thưa vừa hơi ố vàng, muốn niềng và tẩy trắng", "label": "chinh_nha", "accept": ["chinh_nha", "tham_my"]}
+{"text": "Bị áp xe răng đau nhức, nướu sưng to", "label": "noi_nha", "accept": ["noi_nha", "nha_chu"]}
+{"text": "Nhức răng về đêm và chảy máu chân răng khi đánh răng", "label": "noi_nha", "accept": ["noi_nha", "nha_chu"]}
+{"text": "Muốn khám tổng quát, cạo vôi và kiểm tra xem có sâu răng không", "label": "kham_tong_quat", "accept": ["kham_tong_quat", "sau_rang"]}
+{"text": "Răng của bé bị sâu và mọc lệch, có niềng cho trẻ được không", "label": "nha_nhi", "accept": ["nha_nhi", "chinh_nha"]}
+{"text": "con toi bi sau rang sua va rang moc lech muon nieng", "label": "nha_nhi", "accept": ["nha_nhi", "chinh_nha"]}
+{"text": "Răng ê buốt khi ăn lạnh, có lỗ đen và muốn trám sớm", "label": "sau_rang", "accept": ["sau_rang"]}
+{"text": "toi bi mat rang muon trong implant va boc su rang ben canh", "label": "phuc_hinh", "accept": ["phuc_hinh"]}

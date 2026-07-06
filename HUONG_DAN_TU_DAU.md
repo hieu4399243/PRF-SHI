@@ -99,6 +99,30 @@ File sinh ra khi chạy: `appointments.json` (lịch hẹn), `audit_log.jsonl` (
 
 ---
 
+## A4b. Trang quản trị cho admin/bác sĩ
+
+Chatbot (`http://127.0.0.1:5001`) dành cho **bệnh nhân đặt lịch**. Ngoài ra có một trang riêng
+cho **admin/bác sĩ** xem lại lịch đã đặt & lịch làm việc:
+
+1. Giữ server đang chạy, mở **http://127.0.0.1:5001/admin**.
+2. Nhập **khóa truy cập**. Mặc định demo là `shi-admin-demo`.
+   - Đổi khóa: thêm dòng `ADMIN_KEY=khoa-cua-ban` vào file `.env` rồi chạy lại server.
+3. Sau khi vào, có 2 tab:
+   - **📋 Danh sách lịch hẹn** — lọc theo ngày / bác sĩ / trạng thái / SĐT; xem thống kê nhanh
+     (tổng, đã xác nhận, đã hủy); bấm **Hủy** để hủy một lịch.
+   - **🗓️ Lịch làm việc bác sĩ** — chọn bác sĩ + ngày → xem từng khung giờ **bận** (ai đặt) hay **trống**.
+
+> Trang admin chỉ **đọc** lịch bệnh nhân đã đặt (không tạo dữ liệu mới), dùng chung nguồn dữ
+> liệu với chatbot nên chạy đúng cả chế độ file JSON lẫn Supabase. Muốn thấy dữ liệu, hãy đặt
+> vài lịch bằng chatbot trước.
+
+Test nhanh bằng dòng lệnh (khóa qua header hoặc `?key=`):
+```bash
+curl "http://127.0.0.1:5001/api/admin/appointments?status=confirmed&key=shi-admin-demo"
+```
+
+---
+
 ## A5. Nối Database Supabase
 
 Làm bước này khi muốn dữ liệu **bền vững + quản lý online** (không mất khi tắt máy).
@@ -370,3 +394,6 @@ PORT=5001 ./.venv/bin/python app.py                 # backend
 ./.venv/bin/python reminder_worker.py --watch       # worker nhắc (tùy chọn)
 cd mobile && npx expo start -c                       # app điện thoại
 ```
+
+- Bệnh nhân: **http://127.0.0.1:5001**
+- Admin/bác sĩ: **http://127.0.0.1:5001/admin** (khóa demo `shi-admin-demo`)

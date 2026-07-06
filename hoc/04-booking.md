@@ -119,6 +119,11 @@ Vì sao đổi? Bảng in-memory tính 1 lần lúc khởi động sẽ **lệch
   **không xóa** bản ghi, chỉ đổi trạng thái; nhờ `_confirmed_at` chỉ đếm lịch `confirmed`
   nên khung giờ tự trống lại, khỏi phải "trả slot" thủ công.
 
+**Các hàm tra cứu cho admin/bác sĩ** (chỉ đọc — xem bài [09](09-admin.md)):
+- `query_appointments(date, doctor_id, dept_code, phone, status)`: lọc lịch nhiều tiêu chí.
+- `doctor_day_schedule(doctor_id, date)`: mỗi khung giờ của 1 bác sĩ trong 1 ngày → bận/trống.
+- `all_doctors()`, `admin_summary()`: danh sách bác sĩ + thống kê nhanh cho trang `/admin`.
+
 ## Bài tập
 1. Thêm tham số `doctor_id` vào `book_appointment` và đưa vào dict `appt`.
 2. Viết hàm `get_appointment(code)` tìm trong 1 list lịch hẹn theo mã (gợi ý: vòng `for` + `if a["code"] == code`).

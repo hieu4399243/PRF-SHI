@@ -13,10 +13,13 @@ Bộ tài liệu tự học, mỗi file dạy 1 khối, **gõ tới đâu chạy
 | 6 | [06-chatbot.md](06-chatbot.md) | `chatbot.py` | **Máy trạng thái** nối tất cả (khó nhất) |
 | 7 | [07-app.md](07-app.md) | `app.py` | Cửa ngõ API (Flask) |
 | 8 | [08-storage-calendar-reminder.md](08-storage-calendar-reminder.md) | 3 file phụ trợ | Lưu trữ, file .ics, worker nhắc |
+| 9 | [09-admin.md](09-admin.md) | `admin` (booking + app + template) | **Trang quản trị** admin/bác sĩ xem lịch |
 
-## Có gì mới (cập nhật theo code 02/07/2026)
+## Có gì mới (cập nhật theo code 06/07/2026)
 Các bài đã được cập nhật cho khớp tính năng mới; phần thay đổi nằm ở mục
 "So với file thật" cuối mỗi bài:
+- **Trang quản trị admin/bác sĩ** (`/admin`): xem lịch đã đặt & lịch làm việc → bài [09](09-admin.md)
+- **Đánh giá AI mở rộng**: 90 câu đơn-ý + 20 câu ghép nhiều ý, đo thêm **top-2** → `BAOCAO_DANHGIA.md`, `eval/`
 - **Hủy lịch hẹn** qua chat (tra theo SĐT) + xử lý **trùng SĐT** → bài [06](06-chatbot.md), [04](04-booking.md)
 - **Hỏi SĐT** khi đặt lịch (state `ASK_PHONE`) → bài [06](06-chatbot.md)
 - **Bỏ bảng slot in-memory** — DB là nguồn chân lý, kiểm tra lúc xác nhận → bài [04](04-booking.md), [08](08-storage-calendar-reminder.md)

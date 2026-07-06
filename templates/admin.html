@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Quản trị — Trợ lý Nha khoa SHI</title>
+<style>
+  :root{
+    --bg:#edf0f2; --paper:#ffffff; --ink:#1a1a1a; --body:#2e2e2e; --muted:#8a8a8a;
+    --teal:#0e9b8e; --teal-deep:#0b7d72; --teal-tint:#e7f4f1; --line:#e4e4e4;
+    --warn:#b25a2b; --ok:#0e9b8e; --cancel:#b23a3a;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; background:var(--bg); color:var(--body); min-height:100vh;
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  .head{background:linear-gradient(135deg,var(--teal),var(--teal-deep)); color:#fff;
+        padding:16px 20px; display:flex; align-items:center; gap:12px}
+  .avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.18);
+          display:flex;align-items:center;justify-content:center;font-size:22px}
+  .head h1{font-size:16px;margin:0;font-weight:700}
+  .head p{font-size:11.5px;margin:2px 0 0;opacity:.9}
+  .wrap{max-width:1000px;margin:0 auto;padding:20px 16px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+        padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  h2{font-size:14px;margin:0 0 12px;color:var(--ink)}
+  label{font-size:12px;color:var(--muted);display:block;margin-bottom:4px}
+  select,input{font:inherit;font-size:13px;padding:8px 10px;border:1px solid var(--line);
+               border-radius:8px;background:#fff;color:var(--body)}
+  button{font:inherit;font-size:13px;padding:8px 14px;border:0;border-radius:8px;
+         background:var(--teal);color:#fff;cursor:pointer}
+  button:hover{background:var(--teal-deep)}
+  button.ghost{background:#fff;color:var(--teal);border:1px solid var(--teal)}
+  button.danger{background:#fff;color:var(--cancel);border:1px solid var(--cancel);padding:4px 10px;font-size:12px}
+  .filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+  .tabs{display:flex;gap:8px;margin-bottom:16px}
+  .tabs button{background:#fff;color:var(--body);border:1px solid var(--line)}
+  .tabs button.active{background:var(--teal);color:#fff;border-color:var(--teal)}
+  .stats{display:flex;gap:12px;flex-wrap:wrap}
+  .stat{background:var(--teal-tint);border-radius:10px;padding:10px 16px;min-width:110px}
+  .stat b{font-size:22px;color:var(--teal-deep);display:block}
+  .stat span{font-size:11px;color:var(--muted)}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
+  .pill.confirmed{background:#e2f4f0;color:var(--teal-deep)}
+  .pill.cancelled{background:#f7e4e4;color:var(--cancel)}
+  .slot{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;
+        border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
+  .slot.free{background:#fafdfc;color:var(--muted)}
+  .slot.busy{background:#fff;border-left:3px solid var(--teal)}
+  .tableScroll{overflow-x:auto}
+  .empty{color:var(--muted);font-size:13px;padding:16px 0}
+  .gate{max-width:360px;margin:12vh auto;text-align:center}
+  .gate .card{padding:26px}
+  .err{color:var(--cancel);font-size:12px;margin-top:8px;min-height:16px}
+  .hide{display:none}
+</style>
+</head>
+<body>
+
+<div class="head">
+  <div class="avatar">🦷</div>
+  <div>
+    <h1>Trang quản trị — Nha khoa SHI</h1>
+    <p>Xem lịch hẹn đã đặt & lịch làm việc của bác sĩ</p>
+  </div>
+</div>
+
+<!-- Cổng nhập khóa admin -->
+<div id="gate" class="gate">
+  <div class="card">
+    <h2>Đăng nhập quản trị</h2>
+    <label>Khóa truy cập (ADMIN_KEY)</label>
+    <input id="key" type="password" placeholder="nhập khóa..." style="width:100%">
+    <div class="err" id="gateErr"></div>
+    <div style="margin-top:12px"><button onclick="login()">Vào trang quản trị</button></div>
+  </div>
+</div>
+
+<!-- Nội dung chính -->
+<div id="main" class="wrap hide">
+  <div class="card">
+    <div class="stats" id="stats"></div>
+  </div>
+
+  <div class="tabs">
+    <button id="tabList" class="active" onclick="showTab('list')">📋 Danh sách lịch hẹn</button>
+    <button id="tabSched" onclick="showTab('sched')">🗓️ Lịch làm việc bác sĩ</button>
+  </div>
+
+  <!-- TAB 1: danh sách lịch hẹn -->
+  <div id="viewList">
+    <div class="card">
+      <h2>Bộ lọc</h2>
+      <div class="filters">
+        <div><label>Ngày</label>
+          <select id="fDate"><option value="">Tất cả</option></select></div>
+        <div><label>Bác sĩ</label>
+          <select id="fDoctor"><option value="">Tất cả</option></select></div>
+        <div><label>Trạng thái</label>
+          <select id="fStatus">
+            <option value="">Tất cả</option>
+            <option value="confirmed">Đã xác nhận</option>
+            <option value="cancelled">Đã hủy</option>
+          </select></div>
+        <div><label>SĐT bệnh nhân</label>
+          <input id="fPhone" placeholder="vd. 0901234567"></div>
+        <div><button onclick="loadList()">Lọc</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2>Kết quả (<span id="count">0</span> lịch)</h2>
+      <div class="tableScroll">
+        <table>
+          <thead><tr><th>Mã</th><th>Ngày</th><th>Giờ</th><th>Bệnh nhân</th>
+            <th>SĐT</th><th>Dịch vụ</th><th>Bác sĩ</th><th>Trạng thái</th><th></th></tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div id="listEmpty" class="empty hide">Không có lịch hẹn nào khớp bộ lọc.</div>
+    </div>
+  </div>
+
+  <!-- TAB 2: lịch làm việc bác sĩ -->
+  <div id="viewSched" class="hide">
+    <div class="card">
+      <h2>Chọn bác sĩ & ngày</h2>
+      <div class="filters">
+        <div><label>Bác sĩ</label><select id="sDoctor"></select></div>
+        <div><label>Ngày</label><select id="sDate"></select></div>
+        <div><button onclick="loadSched()">Xem lịch làm việc</button></div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 id="schedTitle">Lịch làm việc</h2>
+      <div id="slots"></div>
+    </div>
+  </div>
+</div>
+
+<script>
+let KEY = "";
+const $ = id => document.getElementById(id);
+
+async function api(path){
+  const r = await fetch(path, {headers:{"X-Admin-Key":KEY}});
+  if(r.status === 401) throw new Error("unauth");
+  return r.json();
+}
+
+async function login(){
+  KEY = $("key").value.trim();
+  try{
+    const meta = await api("/api/admin/meta");
+    $("gate").classList.add("hide");
+    $("main").classList.remove("hide");
+    fillMeta(meta);
+    loadList();
+  }catch(e){
+    $("gateErr").textContent = "Khóa không đúng. Thử lại.";
+  }
+}
+
+function fillMeta(meta){
+  // thống kê
+  const s = meta.summary;
+  $("stats").innerHTML =
+    stat(s.total, "Tổng lịch") + stat(s.confirmed, "Đã xác nhận") +
+    stat(s.cancelled, "Đã hủy");
+  // dropdown bác sĩ
+  const docOpts = meta.doctors.map(d =>
+    `<option value="${d.id}">${d.name} — ${d.dept_name}</option>`).join("");
+  $("fDoctor").innerHTML = '<option value="">Tất cả</option>' + docOpts;
+  $("sDoctor").innerHTML = docOpts;
+  // dropdown ngày
+  const dateOpts = meta.dates.map(d => `<option value="${d}">${d}</option>`).join("");
+  $("fDate").innerHTML = '<option value="">Tất cả</option>' + dateOpts;
+  $("sDate").innerHTML = dateOpts;
+}
+const stat = (n,l) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`;
+
+function showTab(t){
+  $("tabList").classList.toggle("active", t==="list");
+  $("tabSched").classList.toggle("active", t==="sched");
+  $("viewList").classList.toggle("hide", t!=="list");
+  $("viewSched").classList.toggle("hide", t!=="sched");
+}
+
+async function loadList(){
+  const q = new URLSearchParams({
+    date:$("fDate").value, doctor_id:$("fDoctor").value,
+    status:$("fStatus").value, phone:$("fPhone").value.trim(),
+  });
+  const data = await api("/api/admin/appointments?"+q);
+  $("count").textContent = data.count;
+  $("listEmpty").classList.toggle("hide", data.count>0);
+  $("rows").innerHTML = data.appointments.map(a => `
+    <tr>
+      <td><b>${a.code}</b></td><td>${a.date}</td><td>${a.time}</td>
+      <td>${a.patient_name||""}</td><td>${a.patient_phone||""}</td>
+      <td>${a.department||""}</td><td>${a.doctor||""}</td>
+      <td><span class="pill ${a.status}">${a.status==="confirmed"?"Đã xác nhận":"Đã hủy"}</span></td>
+      <td>${a.status==="confirmed"
+          ? `<button class="danger" onclick="cancelAppt('${a.code}')">Hủy</button>` : ""}</td>
+    </tr>`).join("");
+}
+
+async function cancelAppt(code){
+  if(!confirm("Hủy lịch "+code+"?")) return;
+  const r = await fetch("/api/admin/cancel", {
+    method:"POST", headers:{"Content-Type":"application/json","X-Admin-Key":KEY},
+    body:JSON.stringify({code})});
+  if(r.ok){ refreshStats(); loadList(); } else { alert("Không hủy được lịch này."); }
+}
+
+async function refreshStats(){
+  const meta = await api("/api/admin/meta");
+  const s = meta.summary;
+  $("stats").innerHTML =
+    stat(s.total,"Tổng lịch")+stat(s.confirmed,"Đã xác nhận")+stat(s.cancelled,"Đã hủy");
+}
+
+async function loadSched(){
+  const did = $("sDoctor").value, date = $("sDate").value;
+  const name = $("sDoctor").selectedOptions[0].textContent;
+  const data = await api(`/api/admin/schedule?doctor_id=${did}&date=${date}`);
+  $("schedTitle").textContent = `Lịch làm việc — ${name} — ${date}`;
+  $("slots").innerHTML = data.slots.map(s => s.appt
+    ? `<div class="slot busy"><span><b>${s.time}</b> — ${s.appt.patient_name}
+         (${s.appt.patient_phone||"—"}) · ${s.appt.department}</span>
+         <span class="pill confirmed">Đã đặt</span></div>`
+    : `<div class="slot free"><span><b>${s.time}</b></span><span>Trống</span></div>`
+  ).join("") || '<div class="empty">Ngày này không có khung giờ làm việc.</div>';
+}
+</script>
+</body>
+</html>

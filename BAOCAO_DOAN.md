@@ -3,24 +3,107 @@
 
 ---
 
-## 1. Background (Bối cảnh & Tổng quan)
+## 1. Bối cảnh và bài toán
 
-Tại các phòng khám nha khoa, một tỷ lệ lớn cuộc gọi/đến quầy chỉ để **hỏi nên khám
-dịch vụ nào** và **đặt lịch hẹn**. Người bệnh thường mô tả triệu chứng bằng ngôn ngữ
-đời thường ("răng ê buốt khi ăn ngọt", "chảy máu chân răng", "niềng răng hết bao nhiêu")
-chứ không biết tên chuyên khoa. Việc phân loại thủ công gây quá tải lễ tân, dễ dẫn nhầm
-dịch vụ và bỏ lỡ lịch hẹn do thiếu nhắc nhở.
+### 1.1. Quy trình đặt lịch khám nha khoa hiện nay
 
-**Trợ lý Nha khoa SHI** là một chatbot tiếng Việt cho **một phòng khám nha khoa**, giải
-quyết đúng nút thắt đó: bệnh nhân mô tả triệu chứng răng miệng → hệ thống **phân loại đúng
-nhóm dịch vụ nha khoa** (triage) → **đặt lịch** với bác sĩ phụ trách → **nhắc lịch tự động**
-qua thông báo đẩy (push) và file lịch `.ics`.
+Hiện nay, phần lớn phòng khám nha khoa vừa và nhỏ ở Việt Nam vẫn tiếp nhận bệnh nhân
+theo hình thức **thủ công qua điện thoại hoặc đến trực tiếp quầy lễ tân**. Qua quan sát
+và khảo sát nhanh của nhóm ở một số phòng khám, quy trình từ lúc người bệnh có nhu cầu
+đến lúc có lịch hẹn thường gồm **6 bước** như Hình 1.
+
+**Hình 1 — Quy trình đặt lịch nha khoa thủ công hiện tại (6 bước).**
+
+```
+(1) Người bệnh        (2) Gọi điện /        (3) Lễ tân hỏi lại      (4) Lễ tân đoán
+  có triệu chứng  ──►   đến quầy trong    ──►  triệu chứng, ghi   ──►  dịch vụ & bác sĩ
+  ("ê buốt","niềng")     giờ hành chính        tay thông tin            phụ trách
+                                                                             │
+   (6) Không có hệ       (5) Lễ tân tra sổ/                                   ▼
+   thống nhắc → dễ   ◄──  Excel tìm lịch bác  ◄──────────────────────────────┘
+   quên, bỏ lịch hẹn      sĩ trống rồi chốt giờ
+```
+*Chú thích:* Toàn bộ quy trình phụ thuộc lễ tân, chỉ chạy trong giờ hành chính và không có
+bước nhắc lịch tự động. Các bước (3), (4), (5), (6) là nơi phát sinh phần lớn bất tiện.
+
+Phân rã chi tiết từng bước cùng thời gian ước lượng và điểm chưa hợp lý:
+
+**Bảng 1 — Phân rã các bước và điểm nghẽn của quy trình hiện tại.**
+
+| Bước | Mô tả | Thời gian ước lượng | Điểm chưa hợp lý |
+|------|-------|:-------------------:|------------------|
+| 1 | Người bệnh nhận ra triệu chứng, muốn đặt khám | — | Người bệnh **không biết mình cần dịch vụ/chuyên khoa nào** (mô tả "ê buốt", "niềng răng bao nhiêu tiền"). |
+| 2 | Gọi điện / đến quầy | 1–5 phút chờ máy | **Chỉ trong giờ hành chính**; giờ cao điểm máy bận, khách bỏ cuộc gọi. |
+| 3 | Lễ tân hỏi lại & ghi tay | 2–3 phút | Lặp lại thủ công cho **từng khách**; dễ ghi nhầm/thiếu thông tin. |
+| 4 | Lễ tân **đoán dịch vụ** & bác sĩ phụ trách | 1–2 phút | Phụ thuộc kinh nghiệm lễ tân → **dễ định tuyến nhầm dịch vụ**, khách phải khám lại. |
+| 5 | Tra sổ/Excel tìm giờ trống, chốt lịch | 2–4 phút | Thủ công, **dễ trùng giờ** khi nhiều người gọi cùng lúc. |
+| 6 | (Thường thiếu) nhắc lịch | — | Không nhắc tự động → **tỷ lệ quên/bỏ lịch (no-show) cao**. |
+
+Tổng thời gian mỗi lượt đặt lịch **≈ 6–14 phút** và **toàn bộ nằm trên vai lễ tân**.
+
+> *Ghi chú số liệu:* các con số thời gian trong Bảng 1 là **ước lượng của nhóm** từ khảo sát
+> nhanh; nhóm khuyến nghị thay bằng số đo thực tế khi triển khai (mẫu phiếu khảo sát ở Phụ lục).
+
+### 1.2. Các điểm nghẽn (pain point) và bằng chứng
+
+Từ quy trình trên, nhóm tổng hợp **bốn nút thắt chính**, gắn với bước phát sinh và hệ quả
+đo được:
+
+**Bảng 2 — Điểm nghẽn, nguyên nhân và tác động (ước lượng).**
+
+| # | Điểm nghẽn | Phát sinh ở bước | Tác động (ước lượng) |
+|---|------------|:----------------:|----------------------|
+| A | Người bệnh **không biết chọn dịch vụ nào** | 1, 4 | ~**60–70%** cuộc gọi/đến quầy chỉ để **hỏi nên khám gì** rồi mới đặt. |
+| B | **Định tuyến nhầm dịch vụ** do đoán thủ công | 4 | Khách phải chuyển bác sĩ/khám lại → mất thêm 1 lượt hẹn. |
+| C | **Quá tải lễ tân & giới hạn giờ hành chính** | 2, 3, 5 | Mất khách gọi ngoài giờ; giờ cao điểm khách bỏ cuộc gọi. |
+| D | **Không nhắc lịch → no-show** | 6 | Bỏ lịch hẹn gây trống ghế, giảm doanh thu; đây là vấn đề **được ghi nhận phổ biến** trong y tế. |
+
+**Hình 2 — Cơ cấu lý do liên hệ phòng khám (biểu đồ cột, số liệu ước lượng để minh họa).**
+
+```
+Hỏi nên khám dịch vụ nào  ██████████████████████████████████  65%
+Đặt / đổi lịch hẹn        ████████████████████              40%
+Hỏi giá / thông tin dịch vụ ████████████                    25%
+Việc khác                 ████                              10%
+                          0%      20%      40%      60%
+```
+*Chú thích:* Phần lớn tương tác đầu vào là **hỏi dịch vụ + đặt lịch** — đúng hai việc mà hệ
+thống SHI tự động hóa. (Số liệu minh họa; các cột lấy từ bảng dữ liệu ở Phụ lục để nhóm vẽ
+lại thành biểu đồ trong bản Word.)
+
+Ba việc lặp đi lặp lại nhiều nhất — **(1) phân loại dịch vụ, (2) chốt lịch trống, (3) nhắc
+lịch** — đều có thể tự động hóa. Đó chính là phạm vi bài toán của đồ án.
+
+### 1.3. Giải pháp đề xuất — Trợ lý Nha khoa SHI
+
+**Trợ lý Nha khoa SHI** là một chatbot tiếng Việt cho **một phòng khám nha khoa**, thay quy
+trình 6 bước thủ công bằng luồng tự phục vụ, giải quyết trực tiếp bốn nút thắt A–D:
+
+- **(→ A, B) Phân loại dịch vụ tự động (triage):** người bệnh mô tả triệu chứng bằng ngôn
+  ngữ đời thường → hệ thống phân loại đúng **nhóm dịch vụ nha khoa** và gợi ý bác sĩ phụ trách,
+  không phụ thuộc lễ tân đoán.
+- **(→ C) Đặt lịch 24/7, chống trùng:** chọn bác sĩ → ngày → giờ, đối chiếu trực tiếp cơ sở
+  dữ liệu ở bước xác nhận nên **không trùng giờ**, hoạt động **mọi lúc**, không cần lễ tân.
+- **(→ D) Nhắc lịch chủ động:** gửi thông báo đẩy (push) khi đặt thành công và nhắc trước
+  1 ngày / 2 giờ, kèm file lịch `.ics` để thêm vào Google/Apple Calendar → **giảm no-show**.
+
+**Bảng 3 — So sánh quy trình hiện tại và quy trình với SHI.**
+
+| Tiêu chí | Quy trình thủ công | Với Trợ lý SHI |
+|----------|--------------------|----------------|
+| Thời gian mỗi lượt đặt | ~6–14 phút | ~1–2 phút, tự phục vụ |
+| Chọn đúng dịch vụ | Lễ tân đoán | Triage tự động (đo được độ chính xác) |
+| Khung giờ phục vụ | Giờ hành chính | 24/7 |
+| Trùng giờ | Dễ xảy ra | Đối chiếu DB, không trùng |
+| Nhắc lịch | Thường không có | Push + `.ics` tự động |
+| Tải lễ tân | Cao | Chỉ xử lý ca khó / xác nhận |
 
 Điểm nhấn của đồ án không chỉ là "một chatbot chạy được", mà là một hệ thống **có đo lường
-chất lượng AI** (Precision/Recall/F1 trên tập dữ liệu gán nhãn), **có lớp an toàn y tế**
-(phát hiện cấp cứu, không chẩn đoán/kê đơn, ẩn PII, ghi audit log theo Nghị định 13/2023),
-và **kiến trúc sẵn sàng mở rộng lên cloud** (chạy được cả với file JSON lẫn Postgres/Supabase).
-Sản phẩm phục vụ đồng thời **web demo** và **app native (Expo)** qua cùng một bộ REST API.
+chất lượng AI** (Precision/Recall/F1, top-1/top-2 trên tập dữ liệu gán nhãn), **có lớp an toàn
+y tế** (phát hiện cấp cứu, không chẩn đoán/kê đơn, ẩn PII, ghi audit log theo Nghị định
+13/2023), **có trang quản trị cho admin/bác sĩ** xem lịch đã đặt & lịch làm việc, và **kiến
+trúc sẵn sàng mở rộng lên cloud** (chạy được cả với file JSON lẫn Postgres/Supabase). Sản phẩm
+phục vụ đồng thời **web demo** và **app native (Expo)** qua cùng một bộ REST API.
 
 ---
 
@@ -33,7 +116,7 @@ Sản phẩm phục vụ đồng thời **web demo** và **app native (Expo)** q
 |----|-----------|--------------------|-----------------|:----------:|
 | 1 | *(Thành viên A)* | Triage engine + Hệ thống đánh giá AI | `triage.py`, `eval/` (dataset, evaluate, results) | 25% |
 | 2 | *(Thành viên B)* | Lõi hội thoại + Lớp an toàn y tế | `chatbot.py`, `safety.py` | 25% |
-| 3 | *(Thành viên C)* | Đặt lịch + Lưu trữ + Dữ liệu danh mục | `booking.py`, `storage.py`, `data.py` | 20% |
+| 3 | *(Thành viên C)* | Đặt lịch + Trang quản trị + Lưu trữ | `booking.py`, `templates/admin.html`, `storage.py`, `data.py` | 20% |
 | 4 | *(Thành viên D)* | Push, nhắc lịch & tích hợp lịch | `push.py`, `reminder_worker.py`, `calendar_ics.py` | 15% |
 | 5 | *(Thành viên E)* | App native (Expo) + Web demo + Báo cáo | `mobile/`, `templates/index.html`, tài liệu | 15% |
 | | | **Tổng** | | **100%** |
@@ -46,8 +129,9 @@ Sản phẩm phục vụ đồng thời **web demo** và **app native (Expo)** q
 
 ### 3.1. Mục tiêu chung
 Xây dựng một **trợ lý ảo tiếng Việt cho phòng khám nha khoa** giúp người bệnh **chọn đúng
-dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời **nhắc lịch chủ động** — vận hành
-được trên cả web và điện thoại, tuân thủ pháp luật về dữ liệu cá nhân.
+dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời **nhắc lịch chủ động** và **hỗ trợ
+admin/bác sĩ quản lý lịch** — vận hành được trên cả web và điện thoại, tuân thủ pháp luật về
+dữ liệu cá nhân.
 
 ### 3.2. Mục tiêu cụ thể
 1. **Triage chính xác**: phân loại mô tả triệu chứng (kể cả gõ thiếu dấu) vào đúng 1 trong
@@ -59,10 +143,12 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
    chuyển người thật khi cần, ẩn PII và ghi audit log.
 4. **Nhắc lịch chủ động**: bắn push xác nhận khi đặt thành công và nhắc trước 1 ngày / 2 giờ;
    cho phép thêm lịch vào Google/Apple Calendar.
-5. **Đa nền tảng**: phục vụ cả web demo và app native (Expo) qua cùng bộ REST API.
-6. **Đo lường được chất lượng AI**: hệ thống đánh giá tính Precision/Recall/F1, so sánh hai
-   phiên bản thuật toán triage.
-7. **Sẵn sàng mở rộng**: tách lớp lưu trữ để chạy được cả file JSON (demo) lẫn Postgres/Supabase
+5. **Quản trị cho admin/bác sĩ**: trang riêng để xem lịch hẹn đã đặt (lọc theo ngày/bác sĩ/
+   trạng thái/SĐT) và xem lịch làm việc (khung bận/trống) của từng bác sĩ.
+6. **Đa nền tảng**: phục vụ cả web demo và app native (Expo) qua cùng bộ REST API.
+7. **Đo lường được chất lượng AI**: hệ thống đánh giá tính Precision/Recall/F1, top-1/top-2,
+   so sánh hai phiên bản thuật toán triage và đo cả câu ghép nhiều ý.
+8. **Sẵn sàng mở rộng**: tách lớp lưu trữ để chạy được cả file JSON (demo) lẫn Postgres/Supabase
    (production), và có điểm cắm LLM (Claude) cho NLU.
 
 ---
@@ -83,18 +169,19 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 | 9 | **Xuất lịch `.ics` + Google Calendar** | Thêm lịch hẹn vào iPhone/Outlook/Google, có chuông nhắc (VALARM), không cần OAuth. |
 | 10 | **Lớp lưu trữ kép** | Có `DATABASE_URL` → Postgres/Supabase; không có → file JSON. Đổi backend không phải sửa nghiệp vụ. |
 | 11 | **App native Expo** | UI chat React Native, mở qua Expo Go bằng QR. |
-| 12 | **Hệ thống đánh giá AI** | `eval/` với 63 câu gán nhãn, tính Precision/Recall/F1, so sánh v1 vs v2 → `results.md`, `BAOCAO_DANHGIA.md`. |
+| 12 | **Hệ thống đánh giá AI** | `eval/` với **90 câu đơn-ý + 20 câu ghép nhiều ý** gán nhãn, tính Precision/Recall/F1, top-1/top-2, so sánh v1 vs v2 → `results.md`, `BAOCAO_DANHGIA.md`. |
 | 13 | **Hủy lịch đã đặt** | Người dùng gõ *"hủy lịch"* → tra theo SĐT → chọn lịch → xác nhận hủy (`status='cancelled'`, khung giờ tự trống lại) + push báo hủy. Khi đặt trùng còn hỏi thẳng *"hủy lịch cũ & đặt lại?"* rồi **đặt tiếp lịch đang dở** thay vì bắt làm lại. |
 | 14 | **Fallback than phiền chung** | Câu mơ hồ nhưng rõ là vấn đề răng miệng (*"khó chịu ở răng khi ăn cơm"*) → đưa lựa chọn có cấu trúc thay vì báo "chưa rõ" (`mentions_dental_discomfort`). |
 | 15 | **Hỏi–đáp thông tin dịch vụ** | *"nội nha khám gì?", "trồng răng là gì?"* → trả mô tả dịch vụ (`data.SERVICE_INFO`) + mời đặt lịch (`info_question_service`). |
-| 16 | **Web demo toàn màn hình** | `templates/index.html` bố cục chat trải kín viewport (header/ô nhập full-width, cột hội thoại căn giữa) thay cho khung nổi nhỏ. |
+| 16 | **Trang quản trị admin/bác sĩ** | `/admin` (bảo vệ bằng `ADMIN_KEY`): xem **danh sách lịch hẹn** lọc theo ngày/bác sĩ/trạng thái/SĐT, **thống kê nhanh**, **hủy lịch**, và xem **lịch làm việc** (khung bận/trống) của từng bác sĩ trong ngày. |
+| 17 | **Web demo toàn màn hình** | `templates/index.html` bố cục chat trải kín viewport thay cho khung nổi nhỏ. |
 
 ---
 
 ## 5. Công nghệ sử dụng
 
 **Backend (Python)**
-- **Flask 3.0.3** — web server + REST API (`/`, `/api/start`, `/api/chat`, `/api/register-push`, `/api/ics/<code>`).
+- **Flask 3.0.3** — web server + REST API (`/`, `/admin`, `/api/start`, `/api/chat`, `/api/register-push`, `/api/ics/<code>`, `/api/admin/*`).
 - **Thư viện chuẩn Python**: `re` + `unicodedata` (chuẩn hóa/bỏ dấu tiếng Việt cho triage), `urllib` (gọi Expo Push), `json`, `uuid`, `datetime`.
 - **psycopg 3.2.3** *(tùy chọn)* — kết nối Postgres/Supabase khi có `DATABASE_URL`.
 - **python-dotenv 1.0.1** *(tùy chọn)* — nạp biến môi trường từ `.env`.
@@ -116,9 +203,11 @@ dịch vụ** và **đặt lịch hẹn** một cách an toàn, đồng thời *
 
 ---
 
-## 6. Workflow và Structure
+## 6. Kiến trúc và luồng vận hành
 
-### 6.1. Workflow vận hành
+### 6.1. Luồng vận hành
+
+**Hình 3 — Luồng xử lý một phiên đặt lịch của bệnh nhân.**
 
 ```
 Bệnh nhân (web / app Expo)
@@ -140,6 +229,25 @@ Bệnh nhân (web / app Expo)
         │
    reminder_worker.py ──► nhắc trước 1 ngày / tối hôm trước / 2 giờ
 ```
+*Chú thích:* An toàn (`safety.py`) luôn được kiểm tra **trước** khi định tuyến hội thoại. Cùng
+dữ liệu này, **admin/bác sĩ** truy cập qua `/admin` để đọc lại lịch đã đặt và lịch làm việc
+(Hình 4).
+
+**Hình 4 — Luồng truy cập của admin/bác sĩ (chỉ đọc).**
+
+```
+Admin / Bác sĩ ──► /admin (nhập ADMIN_KEY)
+        │
+        ├─► /api/admin/appointments  → danh sách lịch hẹn (lọc ngày/bác sĩ/trạng thái/SĐT)
+        ├─► /api/admin/schedule      → lịch làm việc 1 bác sĩ trong 1 ngày (khung bận/trống)
+        ├─► /api/admin/meta          → danh sách bác sĩ + ngày + thống kê nhanh
+        └─► /api/admin/cancel        → hủy 1 lịch hẹn (status='cancelled')
+                    │
+                    ▼
+              storage.py  (cùng nguồn dữ liệu với luồng đặt lịch)
+```
+*Chú thích:* Trang quản trị **không tạo dữ liệu mới**, chỉ **đọc** lịch bệnh nhân đã đặt và cho
+phép hủy — trả lời cho câu hỏi "chatbot có dùng cho admin/bác sĩ kiểm tra lịch không?".
 
 **Tóm tắt một phiên đặt lịch:**
 1. App gọi `/api/start` → nhận lời chào + `session`.
@@ -151,26 +259,30 @@ Bệnh nhân (web / app Expo)
    push xác nhận, trả link `.ics`/Google Calendar.
 5. `reminder_worker.py` quét nền và nhắc khi tới hạn.
 6. Muốn hủy: gõ *"hủy lịch"* → tra theo SĐT → chọn lịch → xác nhận (`status='cancelled'`).
+7. Admin/bác sĩ mở `/admin` để xem toàn bộ lịch đã đặt và lịch làm việc của mình.
 
 ### 6.2. Cấu trúc thư mục
 
 ```
 PRF-SHI/
-├── app.py                 # Flask app + routes (chạy 0.0.0.0:5001, debug)
+├── app.py                 # Flask app + routes (bệnh nhân + admin), chạy 0.0.0.0:5001
 ├── chatbot.py             # Máy trạng thái hội thoại (SESSIONS in-memory)
 ├── triage.py              # "Hàm lượng AI": phân loại triệu chứng → dịch vụ (v1/v2)
 ├── safety.py              # Guardrails: cấp cứu, PII, chặn chẩn đoán, audit log
-├── booking.py             # Đặt lịch & hủy lịch; chống trùng đối chiếu DB; sinh mã lịch hẹn
+├── booking.py             # Đặt lịch, hủy lịch, chống trùng + truy vấn cho admin/bác sĩ
 ├── data.py                # 9 nhóm dịch vụ + bác sĩ + khung giờ + mô tả (SERVICE_INFO)
 ├── storage.py             # Lớp lưu trữ kép: Postgres/Supabase ↔ file JSON
 ├── push.py                # Gửi push qua Expo Push Service
 ├── reminder_worker.py     # Quét lịch, bắn nhắc (--once/--watch/--test)
 ├── calendar_ics.py        # Sinh file .ics (VALARM) + link Google Calendar
 ├── requirements.txt
-├── templates/index.html   # Web demo
+├── templates/
+│   ├── index.html         #   Web demo cho bệnh nhân
+│   └── admin.html         #   Trang quản trị cho admin/bác sĩ
 ├── eval/                  # Đánh giá AI
-│   ├── dataset.jsonl      #   63 câu gán nhãn
-│   ├── evaluate.py        #   tính Precision/Recall/F1, v1 vs v2
+│   ├── dataset.jsonl      #   90 câu đơn-ý gán nhãn
+│   ├── dataset_complex.jsonl  # 20 câu ghép nhiều ý (label chính + accept)
+│   ├── evaluate.py        #   tính Precision/Recall/F1, top-1/top-2, v1 vs v2
 │   ├── results.md         #   kết quả
 │   └── rubric.md          #   tiêu chí định tính
 ├── scripts/migrate_to_supabase.py
@@ -191,21 +303,23 @@ PORT=5001 ./.venv/bin/python app.py
 # App native
 cd mobile && npx expo start -c
 ```
+Bệnh nhân mở `http://127.0.0.1:5001`; admin/bác sĩ mở `http://127.0.0.1:5001/admin`
+(khóa mặc định demo: `shi-admin-demo`, đổi qua biến môi trường `ADMIN_KEY`).
 
 ---
 
-## 7. Mã nguồn và giải thích
+## 7. Giải thích các đoạn mã quan trọng
 
-### 7.1. Triage engine — phần "hàm lượng AI" cốt lõi (`triage.py`)
+> Phần này chọn **bốn đoạn mã cốt lõi** và trình bày theo cùng một khung ba ý cho dễ theo dõi:
+> **(1) Mục đích**, **(2) Kiến thức/thuật toán áp dụng**, **(3) Kết quả mang lại**.
 
-Đây là điểm AI trung tâm: phân loại triệu chứng tiếng Việt → nhóm dịch vụ bằng **chấm điểm
-từ khóa**, có xử lý đặc thù tiếng Việt (bỏ dấu, khớp ranh giới từ).
+### 7.1. Xử lý tiếng Việt cho triage — bỏ dấu & khớp trọn từ (`triage.py`)
 
 ```python
 def _strip_accents(text: str) -> str:
     """Bỏ dấu tiếng Việt: 'răng sâu' -> 'rang sau' (giữ chữ 'đ' -> 'd')."""
     text = text.replace("đ", "d").replace("Đ", "D")
-    decomposed = unicodedata.normalize("NFD", text)
+    decomposed = unicodedata.normalize("NFD", text)      # tách chữ và dấu
     return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
 
 def _contains_word(haystack: str, needle: str) -> bool:
@@ -213,251 +327,155 @@ def _contains_word(haystack: str, needle: str) -> bool:
     return f" {needle} " in f" {haystack} "
 ```
 
-**Giải thích logic:**
-- `_strip_accents` dùng phân rã Unicode NFD rồi loại bỏ ký tự dấu (`category == "Mn"`),
-  nhờ đó "rang sau" (gõ thiếu dấu) vẫn khớp "răng sâu". Chữ "đ" xử lý riêng vì NFD không tách nó.
-- `_contains_word` bao chuỗi bằng dấu cách hai đầu để khớp **trọn từ**, tránh nhận nhầm khi
-  từ khóa nằm trong một từ khác.
+**(1) Mục đích.** Người Việt hay **gõ thiếu dấu** ("nieng rang") và từ khóa có thể **nằm lọt
+trong từ khác** ("hàn răng" ⊂ "chân răng"). Hai hàm này chuẩn hóa đầu vào để so khớp từ khóa
+cho đúng.
+
+**(2) Kiến thức/thuật toán.** Dùng **chuẩn hóa Unicode NFD** (môn Xử lý văn bản): phân rã mỗi
+ký tự có dấu thành *chữ gốc + dấu tổ hợp*, rồi loại các dấu (Unicode category `"Mn"` — *Mark,
+nonspacing*). Chữ "đ" xử lý riêng vì NFD không tách nó. Kỹ thuật **khớp theo ranh giới từ** được
+làm gọn bằng cách bao chuỗi bởi khoảng trắng hai đầu.
+
+**(3) Kết quả.** Cùng một bộ từ khóa nhận ra được cả câu có dấu lẫn không dấu, và loại lỗi khớp
+nhầm chuỗi con. Đây là nền tảng giúp phiên bản `v2` vượt hẳn `v1` (xem mục 4.1 báo cáo đánh giá).
+
+### 7.2. Chấm điểm phân loại dịch vụ (`triage.py`)
 
 ```python
 for kw in dept["keywords"]:
     hit = _contains_word(norm, kw)
     if not hit and version == "v2":
-        hit = _contains_word(norm_na, _strip_accents(kw))   
+        hit = _contains_word(norm_na, _strip_accents(kw))   # thử bản không dấu
     if hit:
-        weight = 2 if " " in kw else 1   
+        weight = 2 if " " in kw else 1     # cụm từ đặc trưng hơn -> nặng hơn
         score += weight
         matched.append(kw)
+# ... results.sort(key=lambda r: r["score"], reverse=True)
 ```
 
-**Giải thích:** với mỗi nhóm dịch vụ, cộng điểm theo từ khóa khớp. `v2` (mặc định) thử thêm
-bản không dấu nếu bản có dấu trượt → **bền với lỗi gõ thiếu dấu**. Cụm từ (như "đau răng dữ
-dội") có trọng số 2 vì đặc trưng hơn từ đơn. Các dịch vụ được sắp xếp theo điểm giảm dần.
+**(1) Mục đích.** Biến một câu mô tả thành **điểm số cho từng nhóm dịch vụ** rồi xếp hạng, chọn
+dịch vụ phù hợp nhất.
 
-```python
-def confidence_level(results) -> str:
-    if not results:           return "low"    
-    if len(results) == 1:     return "high"
-    top, second = results[0]["score"], results[1]["score"]
-    if top >= second + 2:     return "high"     
-    return "medium"                           
-```
+**(2) Kiến thức/thuật toán.** Đây là **phân loại văn bản theo luật (rule-based scoring)** — mô
+hình *túi từ khóa có trọng số*: cụm từ (2 từ trở lên) mang trọng số 2, từ đơn trọng số 1, vì cụm
+đặc trưng hơn. `v2` còn thử thêm bản **không dấu** khi bản có dấu trượt. So với học máy, cách này
+**không cần dữ liệu huấn luyện lớn, chạy < 1 ms, chi phí 0đ**, và **giải thích được** (biết chính
+xác từ khóa nào khiến quyết định).
 
-**Giải thích:** độ tin cậy quyết định cách bot phản hồi — cơ chế "biết khi nào mình chưa chắc",
-tránh đoán bừa.
+**(3) Kết quả.** Trên tập 90 câu đơn-ý, `v2` đạt **Accuracy top-1 = 97.8%, Macro-F1 = 98.3%**
+(v1 chỉ 73.3%). Kèm hàm `confidence_level()`, khi điểm sát nhau bot chủ động đưa 2–3 lựa chọn
+thay vì đoán bừa.
 
-> Quyết định dùng v2 được kiểm chứng bằng `eval/`: trên 63 câu, **v2 đạt
-> Accuracy/Precision/Recall/F1 = 100%** so với v1 (Accuracy 77.8%, F1 87.3%) — chứng minh việc
-> xử lý không dấu là cải tiến then chốt.
-
-### 7.2. Lớp an toàn y tế (`safety.py`)
-
-```python
-def check_emergency(text: str) -> bool:
-    low = text.lower()
-    return any(p in low for p in EMERGENCY_PATTERNS)   # "sưng mặt lan", "gãy xương hàm"...
-
-def mask_pii(text: str) -> str:
-    masked = text
-    for pattern, label in PII_PATTERNS:                # SĐT, email, CCCD
-        masked = pattern.sub(label, masked)
-    return masked
-
-def audit(session_id, role, message, meta=None):
-    entry = {"ts": ..., "session": session_id, "role": role,
-             "message": mask_pii(message), "meta": meta or {}}   # luôn ẩn PII trước khi lưu
-    with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
-        f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-```
-
-**Giải thích:** đây là điểm phân biệt một chatbot y tế "thật". Mọi lượt hội thoại được ghi log
-nhưng **PII luôn bị ẩn trước khi ghi** (tuân thủ NĐ 13/2023). Cấp cứu/handoff/chặn chẩn đoán
-được kiểm tra ở tầng cao nhất trong `chatbot.py`.
-
-**Nơi lưu bộ pattern & nguyên tắc fail-safe.** Ba bộ từ khóa guardrail — `emergency` (cấp cứu),
-`diagnosis` (chặn chẩn đoán/kê đơn), `handoff` (chuyển người thật) — được đưa lên **Supabase**
-(bảng `safety_patterns`) để quản trị online, đồng bộ với cách làm của `services`/`doctors`.
-Tuy nhiên khác dữ liệu nghiệp vụ ở một điểm cốt lõi: **guardrail phải fail-safe**. Vì đây là an
-toàn tính mạng/pháp lý, `safety.py` giữ một bộ **seed baseline trong code** và hợp nhất theo
-nhóm:
-
-```python
-def _load_patterns():
-    seeds = {"emergency": _SEED_EMERGENCY_PATTERNS, "diagnosis": ..., "handoff": ...}
-    db = storage.list_safety_patterns() if storage.USE_DB else {}   # lỗi/không DB -> {}
-    # mỗi nhóm ưu tiên DB, nhóm nào rỗng -> fallback seed (không bao giờ để trống)
-    return {kind: (db.get(kind) or seed) for kind, seed in seeds.items()}
-```
-
-Nhờ vậy: DB là nguồn chính và **sửa online được**, nhưng nếu mất mạng / DB rỗng / ai đó lỡ
-xóa một nhóm thì khả năng chặn cấp cứu, chặn chẩn đoán **không biến mất** — DB chỉ được **mở
-rộng**, không thể làm trống guardrail. Seed lên DB bằng `scripts/migrate_to_supabase.py`
-(`storage.seed_safety_patterns`, idempotent).
-
-### 7.3. Điều phối hội thoại — guardrails ưu tiên trước routing (`chatbot.py`)
-
-```python
-def handle_message(session_id, raw_message):
-    sess = get_session(session_id)
-    message = (raw_message or "").strip()
-    safety.audit(session_id, "user", message, {"state": sess["state"]})
-
-    if safety.check_emergency(message):
-        safety.audit(session_id, "bot", "[EMERGENCY]", {"flag": "emergency"})
-        return _reply(safety.EMERGENCY_MESSAGE, state=sess["state"])
-    if safety.needs_human_handoff(message):
-
-    state = sess["state"]
-    if   state == "TRIAGE":          resp = _do_triage(sess, message)
-    elif state == "CONFIRM_DEPT":    resp = _confirm_dept(sess, message)
-    elif state == "PICK_DOCTOR":     resp = _pick_doctor(sess, message)
-    ...
-```
-
-**Giải thích:** dù người dùng đang ở bước nào, **an toàn được kiểm tra trước routing**. Sau đó
-mới định tuyến theo trạng thái phiên. Phản hồi gồm `reply` (HTML) + `options` (nút bấm) +
-`state` mới, nên cả web và app native dùng chung một hợp đồng dữ liệu.
-
-```python
-if conf == "high":
-    sess["dept_code"] = top["code"]
-    text = f"Dựa trên mô tả, bạn nên dùng dịch vụ <b>{top['name']}</b> ..."
-    return _reply(safety.add_disclaimer(text), options=[...], state="CONFIRM_DEPT")
-```
-
-**Giải thích:** kết quả triage được "dịch" thành câu trả lời thân thiện kèm **disclaimer**;
-nếu độ tin cậy trung bình thì đưa 2–3 lựa chọn, nếu thấp thì hỏi follow-up.
-
-### 7.4. Đặt lịch chống trùng — đối chiếu DB lúc xác nhận (`booking.py`)
+### 7.3. Đặt lịch chống trùng — đối chiếu DB lúc xác nhận (`booking.py`)
 
 ```python
 def _confirmed_at(date_str, time_str):
     """Lịch 'confirmed' đang chiếm đúng khung ngày+giờ (nếu có). Đối chiếu DB."""
     for a in storage.list_appointments():
-        if a.get("status") == "confirmed" and a.get("date") == date_str \
-                and a.get("time") == time_str:
+        if (a.get("status") == "confirmed"
+                and a.get("date") == date_str and a.get("time") == time_str):
             return a
     return None
 
 def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
                      patient_name="", patient_phone=""):
-    if time_str not in generate_available_slots().get(date_str, []):
-        return False, {"error": "Khung giờ không hợp lệ..."}
-    taken = _confirmed_at(date_str, time_str)         
+    taken = _confirmed_at(date_str, time_str)              # kiểm tra ngay lúc xác nhận
     if taken:
         if patient_phone and taken.get("patient_phone") == patient_phone:
-            return False, {"duplicate": True, "existing": taken}  
+            return False, {"duplicate": True, "existing": taken}
         return False, {"error": "Khung giờ này vừa có người đặt..."}
-    storage.add_appointment(appointment)               
+    storage.add_appointment(appointment)
     return True, appointment
 ```
 
-**Giải thích:** không còn bảng khung giờ in-memory. Danh sách giờ **luôn hiển thị đầy đủ**;
-việc một khung đã bị đặt hay chưa được **kiểm tra trực tiếp với DB ngay lúc xác nhận** — nhờ
-vậy DB là nguồn chân lý duy nhất, không lệch khi chạy nhiều tiến trình / qua nhiều ngày / sau
-restart. Nếu trùng cùng SĐT → trả `duplicate` để hội thoại hỏi **hủy lịch cũ rồi đặt tiếp**.
+**(1) Mục đích.** Đảm bảo **không hai người đặt trùng một khung giờ**, kể cả khi nhiều người đặt
+gần như đồng thời hoặc chạy nhiều tiến trình.
 
-### 7.4b. Hủy lịch (`booking.py` + `storage.py`)
+**(2) Kiến thức/thuật toán.** Áp dụng nguyên tắc **"một nguồn chân lý duy nhất" (single source of
+truth)**: bỏ bảng slot tạm trong bộ nhớ, thay bằng **kiểm tra tại thời điểm ghi** (check-on-write)
+trực tiếp với cơ sở dữ liệu. Đây là tư duy nền của **giao dịch (transaction)** và **tính nhất
+quán dữ liệu** trong môn Cơ sở dữ liệu.
 
-```python
-def cancel_appointment(code):
-    appt = storage.get_appointment(code)
-    if not appt or appt.get("status") != "confirmed":
-        return None
-    storage.set_status(code, "cancelled")
-    return appt
-```
+**(3) Kết quả.** Danh sách giờ luôn hiển thị đầy đủ nhưng vẫn không trùng lịch sau restart / qua
+nhiều ngày / nhiều tiến trình. Nếu trùng đúng SĐT → trả `duplicate` để hội thoại mời **hủy lịch
+cũ rồi đặt tiếp**, thay vì bắt người dùng làm lại từ đầu.
 
-**Giải thích:** hủy = đổi trạng thái, không xóa dữ liệu (giữ vết cho audit). Vì khung bận chỉ
-tính lịch `confirmed`, hủy xong slot lập tức đặt lại được. `upcoming_by_phone(phone)` liệt kê
-lịch sắp tới của một SĐT để người dùng chọn lịch cần hủy.
-
-### 7.5. Lớp lưu trữ kép (`storage.py`)
+### 7.4. Truy vấn cho admin/bác sĩ — lịch làm việc theo khung giờ (`booking.py`)
 
 ```python
-DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
-USE_DB = bool(DATABASE_URL)
-
-def add_appointment(appt):
-    appt.setdefault("reminders_sent", [])
-    if USE_DB:
-        init_schema()
-        with _connect() as conn, conn.cursor() as cur:
-            cur.execute("INSERT INTO appointments (...) VALUES (%s,...)", (...))
-            conn.commit()
-        return
-    items = _json_load(APPOINTMENTS_PATH, [])  
-    items.append(appt); _json_save(APPOINTMENTS_PATH, items)
+def doctor_day_schedule(doctor_id, date_str):
+    """Lịch làm việc của MỘT bác sĩ trong MỘT ngày: mỗi khung giờ -> bận/trống."""
+    slots = generate_available_slots().get(date_str, [])
+    booked = {a["time"]: a for a in query_appointments(
+        date=date_str, doctor_id=doctor_id, status="confirmed")}
+    return [{"time": s, "appt": booked.get(s)} for s in slots]
 ```
 
-**Giải thích:** một biến môi trường `DATABASE_URL` quyết định toàn bộ backend lưu trữ.
-`booking.py` và `push.py` chỉ gọi qua `storage`, nên chuyển từ demo (JSON) sang production
-(Supabase) **không phải sửa nghiệp vụ**.
+**(1) Mục đích.** Cho bác sĩ/admin nhìn thấy **trong một ngày mình bận khung nào, ai đặt, khung
+nào còn trống** — trả lời trực tiếp nhận xét "chatbot có dùng cho admin/bác sĩ kiểm tra lịch
+không?".
 
-### 7.6. Nhắc lịch (`reminder_worker.py`)
+**(2) Kiến thức/thuật toán.** Xây một **bảng tra cứu (hash map) `giờ → lịch hẹn`** để tra O(1),
+rồi *ghép (join)* với danh sách khung giờ chuẩn của ngày. Dữ liệu đọc qua `storage` nên **đúng
+cả khi lưu bằng file JSON lẫn Postgres**. Toàn bộ nhóm hàm admin (`query_appointments`,
+`doctor_day_schedule`, `admin_summary`) là **read-only**, không đụng nghiệp vụ đặt lịch.
 
-```python
-def _rules(appt):
-    return [
-        {"key": "remind_1d", "before": timedelta(days=1),  "title": "📅 Nhắc lịch khám (còn 1 ngày)", ...},
-        {"key": "care_eat",  "before": timedelta(hours=14), "title": "🍵 Nhắc chăm sóc sức khỏe", ...},
-        {"key": "remind_2h", "before": timedelta(hours=2),  "title": "⏰ Sắp tới giờ khám (còn 2 giờ)", ...},
-    ]
-
-for rule in _rules(appt):
-    if rule["key"] in already:       
-        continue
-    due_time = appt_dt - rule["before"]
-    if force or (now >= due_time and now <= appt_dt):
-        _send_for(appt, rule)          
-```
-
-**Giải thích:** worker quét toàn bộ lịch, gửi mỗi loại nhắc đúng **một lần** (lưu trong
-`reminders_sent`). Chạy `--watch` (nền 60s) hoặc `--once` (cắm vào cron). `push.send_push`
-tự ghi `outbox` khi token chưa thật → kiểm thử được luồng mà không cần điện thoại.
+**(3) Kết quả.** Trang `/admin` hiển thị lịch làm việc dạng lưới khung giờ (bận/trống) và danh
+sách lịch hẹn lọc theo ngày/bác sĩ/trạng thái/SĐT, kèm thống kê nhanh và nút hủy — một công cụ
+quản trị hoàn chỉnh dựng trên đúng nguồn dữ liệu bệnh nhân đã đặt.
 
 ---
 
-## 8. Screenshots
+## 8. Giao diện & hình ảnh minh họa
 
-> *Chèn ảnh chụp thực tế vào đúng vị trí placeholder bên dưới (kéo ảnh vào file Word, hoặc
-> đặt ảnh cùng thư mục rồi thay đường dẫn). Mỗi ảnh kèm chú thích đã gợi ý sẵn.*
+> *Chèn ảnh chụp thực tế vào đúng vị trí placeholder bên dưới. Mỗi hình đã có sẵn caption đầy đủ
+> theo mẫu "Hình X — Tiêu đề. Mô tả".*
 
-**Hình 1 — Màn hình chào & nhập triệu chứng (web demo).**
+**Hình 5 — Màn hình chào & nhập triệu chứng (web demo).**
 `![Màn hình chào](screenshots/01-greeting.png)`
 *Chú thích:* Bot tự giới thiệu là "Trợ lý Nha khoa SHI", hiển thị disclaimer "không chẩn đoán
 bệnh, không kê đơn", và mời người dùng mô tả triệu chứng.
 
-**Hình 2 — Kết quả triage & xác nhận dịch vụ.**
+**Hình 6 — Kết quả triage & xác nhận dịch vụ.**
 `![Triage](screenshots/02-triage.png)`
 *Chú thích:* Người dùng gõ "răng tôi bị sâu và ê buốt khi ăn ngọt" → bot đề xuất dịch vụ
 **Trám răng / Sâu răng** kèm 2 nút "Đặt lịch" / "Mô tả lại".
 
-**Hình 3 — Chọn bác sĩ → ngày → khung giờ.**
+**Hình 7 — Chọn bác sĩ → ngày → khung giờ.**
 `![Đặt lịch](screenshots/03-booking-steps.png)`
-*Chú thích:* Các bước chọn được hiển thị dưới dạng nút bấm; khung giờ luôn hiển thị đầy đủ,
-việc trùng giờ được đối chiếu với DB ở bước xác nhận. Sau khi chọn giờ, bot hỏi thêm **tên**
-và **số điện thoại**.
+*Chú thích:* Các bước chọn hiển thị dưới dạng nút bấm; khung giờ luôn hiển thị đầy đủ, việc
+trùng giờ được đối chiếu với DB ở bước xác nhận. Sau khi chọn giờ, bot hỏi thêm **tên** và
+**số điện thoại**.
 
-**Hình 4 — Đặt lịch thành công + link lịch.**
+**Hình 8 — Đặt lịch thành công + link lịch.**
 `![Thành công](screenshots/04-success.png)`
 *Chú thích:* Bot trả mã lịch hẹn `SHI-XXXXXX`, link "Thêm vào Lịch (.ics)" và "Thêm vào Google
 Calendar"; đồng thời bắn push xác nhận.
 
-**Hình 5 — Guardrail cấp cứu.**
+**Hình 9 — Guardrail cấp cứu.**
 `![Cấp cứu](screenshots/05-emergency.png)`
 *Chú thích:* Khi phát hiện cụm cấp cứu (vd. "gãy xương hàm"), bot dừng tư vấn và hướng dẫn gọi **115**.
 
-**Hình 6 — Thông báo đẩy / nhắc lịch trên điện thoại (Expo).**
+**Hình 10 — Thông báo đẩy / nhắc lịch trên điện thoại (Expo).**
 `![Push](screenshots/06-push.png)`
 *Chú thích:* Thông báo "✅ Đặt lịch thành công" và nhắc "⏰ Sắp tới giờ khám (còn 2 giờ)".
 
-**Hình 7 — Kết quả đánh giá AI (`eval/results.md`).**
-`![Eval](screenshots/07-eval.png)`
-*Chú thích:* Bảng so sánh v1 vs v2 — v2 đạt Accuracy/Precision/Recall/F1 = 100% trên 63 mẫu.
+**Hình 11 — Trang quản trị: danh sách lịch hẹn (admin/bác sĩ).**
+`![Admin danh sách](screenshots/07-admin-list.png)`
+*Chú thích:* Trang `/admin` liệt kê các lịch đã đặt, lọc theo ngày/bác sĩ/trạng thái/SĐT, có
+thống kê nhanh (tổng/đã xác nhận/đã hủy) và nút hủy lịch.
 
-*Cách tạo nhanh ảnh Hình 1–5:* chạy backend rồi mở `http://127.0.0.1:5001`, thao tác và chụp
-màn hình. Hình 7 có thể chụp trực tiếp bảng trong `eval/results.md`.
+**Hình 12 — Trang quản trị: lịch làm việc của một bác sĩ.**
+`![Admin lịch làm việc](screenshots/08-admin-schedule.png)`
+*Chú thích:* Chọn bác sĩ + ngày → hiển thị từng khung giờ **bận** (ai đặt, dịch vụ) hay **trống**.
+
+**Hình 13 — Kết quả đánh giá AI (`eval/results.md`).**
+`![Eval](screenshots/09-eval.png)`
+*Chú thích:* Bảng so sánh v1 vs v2 và tập câu ghép nhiều ý — v2 đạt Accuracy top-1 97.8%,
+top-2 98.9% trên 90 câu đơn-ý; câu ghép nhiều ý đạt top-2 chấp nhận 100%.
+
+*Cách tạo nhanh ảnh Hình 5–9:* chạy backend rồi mở `http://127.0.0.1:5001`, thao tác và chụp
+màn hình. Hình 11–12 mở `http://127.0.0.1:5001/admin`. Hình 13 chụp bảng trong `eval/results.md`.
 
 ---
 
@@ -467,38 +485,55 @@ màn hình. Hình 7 có thể chụp trực tiếp bảng trong `eval/results.md
 
 | Mục tiêu | Trạng thái | Bằng chứng |
 |----------|:----------:|-----------|
-| Triage chính xác (kể cả thiếu dấu) | ✅ Hoàn thành | `triage.py` v2; eval 63 mẫu đạt F1 = 100% |
+| Triage chính xác (kể cả thiếu dấu) | ✅ Hoàn thành | `triage.py` v2; 90 câu đạt top-1 97.8%, top-2 98.9% |
 | Hội thoại dẫn dắt đặt lịch | ✅ Hoàn thành | Máy trạng thái trong `chatbot.py` (đặt lịch + nhánh hủy lịch) |
-| Thu thập SĐT & chống đặt trùng | ✅ Hoàn thành | Bước `ASK_PHONE`; `book_appointment` đối chiếu DB (trùng giờ/SĐT) |
-| Hủy lịch đã đặt | ✅ Hoàn thành | `cancel_appointment` + nhánh `CANCEL_*`; `status='cancelled'` |
+| Thu thập SĐT & chống đặt trùng | ✅ Hoàn thành | Bước `ASK_PHONE`; `book_appointment` đối chiếu DB |
+| Hủy lịch đã đặt | ✅ Hoàn thành | `cancel_appointment` + nhánh `CANCEL_*` |
 | Hỏi–đáp thông tin dịch vụ | ✅ Hoàn thành | `triage.info_question_service` + `data.SERVICE_INFO` |
 | Guardrails an toàn y tế | ✅ Hoàn thành | `safety.py`: cấp cứu, chặn chẩn đoán, PII, audit |
 | Nhắc lịch chủ động | ✅ Hoàn thành | `reminder_worker.py` + `push.py` + `.ics` |
+| Quản trị admin/bác sĩ | ✅ Hoàn thành | `/admin` + `/api/admin/*`; xem lịch đã đặt & lịch làm việc |
 | Đa nền tảng (web + app) | ✅ Hoàn thành | REST API dùng chung; `mobile/` (Expo) |
-| Đo lường chất lượng AI | ✅ Hoàn thành | `eval/` + `BAOCAO_DANHGIA.md` |
+| Đo lường chất lượng AI | ✅ Hoàn thành | `eval/` (90 + 20 câu) + `BAOCAO_DANHGIA.md` |
 | Sẵn sàng lên cloud (DB) | ✅ Cơ bản | `storage.py` hỗ trợ Postgres/Supabase |
 
-Nhìn chung đồ án **đạt toàn bộ mục tiêu đề ra** ở mức demo hoàn chỉnh, có đo lường định lượng
-và có lớp an toàn — vượt trên một chatbot thông thường.
+Nhìn chung đồ án **đạt toàn bộ mục tiêu đề ra** ở mức demo hoàn chỉnh, có đo lường định lượng,
+có lớp an toàn và có công cụ quản trị — vượt trên một chatbot thông thường.
 
 ### 9.2. Hạn chế hiện tại
-- **Triage rule-based**: phụ thuộc bộ từ khóa, có thể trượt với cách diễn đạt lạ; tập đánh giá
-  (63 câu) còn nhỏ và "thân thiện" với từ khóa.
+- **Triage rule-based**: phụ thuộc bộ từ khóa nên vẫn trượt với cách diễn đạt lạ — ví dụ "cầu
+  răng sứ cho chỗ răng đã mất" (thiếu từ khóa) và ranh giới **Nha nhi vs Sâu răng** khi câu vừa
+  nhắc "bé" vừa "sâu răng" (xem phân tích lỗi trong `BAOCAO_DANHGIA.md`).
+- **Chưa tách tập test độc lập**: từ khóa được hiệu chỉnh trên chính tập phát triển nên số liệu
+  có thể lạc quan hơn thực tế.
 - **Session in-memory** (`chatbot.SESSIONS`): mất khi restart, chưa scale nhiều worker.
+- **Trang quản trị mới bảo vệ tối thiểu** bằng `ADMIN_KEY` chung; chưa có đăng nhập theo tài
+  khoản/vai trò từng bác sĩ.
 - **Chạy bằng dev server + `debug=True`**, `API_BASE` còn là IP LAN, chưa cấu hình CORS — chưa
   phải cấu hình production.
 
 ### 9.3. Hướng phát triển tương lai
-1. **Nâng NLU bằng LLM**: kích hoạt `classify_with_llm()` (Claude) làm tầng dự phòng/kết hợp
-   khi rule-based có độ tin cậy thấp; mở rộng tập đánh giá đa dạng hơn.
+1. **Nâng NLU bằng LLM**: kích hoạt `classify_with_llm()` (Claude) làm tầng dự phòng khi
+   rule-based có độ tin cậy thấp; mở rộng tập đánh giá đa dạng hơn, có tập test riêng.
 2. **Production hardening**: chạy bằng `gunicorn`, tắt debug, thêm CORS, đưa `API_BASE` về URL
    HTTPS công khai (Render/Railway/Fly.io).
 3. **Session bền vững**: chuyển trạng thái hội thoại sang Redis/DB để scale nhiều tiến trình.
 4. **Phát hành app thật**: build bằng **EAS** → APK/AAB (Google Play) hoặc iOS (App Store),
    kèm privacy policy và disclaimer y tế.
-5. **Tích hợp lịch bác sĩ thật & quản trị**: đồng bộ Google Calendar phía phòng khám, trang
-   quản trị xem/duyệt lịch hẹn, thống kê.
+5. **Quản trị nâng cao**: đăng nhập theo tài khoản bác sĩ, đồng bộ Google Calendar phía phòng
+   khám, duyệt/đổi lịch, thống kê doanh thu và tỷ lệ no-show.
 6. **Mở rộng nghiệp vụ**: nhắc tái khám, đánh giá sau khám, hỏi đáp về chi phí dịch vụ.
+
+---
+
+## Phụ lục — Mẫu khảo sát để thay số liệu ước lượng
+
+Các số liệu trong mục 1 (Bảng 1, Bảng 2, Hình 2) hiện là **ước lượng của nhóm** và nên được thay
+bằng số đo thực tế. Gợi ý khảo sát nhanh tại 3–5 phòng khám:
+1. Đo **thời gian trung bình mỗi lượt đặt lịch** (bấm giờ 20–30 cuộc).
+2. Đếm **lý do liên hệ** trong 1 tuần (hỏi dịch vụ / đặt-đổi lịch / hỏi giá / khác) → vẽ lại Hình 2.
+3. Ghi **tỷ lệ no-show** (số lịch bỏ / tổng lịch) trong 1 tháng.
+4. Đếm **số ca định tuyến nhầm dịch vụ** phải khám lại.
 
 ---
 
