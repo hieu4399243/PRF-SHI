@@ -36,14 +36,10 @@ async function pickWritableCalendar() {
       if (def && def.allowsModifications) return def;
     } catch (e) {}
   }
-  // Android: ưu tiên lịch chính (isPrimary), nếu không lấy cái đầu.
   return writable.find((c) => c.isPrimary) || writable[0];
 }
 
-/**
- * Thêm lịch hẹn vào lịch máy. Trả về:
- *   { ok, eventId, calendarTitle, sourceName }  hoặc  { ok:false, reason }
- */
+
 export async function addAppointmentToCalendar(appt) {
   const granted = await ensurePermission();
   if (!granted) return { ok: false, reason: "denied" };
