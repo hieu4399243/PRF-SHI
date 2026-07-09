@@ -39,7 +39,7 @@ cấp cứu / chẩn đoán / handoff online (xem bài 03, phần fail-safe).
 - `get_appointment(code)` đọc **thẳng storage** — vì thiết kế mới coi **DB là nguồn chân
   lý duy nhất** cho slot trống (xem bài 04): không còn bảng giờ trống in-memory.
 
-Chi tiết cấu hình Supabase: xem [DATABASE.md](../DATABASE.md).
+Chi tiết cấu hình Supabase: xem [DATABASE.md](../docs/database-storage-guide.md).
 
 ---
 

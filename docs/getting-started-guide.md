@@ -7,7 +7,7 @@ Tài liệu này có **2 phần**, tùy bạn muốn gì:
 | **Chạy được** dự án có sẵn trên máy mình (backend → DB → app điện thoại) | [Phần A](#phần-a--chạy-dự-án-có-sẵn) | 30–60 phút |
 | **Tự xây lại từ số 0** để hiểu code, biết cách tạo API, viết được cái tương tự | [Phần B](#phần-b--tự-xây-lại-từ-số-0) | vài buổi |
 
-> Muốn hiểu **bức tranh tổng** (khối nào nói chuyện với khối nào) thì xem [KIEN_TRUC.md](KIEN_TRUC.md).
+> Muốn hiểu **bức tranh tổng** (khối nào nói chuyện với khối nào) thì xem [system-architecture.md](system-architecture.md).
 
 ---
 
@@ -165,7 +165,7 @@ Mở **Supabase → Table editor** thấy 4 bảng `appointments`, `device_token
 `doctors`. Từ đây sửa danh mục online (xong **restart app**).
 
 > Muốn quay lại file JSON: xóa/để trống dòng `DATABASE_URL` trong `.env`.
-> Chi tiết & FAQ: [DATABASE.md](DATABASE.md).
+> Chi tiết & FAQ: [database-storage-guide.md](database-storage-guide.md).
 
 ---
 
@@ -365,7 +365,7 @@ trọn vòng đặt lịch y như Mốc 3 nhưng qua HTTP.
 | Push notification (Expo Push) | `push.py` | [hoc/05-push.md](hoc/05-push.md) |
 | Worker quét lịch → bắn nhắc | `reminder_worker.py` | [hoc/08-storage-calendar-reminder.md](hoc/08-storage-calendar-reminder.md) |
 | File lịch `.ics` | `calendar_ics.py` | như trên |
-| Đổi file JSON → Postgres/Supabase | `storage.py` | như trên + [DATABASE.md](DATABASE.md) |
+| Đổi file JSON → Postgres/Supabase | `storage.py` | như trên + [database-storage-guide.md](database-storage-guide.md) |
 | Đo chất lượng AI (Precision/Recall/F1) | `eval/` | [BAOCAO_DANHGIA.md](BAOCAO_DANHGIA.md) |
 
 ## B3. Vì sao thứ tự này?

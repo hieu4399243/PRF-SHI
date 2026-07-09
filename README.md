@@ -11,12 +11,11 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 ## 📚 Tài liệu
 | File | Nội dung |
 |------|----------|
-| [KIEN_TRUC.md](KIEN_TRUC.md) | Kiến trúc dự án: sơ đồ, luồng xử lý, bản đồ file, mô hình dữ liệu |
-| [HUONG_DAN_TU_DAU.md](HUONG_DAN_TU_DAU.md) | Dựng dự án từ đầu (máy trắng → chạy được), chi tiết cho người mới |
-| [DATABASE.md](DATABASE.md) | Lưu trữ JSON ↔ Supabase, cách đưa dữ liệu lên cloud |
+| [docs/](docs/project-overview-pdr.md) | Bộ tài liệu chuẩn: tổng quan/PDR, kiến trúc, bản đồ mã, chuẩn mã, triển khai, lộ trình |
+| [docs/getting-started-guide.md](docs/getting-started-guide.md) | Dựng dự án từ đầu (máy trắng → chạy được), chi tiết cho người mới |
+| [docs/database-storage-guide.md](docs/database-storage-guide.md) | Lưu trữ JSON ↔ Supabase, cách đưa dữ liệu lên cloud |
 | [BAOCAO_DANHGIA.md](BAOCAO_DANHGIA.md) | Báo cáo đánh giá AI (mục đích→mục tiêu→cách đo→kết quả→kết luận) |
 | [hoc/](hoc/00-muc-luc.md) | Tự học: viết lại từng khối từ con số 0 |
-| [SETUP.md](SETUP.md) | Cài đặt & chạy nhanh (3 terminal) |
 
 ```
 ┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐

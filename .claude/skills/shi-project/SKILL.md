@@ -57,7 +57,7 @@ Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem
 
 ## Chạy local (dev)
 
-3 terminal (xem `SETUP.md`):
+3 terminal (xem `docs/deployment-guide.md`):
 ```bash
 # 1. Backend
 PORT=5001 ./.venv/bin/python app.py
@@ -76,7 +76,7 @@ Lưu ý: macOS chiếm cổng 5000 (AirPlay) → dùng 5001.
 2. **`secret_key`** — đã đọc từ env `SECRET_KEY` (fallback demo key) trong `app.py`.
 3. **Lưu trữ:** `appointments` + `device_tokens` đã tách qua `storage.py` — có `DATABASE_URL`
    thì dùng **Postgres/Supabase** (bền vững), không thì fallback **file JSON** (local).
-   Xem `DATABASE.md` + `scripts/migrate_to_supabase.py`. **Còn lại:** session hội thoại
+   Xem `docs/database-storage-guide.md` + `scripts/migrate_to_supabase.py`. **Còn lại:** session hội thoại
    vẫn **in-memory** (`chatbot.SESSIONS`) → cần Redis/DB khi scale nhiều worker.
 4. **CORS** — chưa cấu hình; khi backend khác origin với client web cần thêm.
 5. `API_BASE` đang là IP LAN — khi deploy phải đổi sang URL HTTPS công khai.
