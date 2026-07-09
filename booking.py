@@ -8,7 +8,7 @@ danh sách trống để tránh trùng lịch.
 (Phần đồng bộ Google Calendar là optional/stretch — xem ghi chú ở cuối file.)
 """
 
-import random
+import secrets
 import string
 from datetime import datetime
 
@@ -64,7 +64,8 @@ def get_available_times(date_str: str):
 
 
 def _generate_code():
-    return "SHI-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    alphabet = string.ascii_uppercase + string.digits
+    return "SHI-" + "".join(secrets.choice(alphabet) for _ in range(6))
 
 
 def upcoming_by_phone(phone):
@@ -147,7 +148,51 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
         "status": "confirmed",
     }
 
-    storage.add_appointment(appointment)
+    return _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
+                                    retry=True)
+
+
+def _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
+                            retry):
+    """Gọi storage.add_appointment, bắt UniqueViolation do race giữa 2 request
+    đặt cùng khung giờ gần như đồng thời (xem UNIQUE INDEX ux_appointments_slot
+    trong storage.py).
+
+    `UniqueViolation` có thể đến từ 2 nguồn khác nhau vì `appointments.code` là
+    PRIMARY KEY từ trước khi có `ux_appointments_slot`:
+      - constraint ux_appointments_slot -> đúng ý: khung giờ vừa bị bên khác
+        chiếm trong lúc race. Trả lỗi giống nhánh "đã có người đặt" ở trên.
+      - constraint khác (vd appointments_pkey, do _generate_code() hiếm khi
+        sinh trùng mã) -> khung giờ KHÔNG thực sự bị chiếm, KHÔNG được gọi
+        _confirmed_at (sẽ trả None -> AttributeError khi code cũ giả định
+        taken luôn có giá trị). Sinh mã mới và retry insert một lần; nếu vẫn
+        lỗi, trả lỗi hệ thống chung thay vì để exception rò rỉ ra route Flask.
+    """
+    try:
+        storage.add_appointment(appointment)
+    except Exception as exc:
+        try:
+            import psycopg
+        except ImportError:
+            raise exc
+        if not isinstance(exc, psycopg.errors.UniqueViolation):
+            raise
+        constraint_name = getattr(getattr(exc, "diag", None),
+                                  "constraint_name", None)
+        if constraint_name == "ux_appointments_slot":
+            taken = _confirmed_at(date_str, time_str)
+            if patient_phone and taken and taken.get("patient_phone") == patient_phone:
+                return False, {"duplicate": True, "existing": taken,
+                               "error": "Bạn đã đặt lịch vào khung giờ này rồi."}
+            return False, {"error": "Khung giờ này vừa có người đặt. "
+                                    "Vui lòng chọn giờ khác."}
+        # Không phải lỗi trùng slot (vd trùng code ngẫu nhiên) -> không đụng
+        # taken/_confirmed_at, chỉ retry với code mới.
+        if not retry:
+            return False, {"error": "Lỗi hệ thống, vui lòng thử lại."}
+        appointment = dict(appointment, code=_generate_code())
+        return _insert_with_race_guard(appointment, date_str, time_str,
+                                       patient_phone, retry=False)
 
     return True, appointment
 

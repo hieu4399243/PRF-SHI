@@ -21,6 +21,8 @@ Mục lục:
 2. [Lấy mã nguồn & môi trường ảo](#a2-lấy-mã-nguồn--môi-trường-ảo)
 3. [Chạy backend (chế độ file JSON)](#a3-chạy-backend-chế-độ-file-json)
 4. [Thử nhanh backend](#a4-thử-nhanh-backend)
+4a. [Chạy bộ test](#a4a-chạy-bộ-test-tuỳ-chọn)
+4b. [Trang quản trị](#a4b-trang-quản-trị-cho-admin/bác-sĩ)
 5. [Nối Database Supabase](#a5-nối-database-supabase)
 6. [Chạy app điện thoại (Expo)](#a6-chạy-app-điện-thoại-expo)
 7. [Worker nhắc lịch](#a7-worker-nhắc-lịch)
@@ -96,6 +98,21 @@ curl -X POST http://127.0.0.1:5001/api/start -H "Content-Type: application/json"
 Nhận về JSON có `reply` và `session` là backend OK.
 
 File sinh ra khi chạy: `appointments.json` (lịch hẹn), `audit_log.jsonl` (log đã ẩn PII).
+
+---
+
+## A4a. Chạy bộ test (tuỳ chọn)
+
+Dự án có bộ test để kiểm tra **triage, booking, safety, reminder, chatbot sessions** hoạt động đúng:
+```bash
+# Chạy tất cả test
+./.venv/bin/python -m pytest tests/ -v
+
+# Hoặc chạy test riêng từng khối
+./.venv/bin/python -m pytest tests/test_safety.py -v
+./.venv/bin/python -m pytest tests/test_booking.py -v
+```
+**Khi nào chạy:** trước khi commit khi sửa logic triage/booking/safety/reminder, để tránh regression.
 
 ---
 

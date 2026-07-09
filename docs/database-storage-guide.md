@@ -58,11 +58,25 @@ appointments(
   code PK, session, patient_name, patient_phone, department, department_code,
   doctor, doctor_id, date, time, created_at, status, reminders_sent jsonb
 )  -- status: 'confirmed' | 'cancelled'
+   -- UNIQUE INDEX ux_appointments_slot(date, time) WHERE status='confirmed' 
+   --   → chặn 2 lịch confirmed cùng khung giờ (chống race condition khi đặt)
 device_tokens(session, token, PRIMARY KEY(session, token))
 services(code PK, name, descr, keywords jsonb, sort_order)   -- danh mục dịch vụ nha khoa
 doctors(id PK, service_code -> services.code, name, sort_order)
 safety_patterns(kind, pattern, PRIMARY KEY(kind, pattern))   -- guardrail an toàn y tế
 ```
+
+## Bảo vệ chống trùng lịch (UNIQUE constraint)
+Khi 2 request cùng lúc đặt lịch ở khung giờ trống, bình thường cả 2 đều thấy slot trống →
+may được cả 2 lịch cùng khung (lỗi race condition). **UNIQUE INDEX `ux_appointments_slot`**
+chặn điều này ở tầng DB:
+```sql
+CREATE UNIQUE INDEX ux_appointments_slot 
+  ON appointments (date, time) WHERE status = 'confirmed';
+```
+Nếu index này không thể tạo (vd. dữ liệu prod đã có 2+ lịch trùng), app in cảnh báo tại
+khởi động nhưng vẫn chạy; lúc này `booking.py` dựa vào `psycopg.errors.UniqueViolation`
+để bắt race và báo lỗi cho người dùng thay vì im lặng tạo lịch trùng.
 
 ## Guardrail an toàn (`safety_patterns`) — có fallback
 - `kind` ∈ `emergency` (cấp cứu → 115), `diagnosis` (chặn chẩn đoán/kê đơn), `handoff`

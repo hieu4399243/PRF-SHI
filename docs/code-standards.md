@@ -43,6 +43,13 @@ Quy ước rút ra từ mã hiện có. Giữ nhất quán khi thêm/sửa.
 - File Python mới: `snake_case.py`, đặt ở gốc nếu là khối nghiệp vụ, `scripts/` nếu là tiện ích.
 - Không tạo file Markdown ngoài `docs/` và `plans/` trừ khi được yêu cầu rõ.
 
+## Test
+
+- Dùng `pytest` (xem `requirements.txt`). Test file nằm trong `tests/` cùng cấp với `app.py`.
+- Chạy tất cả test: `./.venv/bin/python -m pytest tests/ -v` (hoặc `pytest tests/ -v` nếu venv đã active).
+- Mỗi khối có thể test độc lập: `pytest tests/test_safety.py`, `pytest tests/test_booking.py`, v.v.
+- Chạy test lại **trước khi commit** khi sửa code liên quan.
+
 ## Commit
 
 - Conventional commits, không tham chiếu AI. Không commit secrets/`.env`/dữ liệu cá nhân.

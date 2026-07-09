@@ -8,29 +8,52 @@ worker), 2026-07-09. Đầy đủ hơn ở
 
 ## 🔴 Critical
 
-- [ ] **C1 — Cấp cứu/chẩn đoán không bắt được câu KHÔNG DẤU** (`safety.py:111-120`)
+- [x] **C1 — Cấp cứu/chẩn đoán không bắt được câu KHÔNG DẤU** (`safety.py:111-120`)
   Triage dùng v2 (không phân biệt dấu) nhưng `check_emergency`/`is_diagnosis_request` so khớp
   có dấu. "kho tho nang", "co giat", "dot quy" → không cảnh báo 115. **Rủi ro tính mạng.**
   Fix: dùng `triage._strip_accents`/`_normalize`/`_contains_word`; thêm pattern rút gọn
   ("khó thở", "sưng mặt", "chảy máu nhiều").
+  **Đã fix** (2026-07-09, `plans/260709-2126-fix-critical-issues/phase-01-...md`):
+  `safety.py` giờ `_normalize` + `_strip_accents` CẢ input lẫn pattern (kể cả pattern nạp từ
+  Supabase, không chỉ seed hardcode). Test: `tests/test_safety.py` (8/8 pass).
 
-- [ ] **C2 — Trùng lịch (double-booking) do race condition** (`booking.py:126` → `storage.py:160`)
+- [x] **C2 — Trùng lịch (double-booking) do race condition** (`booking.py:126` → `storage.py:160`)
   Kiểm tra rồi mới insert, không có unique constraint/transaction. 2 request đặt cùng giờ
   cùng lúc → cả 2 đều thành công. Fix: unique index `WHERE status='confirmed'` trên
   `(doctor_id,date,time)` + bắt `IntegrityError`.
+  **Đã fix** (2026-07-09, `plans/260709-2126-fix-critical-issues/phase-02-...md`): UNIQUE
+  INDEX `ux_appointments_slot` trên `(date,time)` (giữ nguyên semantics hiện tại, KHÔNG theo
+  `doctor_id` — xem H1 bên dưới, chưa xác nhận là bug hay spec), tạo tách riêng trong
+  `init_schema()` để 1 lỗi migrate không sập cả app. `booking.py` bắt
+  `psycopg.errors.UniqueViolation`, phân biệt theo `constraint_name`. Test:
+  `tests/test_booking.py` (8 pass, 1 skip — thiếu Postgres local để test race thật, chỉ
+  verify qua monkeypatch + review SQL).
 
-- [ ] **C3 — `SESSIONS` không giới hạn + key do client tự chọn → DoS bộ nhớ** (`chatbot.py:16`,
+- [x] **C3 — `SESSIONS` không giới hạn + key do client tự chọn → DoS bộ nhớ** (`chatbot.py:16`,
   `app.py:34`) Không TTL/cap/rate-limit; client gửi `session` tùy ý trong body → tạo entry vô
   hạn → OOM. Fix: cap + TTL/LRU, hoặc chuyển Redis.
+  **Đã fix** (2026-07-09, `plans/260709-2126-fix-critical-issues/phase-03-...md`):
+  `SESSIONS` là `OrderedDict` với cap 2000 + TTL 3600s + `threading.Lock`. Quyết định: sản
+  phẩm chạy 1 Flask process, không cần Redis. Residual risk chấp nhận: cap không gắn
+  rate-limit nên vẫn có thể bị đá phiên hợp lệ nếu 1 client spam `/api/start` (fix đúng —
+  rate-limit — là mục Medium riêng, chưa làm). Test: `tests/test_chatbot_sessions.py` (5/5).
 
-- [ ] **C4 — `/api/ics/<code>` không xác thực → lộ dữ liệu sức khỏe** (`app.py:77-88`,
+- [x] **C4 — `/api/ics/<code>` không xác thực → lộ dữ liệu sức khỏe** (`app.py:77-88`,
   `booking.py:66-67`) Mã dùng `random` (không phải `secrets`), không kiểm tra quyền sở hữu.
   Đoán/dò mã → tải được tên bệnh nhân + dịch vụ nha khoa. Fix: `secrets.token_urlsafe` hoặc
   yêu cầu khớp session; thêm rate limit.
+  **Đã fix** (2026-07-09, `plans/260709-2126-fix-critical-issues/phase-04-...md`):
+  `_generate_code()` dùng `secrets.choice`; `/api/ics/<code>` yêu cầu `appt["session"] ==
+  sid`, 404 đồng nhất cho "không tồn tại" và "sai chủ sở hữu". Residual risk chấp nhận: user
+  web mất cookie sẽ không tải lại được link cũ (đúng mô hình bảo mật, không phải bug). Test:
+  `tests/test_app_ics.py` (4/4).
 
-- [ ] **C5 — Worker `--watch` chết khi gặp 1 bản ghi lỗi** (`reminder_worker.py:88`)
+- [x] **C5 — Worker `--watch` chết khi gặp 1 bản ghi lỗi** (`reminder_worker.py:88`)
   Không try/except quanh `_send_for`; 1 lịch hẹn thiếu field → KeyError → toàn bộ nhắc lịch
   ngừng cho mọi người. Fix: try/except từng item trong vòng lặp.
+  **Đã fix** (2026-07-09, `plans/260709-2126-fix-critical-issues/phase-05-...md`): 2 lớp
+  try/except trong `scan_once()` — `[SKIP]` cho lỗi dữ liệu, `[SEND-ERROR]` cho lỗi
+  gửi/đánh dấu (tách log để không lẫn với H2/H3). Test: `tests/test_reminder_worker.py` (3/3).
 
 ## 🟠 High
 

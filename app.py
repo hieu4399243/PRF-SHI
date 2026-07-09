@@ -76,9 +76,16 @@ def register_push():
 
 @app.route("/api/ics/<code>")
 def download_ics(code):
-    """Tải file lịch .ics của một lịch hẹn -> thêm vào lịch + tự nhắc."""
+    """Tải file lịch .ics của một lịch hẹn -> thêm vào lịch + tự nhắc.
+
+    Chỉ chủ sở hữu (cùng session đã đặt lịch) mới tải được. Không phân biệt
+    "không tồn tại" vs "không có quyền" -> luôn 404, tránh lộ thông tin mã
+    lịch hẹn có tồn tại hay không (chống enumeration).
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    sid = resolve_sid(data)
     appt = booking.get_appointment(code)
-    if not appt:
+    if not appt or appt.get("session") != sid:
         abort(404)
     ics = calendar_ics.build_ics(appt)
     return Response(

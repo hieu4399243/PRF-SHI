@@ -8,12 +8,32 @@ Mỗi phiên (session) giữ trạng thái riêng để dẫn dắt bệnh nhân
 Bất kỳ lúc nào, guardrails (cấp cứu / handoff / chặn chẩn đoán) đều được ưu tiên.
 """
 
+import time
+import threading
+from collections import OrderedDict
+
 import triage
 import booking
 import safety
 
 # Bộ nhớ phiên (in-memory). Sản phẩm thật nên dùng Redis/DB.
-SESSIONS = {}
+#
+# OrderedDict được dùng làm cấu trúc LRU: mỗi lần một session được truy cập
+# (get_session) hoặc reset (reset_session), nó được đưa xuống cuối (move_to_end)
+# để đánh dấu "vừa hoạt động gần nhất". Khi số session chạm trần _MAX_SESSIONS,
+# session ở đầu (lâu-không-hoạt-động-nhất) bị loại bỏ trước.
+#
+# LƯU Ý: _MAX_SESSIONS chỉ giới hạn bộ nhớ TRONG 1 PROCESS. Nếu sau này deploy
+# nhiều worker process (vd `gunicorn --workers N`, N > 1), mỗi worker giữ
+# SESSIONS riêng của nó -> trần bộ nhớ thực tế nhân lên theo số worker. Deploy
+# nhiều THREAD trong 1 process (vd `--workers 1 --threads N`) không bị ảnh
+# hưởng vì đã có _SESSIONS_LOCK bên dưới.
+SESSIONS = OrderedDict()
+
+_MAX_SESSIONS = 2000
+_SESSION_TTL_SECONDS = 3600  # 1 giờ không hoạt động -> hết hạn
+
+_SESSIONS_LOCK = threading.Lock()
 
 
 def _new_session():
@@ -29,17 +49,38 @@ def _new_session():
         "cancel_phone": "",  # SĐT dùng khi tra cứu để hủy lịch
         "cancel_code": None,  # mã lịch hẹn đang chờ xác nhận hủy
         "resume_booking": False,  # hủy lịch trùng xong thì đặt tiếp lịch đang dở
+        "_last_seen": time.time(),  # không phải dữ liệu nghiệp vụ, chỉ dùng cho eviction
     }
 
 
+def _evict_if_full_locked():
+    """Loại session cũ nhất nếu đã chạm trần. Phải gọi trong lúc giữ _SESSIONS_LOCK."""
+    if len(SESSIONS) >= _MAX_SESSIONS:
+        SESSIONS.popitem(last=False)
+
+
 def get_session(session_id: str):
-    if session_id not in SESSIONS:
+    with _SESSIONS_LOCK:
+        existing = SESSIONS.get(session_id)
+        if existing is not None:
+            if time.time() - existing["_last_seen"] <= _SESSION_TTL_SECONDS:
+                existing["_last_seen"] = time.time()
+                SESSIONS.move_to_end(session_id)
+                return existing
+            # Hết hạn -> coi như mới, tạo lại.
+            del SESSIONS[session_id]
+
+        _evict_if_full_locked()
         SESSIONS[session_id] = _new_session()
-    return SESSIONS[session_id]
+        return SESSIONS[session_id]
 
 
 def reset_session(session_id: str):
-    SESSIONS[session_id] = _new_session()
+    with _SESSIONS_LOCK:
+        if session_id in SESSIONS:
+            del SESSIONS[session_id]
+        _evict_if_full_locked()
+        SESSIONS[session_id] = _new_session()
 
 
 def _reply(text, options=None, state=None, done=False, **extra):

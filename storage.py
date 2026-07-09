@@ -83,6 +83,17 @@ CREATE TABLE IF NOT EXISTS safety_patterns (
 );
 """
 
+# Tách riêng khỏi SCHEMA_SQL: UNIQUE index này có thể FAIL nếu dữ liệu prod đã có
+# sẵn >=2 lịch 'confirmed' trùng (date, time) — đúng tình huống mà index này tồn
+# tại để ngăn. `IF NOT EXISTS` chỉ chặn chạy lại DDL, KHÔNG chặn lỗi vì dữ liệu
+# trùng sẵn có. Bọc try/except riêng để 1 lỗi ở đây không chặn các bảng/index
+# khác trong SCHEMA_SQL (degrade an toàn: app vẫn chạy, tạm thời mất bảo vệ
+# UNIQUE, thay vì _schema_ready không bao giờ True -> mọi request storage fail).
+UNIQUE_SLOT_INDEX_SQL = """
+CREATE UNIQUE INDEX IF NOT EXISTS ux_appointments_slot
+    ON appointments (date, time) WHERE status = 'confirmed';
+"""
+
 _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
               "department_code", "doctor", "doctor_id", "date", "time", "created_at",
               "status", "reminders_sent"]
@@ -96,6 +107,23 @@ def init_schema():
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(SCHEMA_SQL)
         conn.commit()
+        try:
+            cur.execute(UNIQUE_SLOT_INDEX_SQL)
+            conn.commit()
+        except Exception as exc:  # noqa: BLE001 - phải bắt mọi lỗi DB ở đây
+            # Không để lỗi tạo UNIQUE index (vd. dữ liệu trùng sẵn có) chặn schema
+            # init của các bảng khác. Rollback để connection còn dùng được tiếp
+            # (Postgres yêu cầu rollback sau lỗi trong transaction).
+            conn.rollback()
+            print(
+                "[storage] CẢNH BÁO: không tạo được UNIQUE INDEX "
+                "ux_appointments_slot (appointments.date, time). Lỗi: "
+                f"{exc}. Có thể do đã tồn tại lịch 'confirmed' trùng "
+                "(date, time) trong dữ liệu hiện có — cần dọn dữ liệu thủ "
+                "công rồi khởi động lại app để bật lại bảo vệ chống trùng "
+                "lịch ở tầng DB. App vẫn chạy tiếp nhưng KHÔNG có UNIQUE "
+                "constraint bảo vệ tạm thời."
+            )
     _schema_ready = True
 
 

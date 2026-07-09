@@ -73,21 +73,29 @@ def scan_once(force=False):
     appts = booking.all_appointments()
     n_sent = 0
     for appt in appts:
-        if appt.get("status") != "confirmed":
-            continue
         try:
-            appt_dt = datetime.fromisoformat(f"{appt['date']}T{appt['time']}:00")
-        except ValueError:
-            continue
-        already = set(appt.get("reminders_sent", []))
-        for rule in _rules(appt):
-            if rule["key"] in already:
+            if appt.get("status") != "confirmed":
                 continue
-            due_time = appt_dt - rule["before"]
-            # gửi nếu: ép gửi (test), HOẶC đã tới thời điểm nhắc và chưa quá giờ hẹn
-            if force or (now >= due_time and now <= appt_dt):
-                _send_for(appt, rule)
-                n_sent += 1
+            try:
+                appt_dt = datetime.fromisoformat(f"{appt['date']}T{appt['time']}:00")
+            except ValueError:
+                continue
+            already = set(appt.get("reminders_sent", []))
+            for rule in _rules(appt):
+                if rule["key"] in already:
+                    continue
+                due_time = appt_dt - rule["before"]
+                # gửi nếu: ép gửi (test), HOẶC đã tới thời điểm nhắc và chưa quá giờ hẹn
+                if force or (now >= due_time and now <= appt_dt):
+                    try:
+                        _send_for(appt, rule)
+                        n_sent += 1
+                    except Exception as e:
+                        print(f"  [SEND-ERROR] {appt.get('code','?')} · {rule['key']} · "
+                              f"lỗi khi gửi/đánh dấu nhắc lịch: {e}")
+        except Exception as e:
+            print(f"  [SKIP] {appt.get('code', '?')} · dữ liệu lịch hẹn lỗi: {e}")
+            continue
     return n_sent
 
 

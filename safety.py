@@ -13,6 +13,8 @@ import json
 import os
 from datetime import datetime
 
+from triage import _normalize, _strip_accents, _contains_word
+
 AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "audit_log.jsonl")
 
 # ---------------------------------------------------------------------------
@@ -109,21 +111,30 @@ DISCLAIMER = (
 
 
 def check_emergency(text: str) -> bool:
-    """Trả về True nếu phát hiện dấu hiệu cấp cứu."""
-    low = text.lower()
-    return any(p in low for p in EMERGENCY_PATTERNS)
+    """Trả về True nếu phát hiện dấu hiệu cấp cứu (bắt cả câu không dấu)."""
+    norm_na = _strip_accents(_normalize(text))
+    return any(
+        _contains_word(norm_na, _strip_accents(_normalize(p)))
+        for p in EMERGENCY_PATTERNS
+    )
 
 
 def is_diagnosis_request(text: str) -> bool:
-    """Người dùng đang yêu cầu chẩn đoán / kê đơn?"""
-    low = text.lower()
-    return any(p in low for p in DIAGNOSIS_REQUEST_PATTERNS)
+    """Người dùng đang yêu cầu chẩn đoán / kê đơn? (bắt cả câu không dấu)"""
+    norm_na = _strip_accents(_normalize(text))
+    return any(
+        _contains_word(norm_na, _strip_accents(_normalize(p)))
+        for p in DIAGNOSIS_REQUEST_PATTERNS
+    )
 
 
 def needs_human_handoff(text: str) -> bool:
-    """Phát hiện yêu cầu gặp người thật / tình huống nhạy cảm."""
-    low = text.lower()
-    return any(t in low for t in HANDOFF_PATTERNS)
+    """Phát hiện yêu cầu gặp người thật / tình huống nhạy cảm (bắt cả câu không dấu)."""
+    norm_na = _strip_accents(_normalize(text))
+    return any(
+        _contains_word(norm_na, _strip_accents(_normalize(t)))
+        for t in HANDOFF_PATTERNS
+    )
 
 
 def add_disclaimer(reply: str) -> str:
