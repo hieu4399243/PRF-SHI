@@ -16,19 +16,19 @@
    ```
 2. Tạo 1 file mới để tập (KHÔNG sửa file thật `triage.py`):
    ```bash
-   touch hoc/triage_demo.py
+   touch docs/hoc/triage_demo.py
    ```
-3. Mở `hoc/triage_demo.py` trong VS Code. Mỗi bước dưới đây ta sẽ **thêm dần** vào file này.
+3. Mở `docs/hoc/triage_demo.py` trong VS Code. Mỗi bước dưới đây ta sẽ **thêm dần** vào file này.
 4. Lệnh chạy file (dùng lại sau mỗi bước):
    ```bash
-   ./.venv/bin/python hoc/triage_demo.py
+   ./.venv/bin/python docs/hoc/triage_demo.py
    ```
 
 ---
 
 ## Bước 0 — Python siêu tốc trong 1 phút
 
-Gõ đoạn này vào `hoc/triage_demo.py` rồi chạy thử:
+Gõ đoạn này vào `docs/hoc/triage_demo.py` rồi chạy thử:
 
 ```python
 # Dòng bắt đầu bằng # là CHÚ THÍCH, Python bỏ qua.
@@ -45,7 +45,7 @@ print(tu_dien["ten"])      # lấy giá trị theo khóa → "Sâu răng"
 
 Chạy:
 ```bash
-./.venv/bin/python hoc/triage_demo.py
+./.venv/bin/python docs/hoc/triage_demo.py
 ```
 Kỳ vọng in ra:
 ```
@@ -235,7 +235,7 @@ if __name__ == "__main__":
 
 Chạy:
 ```bash
-./.venv/bin/python hoc/triage_demo.py
+./.venv/bin/python docs/hoc/triage_demo.py
 ```
 Kỳ vọng:
 ```
@@ -310,7 +310,7 @@ File thật khác bản demo này ở chỗ:
    Mẹo: so khớp bằng **tập token** đã bỏ các từ quá chung ("răng", "khám", "gì"…),
    ưu tiên khớp có dấu trước ("trồng" ≠ "trong") rồi mới thử bản không dấu.
 
-Đối chiếu bản bạn vừa viết với [triage.py](../app/triage.py) — bạn sẽ thấy **cùng một ý tưởng**,
+Đối chiếu bản bạn vừa viết với [triage.py](../../app/triage.py) — bạn sẽ thấy **cùng một ý tưởng**,
 chỉ "mặc áo chỉnh tề" hơn.
 
 ---

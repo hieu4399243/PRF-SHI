@@ -35,9 +35,9 @@ Người dùng → app.py → chatbot.py → (safety, triage, booking) → data.
 ## Lệnh hay dùng
 ```bash
 cd /Users/hieutm3/Desktop/PRF-SHI
-./.venv/bin/python hoc/<file_ban_tao>.py     # chạy file tập
+./.venv/bin/python docs/hoc/<file_ban_tao>.py     # chạy file tập
 ./.venv/bin/python -m app.app                 # chạy server thật
 ```
 
-> Quy ước: các file tập bạn tự tạo trong `hoc/` (vd `hoc/triage_demo.py`) để **không
+> Quy ước: các file tập bạn tự tạo trong `docs/hoc/` (vd `docs/hoc/triage_demo.py`) để **không
 > đụng vào code thật** ở thư mục gốc. Hiểu rồi thì mở file thật đối chiếu.

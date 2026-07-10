@@ -40,5 +40,5 @@
 
 - Chất lượng triage phụ thuộc từ khóa thủ công → cần theo dõi qua `eval/` mỗi lần sửa.
 - Số liệu đánh giá "lạc quan" do hiệu chỉnh trên chính tập dev (nêu rõ trong
-  [BAOCAO_DANHGIA.md](../BAOCAO_DANHGIA.md)).
+  [BAOCAO_DANHGIA.md](BAOCAO_DANHGIA.md)).
 - App y tế: ràng buộc pháp lý (NĐ 13/2023) và review store nghiêm ngặt.

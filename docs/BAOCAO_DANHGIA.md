@@ -4,7 +4,7 @@
 và **đặt lịch hẹn**. Tài liệu này trình bày phần đánh giá thành phần AI (triage engine)
 theo luồng: *Mục đích → Mục tiêu → Cách đánh giá → Kết quả → Kết luận*.
 
-> Số liệu trong báo cáo được sinh tự động bởi `eval/evaluate.py` (xem `eval/results.md`).
+> Số liệu trong báo cáo được sinh tự động bởi `../eval/evaluate.py` (xem `eval/results.md`).
 > Chạy lại: `./.venv/bin/python eval/evaluate.py`
 
 ---

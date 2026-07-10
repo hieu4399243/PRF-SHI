@@ -5,7 +5,7 @@
 
 File tập:
 ```bash
-touch hoc/safety_demo.py
+touch docs/hoc/safety_demo.py
 ```
 
 ---
@@ -90,11 +90,11 @@ def audit(session_id, role, message, meta=None):
         "message": mask_pii(message),  # LUÔN ẩn PII trước khi lưu
         "meta": meta or {},
     }
-    with open("hoc/audit_demo.jsonl", "a", encoding="utf-8") as f:
+    with open("docs/hoc/audit_demo.jsonl", "a", encoding="utf-8") as f:
         f.write(json.dumps(entry, ensure_ascii=False) + "\n")
 
 audit("user1", "user", "sđt tôi 0901234567")
-print("đã ghi log, mở hoc/audit_demo.jsonl xem")
+print("đã ghi log, mở docs/hoc/audit_demo.jsonl xem")
 ```
 **Giải thích:**
 - `open(path, "a")` = mở để **ghi nối thêm** (append), không xóa nội dung cũ.

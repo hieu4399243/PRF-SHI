@@ -6,7 +6,7 @@ Kiến trúc: **app native React Native (Expo)** làm giao diện + **backend Py
 làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 
 > 📊 Phần **đánh giá hệ thống AI** (Precision/Recall/F1, so sánh phiên bản) nằm ở
-> `BAOCAO_DANHGIA.md` và thư mục `eval/`.
+> `docs/BAOCAO_DANHGIA.md` và thư mục `eval/`.
 
 ## 📚 Tài liệu
 
@@ -15,8 +15,8 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 | [docs/](docs/project-overview-pdr.md)                            | Bộ tài liệu chuẩn: tổng quan/PDR, kiến trúc, bản đồ mã, chuẩn mã, triển khai, lộ trình |
 | [docs/getting-started-guide.md](docs/getting-started-guide.md)   | <br />Dựng dự án từ đầu (máy trắng → chạy được), chi tiết cho người mới               |
 | [docs/database-storage-guide.md](docs/database-storage-guide.md) | Lưu trữ JSON ↔ Supabase, cách đưa dữ liệu lên cloud                                           |
-| [BAOCAO_DANHGIA.md](BAOCAO_DANHGIA.md)                           | Báo cáo đánh giá AI (mục đích→mục tiêu→cách đo→kết quả→kết luận)                   |
-| [hoc/](hoc/00-muc-luc.md)                                        | Tự học: viết lại từng khối từ con số 0                                                         |
+| [BAOCAO_DANHGIA.md](docs/BAOCAO_DANHGIA.md)                      | Báo cáo đánh giá AI (mục đích→mục tiêu→cách đo→kết quả→kết luận)                   |
+| [hoc/](docs/hoc/00-muc-luc.md)                                   | Tự học: viết lại từng khối từ con số 0                                                         |
 
 ```
 ┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐
@@ -40,7 +40,7 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 | **Reminder worker**     | `app/reminder_worker.py`      | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ).                                                                                                                         |
 | **API server**          | `app/app.py`                  | Flask API cho app native (`/api/start`, `/api/chat`, `/api/register-push`, `/api/ics`).                                                                                |
 | **Dữ liệu**           | `app/data.py`                 | Danh mục**dịch vụ nha khoa**, nha sĩ, khung giờ trống (thay bằng DB trong thực tế).                                                                             |
-| **Đánh giá AI**      | `eval/`              | `dataset.jsonl` + `evaluate.py` (Precision/Recall/F1, v1 vs v2) + `rubric.md`; báo cáo ở `BAOCAO_DANHGIA.md`.                                                       |
+| **Đánh giá AI**      | `eval/`              | `dataset.jsonl` + `evaluate.py` (Precision/Recall/F1, v1 vs v2) + `docs/eval/rubric.md`; báo cáo ở `docs/BAOCAO_DANHGIA.md`.                                                       |
 
 > Giao diện chính là **app native trong `mobile/`** (xem `mobile/README.md`).
 > File `templates/index.html` là bản web cũ, giữ lại để test nhanh trên trình duyệt.
@@ -84,12 +84,12 @@ Chi tiết: **`mobile/README.md`**.
 ## Đánh giá hệ thống AI
 
 ```bash
-./.venv/bin/python eval/evaluate.py   # Accuracy/Macro-F1 cho v1 & v2 → ghi eval/results.md
+./.venv/bin/python eval/evaluate.py   # Accuracy/Macro-F1 cho v1 & v2 → ghi docs/eval/results.md
 ```
 
 Kết quả mới nhất (tập dev 63 câu): **v2 đạt Accuracy 100%, Macro-F1 1.0** (v1: 77.8% / 0.87).
 Lưu ý: từ khóa hiệu chỉnh trên chính tập này nên là số "lạc quan"; chi tiết & phân tích
-trung thực trong `BAOCAO_DANHGIA.md`.
+trung thực trong `docs/BAOCAO_DANHGIA.md`.
 
 ## File sinh ra khi chạy
 

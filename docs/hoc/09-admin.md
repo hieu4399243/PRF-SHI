@@ -9,7 +9,7 @@ lịch đã đặt và lịch làm việc. Khối này thêm đúng phần đó 
 
 File tập:
 ```bash
-touch hoc/admin_demo.py
+touch docs/hoc/admin_demo.py
 ```
 
 ---

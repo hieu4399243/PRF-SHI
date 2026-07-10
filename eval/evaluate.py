@@ -10,7 +10,7 @@ So sánh HAI phiên bản engine: v1 (so khớp có dấu) và v2 (không phân 
 
 Chạy:
     ./.venv/bin/python eval/evaluate.py
-Kết quả in ra màn hình và ghi vào eval/results.md (bảng Markdown).
+Kết quả in ra màn hình và ghi vào docs/eval/results.md (bảng Markdown).
 
 Chỉ dùng thư viện chuẩn -> không cần cài thêm gì.
 """
@@ -29,7 +29,7 @@ from app.data import DEPARTMENTS  # noqa: E402
 
 DATASET_PATH = os.path.join(os.path.dirname(__file__), "dataset.jsonl")
 COMPLEX_PATH = os.path.join(os.path.dirname(__file__), "dataset_complex.jsonl")
-RESULTS_PATH = os.path.join(os.path.dirname(__file__), "results.md")
+RESULTS_PATH = os.path.join(ROOT, "docs", "eval", "results.md")
 
 LABELS = list(DEPARTMENTS.keys())
 LABEL_NAME = {code: d["name"] for code, d in DEPARTMENTS.items()}

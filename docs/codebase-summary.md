@@ -51,12 +51,12 @@
 | Đường dẫn | Nội dung |
 |-----------|----------|
 | `eval/dataset.jsonl`, `dataset_complex.jsonl` | Câu gán nhãn test triage |
-| `eval/evaluate.py` | Accuracy/Macro-F1, v1 vs v2 → `results.md` |
-| `eval/rubric.md` | Đánh giá định tính |
+| `eval/evaluate.py` | Accuracy/Macro-F1, v1 vs v2 → `docs/eval/results.md` |
+| `docs/eval/rubric.md` | Đánh giá định tính |
 | `scripts/migrate_to_supabase.py` | Đẩy JSON + seed danh mục lên Supabase |
 | `scripts/clean_stale_appointments.py` | Dọn lịch hẹn cũ |
-| `hoc/` | Tài liệu tự học (dựng lại từng khối) |
-| `BAOCAO_DANHGIA.md`, `BAOCAO_DOAN.md` | Báo cáo đánh giá AI & đồ án |
+| `docs/hoc/` | Tài liệu tự học (dựng lại từng khối) |
+| `docs/BAOCAO_DANHGIA.md`, `docs/BAOCAO_DOAN.md` | Báo cáo đánh giá AI & đồ án |
 
 ## File sinh ra khi chạy
 

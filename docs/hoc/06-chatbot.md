@@ -195,7 +195,7 @@ nhầm thành hủy *lịch hẹn*. Đây là bài học hay về **ngữ cảnh
    đưa danh sách dịch vụ để chọn, thay vì "mình chưa hiểu".
 
 File thật còn gọi `triage` (độ tin cậy → mơ hồ thì đưa 2–3 lựa chọn), `booking` để lưu
-lịch, `push` gửi thông báo. Mở [chatbot.py](../app/chatbot.py) đối chiếu `handle_message` —
+lịch, `push` gửi thông báo. Mở [chatbot.py](../../app/chatbot.py) đối chiếu `handle_message` —
 bạn sẽ nhận ra đúng khung `xu_ly` bạn vừa viết.
 
 ## Bài tập
