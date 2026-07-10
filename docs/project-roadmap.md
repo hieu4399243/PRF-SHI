@@ -6,7 +6,7 @@
 - Đặt lịch hội thoại + hủy lịch, chống trùng giờ/SĐT đối chiếu DB.
 - Guardrails an toàn: cấp cứu→115, chặn chẩn đoán, ẩn PII, audit log, human handoff.
 - Nhắc lịch (worker nền) + file `.ics` + link Google Calendar.
-- Push qua Expo Push Service; fallback `app/outbox/`.
+- Push qua Expo Push Service; fallback `app/data/outbox/`.
 - Lưu trữ 2 chế độ (Supabase ↔ JSON) qua `app/storage.py` + script migrate.
 - Trang admin (`/admin`, `ADMIN_KEY`) xem/hủy lịch.
 - Hệ thống đánh giá AI (`eval/`, Accuracy/Macro-F1, v1 vs v2) + báo cáo.

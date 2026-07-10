@@ -27,7 +27,7 @@ except ImportError:
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_DB = bool(DATABASE_URL)
 
-_BASE = os.path.dirname(__file__)
+_BASE = os.path.join(os.path.dirname(__file__), "data")
 APPOINTMENTS_PATH = os.path.join(_BASE, "appointments.json")
 TOKENS_PATH = os.path.join(_BASE, "device_tokens.json")
 

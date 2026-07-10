@@ -4,7 +4,7 @@ Dự án có **2 chế độ lưu trữ**, tự chọn theo biến môi trườn
 
 | Chế độ | Khi nào | Dữ liệu nằm ở |
 |---|---|---|
-| **File JSON (mặc định)** | Không đặt `DATABASE_URL` | `app/appointments.json`, `app/device_tokens.json` (local) |
+| **File JSON (mặc định)** | Không đặt `DATABASE_URL` | `app/data/appointments.json`, `app/data/device_tokens.json` (local) |
 | **Postgres / Supabase** | Có `DATABASE_URL` | Bảng `appointments`, `device_tokens` trên cloud, quản lý qua dashboard Supabase |
 
 Cùng một code, đổi chế độ **không phải sửa nghiệp vụ** — xem `app/storage.py`.

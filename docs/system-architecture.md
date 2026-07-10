@@ -28,7 +28,7 @@ Client (Expo app + web demo)  ──HTTP /api/* JSON──►  Backend (Flask)  
 | Đặt/hủy lịch | `app/booking.py` | Chọn slot, chống trùng (giờ/SĐT) đối chiếu DB, sinh mã lịch. |
 | Danh mục | `app/data.py` | 9 nhóm dịch vụ + nha sĩ + khung giờ (seed tĩnh hoặc nạp từ DB). |
 | Lưu trữ | `app/storage.py` | Trừu tượng Postgres ↔ JSON theo `DATABASE_URL`. |
-| Push | `app/push.py` | Gửi qua Expo Push Service; không token → `app/outbox/`. |
+| Push | `app/push.py` | Gửi qua Expo Push Service; không token → `app/data/outbox/`. |
 | Nhắc lịch | `app/reminder_worker.py` | Worker nền (`--once`/`--watch`/`--test`). |
 | Lịch .ics | `app/calendar_ics.py` | Sinh file `.ics` có VALARM, không cần OAuth. |
 
@@ -62,7 +62,7 @@ services(code PK, name, descr, keywords jsonb, sort_order)
 doctors(id PK, service_code → services.code, name, sort_order)
 safety_patterns(kind, pattern, PRIMARY KEY(kind, pattern))  -- emergency/diagnosis/handoff
 ```
-**Fallback JSON:** `app/appointments.json`, `app/device_tokens.json`; danh mục lấy từ `_SEED_*` trong
+**Fallback JSON:** `app/data/appointments.json`, `app/data/device_tokens.json`; danh mục lấy từ `_SEED_*` trong
 `app/data.py`. JSON mode sử dụng file atomic writes (viết file tạm rồi rename) + process-wide lock
 để tránh data corruption. Chi tiết + hướng dẫn migrate: [database-storage-guide.md](database-storage-guide.md).
 

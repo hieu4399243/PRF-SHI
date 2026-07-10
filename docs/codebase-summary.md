@@ -14,11 +14,11 @@
 | `app/app.py` | ~160 | API Flask + trang admin. `resolve_sid()`. Chạy `0.0.0.0:5001 debug=True`. |
 | `app/chatbot.py` | ~620 | Máy trạng thái hội thoại; session in-memory (`SESSIONS`). |
 | `app/triage.py` | ~220 | Phân loại triệu chứng → dịch vụ (v1/v2), Q&A dịch vụ, `classify_with_llm()` placeholder. |
-| `app/safety.py` | ~150 | Guardrails y tế + audit log `app/audit_log.jsonl`. |
+| `app/safety.py` | ~150 | Guardrails y tế + audit log `app/data/audit_log.jsonl`. |
 | `app/booking.py` | ~250 | Đặt/hủy lịch, chống trùng, sinh mã. |
 | `app/storage.py` | ~400 | Lớp lưu trữ Postgres ↔ JSON. |
 | `app/data.py` | ~220 | Danh mục dịch vụ/nha sĩ + khung giờ (seed + nạp DB), `SERVICE_INFO`. |
-| `app/push.py` | ~96 | Expo Push; fallback `app/outbox/push_outbox.jsonl`. |
+| `app/push.py` | ~96 | Expo Push; fallback `app/data/outbox/push_outbox.jsonl`. |
 | `app/reminder_worker.py` | ~113 | Worker nhắc lịch nền. |
 | `app/calendar_ics.py` | ~98 | Sinh file `.ics` có lời nhắc. |
 
@@ -60,5 +60,6 @@
 
 ## File sinh ra khi chạy
 
-`app/appointments.json`, `app/device_tokens.json`, `app/audit_log.jsonl`, `app/outbox/push_outbox.jsonl`
+`app/data/appointments.json`, `app/data/device_tokens.json`, `app/data/audit_log.jsonl`,
+`app/data/outbox/push_outbox.jsonl`
 (chế độ JSON — khi có DB thì dữ liệu ở Supabase).

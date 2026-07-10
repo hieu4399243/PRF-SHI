@@ -39,7 +39,7 @@ Lấy IP máy Mac: `ipconfig getifaddr en0`. Điện thoại + máy tính phải
   ```
 - ⚠️ **Push thật KHÔNG chạy trong Expo Go** (từ SDK 53 Expo gỡ remote push khỏi
   Expo Go). Trong Expo Go, `getExpoPushTokenAsync` sẽ lỗi → app tự dùng token
-  DEMO và backend ghi vào `../outbox/push_outbox.jsonl` (vẫn kiểm thử được luồng,
+  DEMO và backend ghi vào `../app/data/outbox/push_outbox.jsonl` (vẫn kiểm thử được luồng,
   giao diện chat chạy bình thường).
 - Để push **hiện thật trên điện thoại**: tạo project EAS (`npx eas init`), điền
   `extra.eas.projectId` trong `app.json`, rồi build **development build**:

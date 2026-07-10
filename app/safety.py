@@ -16,7 +16,7 @@ from datetime import datetime, timezone
 
 from .triage import _normalize, _strip_accents, _contains_word
 
-AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "audit_log.jsonl")
+AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "data", "audit_log.jsonl")
 AUDIT_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB, 1 thế hệ xoay vòng (đủ cho demo/đồ án)
 
 _AUDIT_LOCK = threading.Lock()

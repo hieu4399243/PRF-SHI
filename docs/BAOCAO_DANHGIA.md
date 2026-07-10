@@ -170,7 +170,7 @@ Hai câu top-1 chưa "chấp nhận được" đều rơi vào ranh giới **Nha
 
 ### 4.5. Định tính
 Trên bộ kịch bản `eval/rubric.md`, hệ thống xử lý đúng các tình huống an toàn (cấp cứu → 115,
-từ chối chẩn đoán/kê đơn, human handoff) và ẩn PII trong `app/audit_log.jsonl`.
+từ chối chẩn đoán/kê đơn, human handoff) và ẩn PII trong `app/data/audit_log.jsonl`.
 
 ### 4.6. Năng lực NLU bổ sung (định tính)
 Ngoài phân loại top-1, engine còn có **fallback than phiền chung** (`mentions_dental_discomfort`)

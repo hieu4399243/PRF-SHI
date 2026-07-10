@@ -33,7 +33,7 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 | Khối                         | File                         | Mô tả                                                                                                                                                                        |
 | ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | **Triage engine**       | `app/triage.py`               | Phân loại triệu chứng răng miệng → đúng**dịch vụ** (chấm điểm từ khóa, có v1/v2; có chỗ cắm LLM Claude).                                             |
-| **Booking**             | `app/booking.py`              | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `app/appointments.json`.                                     |
+| **Booking**             | `app/booking.py`              | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `app/data/appointments.json`.                                     |
 | **Safety / guardrails** | `app/safety.py`               | Phát hiện**cấp cứu** (→ gọi 115), **lọc PII**, chặn **chẩn đoán/kê đơn**, **human handoff**, **audit log** (Nghị định 13/2023). |
 | **Conversational core** | `app/chatbot.py`              | Máy trạng thái điều phối hội thoại, kết nối các khối.                                                                                                              |
 | **Push**                | `app/push.py`                 | Lưu device token + gửi push qua Expo Push Service.                                                                                                                           |
@@ -93,8 +93,8 @@ trung thực trong `docs/BAOCAO_DANHGIA.md`.
 
 ## File sinh ra khi chạy
 
-- `app/appointments.json` — lịch hẹn đã đặt.
-- `app/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
+- `app/data/appointments.json` — lịch hẹn đã đặt.
+- `app/data/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
 
 ## Thêm vào lịch + nhắc tự động
 

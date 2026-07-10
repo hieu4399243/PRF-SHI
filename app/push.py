@@ -23,7 +23,7 @@ from datetime import datetime
 from . import storage
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
-OUTBOX_DIR = os.path.join(os.path.dirname(__file__), "outbox")
+OUTBOX_DIR = os.path.join(os.path.dirname(__file__), "data", "outbox")
 OUTBOX_PATH = os.path.join(OUTBOX_DIR, "push_outbox.jsonl")
 
 

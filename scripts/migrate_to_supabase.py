@@ -1,5 +1,5 @@
 """
-Chuyển dữ liệu từ file JSON (appointments.json, device_tokens.json) lên Postgres
+Chuyển dữ liệu từ file JSON (app/data/appointments.json, app/data/device_tokens.json) lên Postgres
 (Supabase). Bảng được tạo tự động nếu chưa có.
 
 Cách dùng:
