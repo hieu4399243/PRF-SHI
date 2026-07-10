@@ -11,11 +11,15 @@ Gồm:
 import re
 import json
 import os
-from datetime import datetime
+import threading
+from datetime import datetime, timezone
 
 from triage import _normalize, _strip_accents, _contains_word
 
 AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "audit_log.jsonl")
+AUDIT_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB, 1 thế hệ xoay vòng (đủ cho demo/đồ án)
+
+_AUDIT_LOCK = threading.Lock()
 
 # ---------------------------------------------------------------------------
 # 1) PHÁT HIỆN CẤP CỨU  -> hướng dẫn gọi 115, không tư vấn tiếp.
@@ -145,17 +149,31 @@ def add_disclaimer(reply: str) -> str:
 # ---------------------------------------------------------------------------
 # 4) AUDIT LOG  -> ghi lại hội thoại (đã ẩn PII) để truy vết & tuân thủ.
 # ---------------------------------------------------------------------------
+def _rotate_audit_log_if_needed():
+    """Phải gọi trong lúc giữ _AUDIT_LOCK (xem audit())."""
+    try:
+        if (os.path.exists(AUDIT_LOG_PATH)
+                and os.path.getsize(AUDIT_LOG_PATH) >= AUDIT_LOG_MAX_BYTES):
+            rotated_path = AUDIT_LOG_PATH + ".1"
+            os.replace(AUDIT_LOG_PATH, rotated_path)  # ghi đè .1 cũ nếu có
+    except OSError:
+        pass  # rotation lỗi không được chặn ghi log mới
+
+
 def audit(session_id: str, role: str, message: str, meta: dict | None = None):
-    """Ghi một dòng log JSON cho mỗi lượt hội thoại."""
+    """Ghi một dòng log JSON cho mỗi lượt hội thoại (UTC, tự xoay vòng, fail-safe)."""
     entry = {
-        "ts": datetime.now().isoformat(timespec="seconds"),
+        "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "session": session_id,
         "role": role,
         "message": mask_pii(message),  # luôn ẩn PII trước khi lưu
         "meta": meta or {},
     }
     try:
-        with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-    except OSError:
-        pass  # log lỗi không được làm gián đoạn hội thoại
+        with _AUDIT_LOCK:
+            _rotate_audit_log_if_needed()
+            with open(AUDIT_LOG_PATH, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+    except Exception:
+        pass  # log lỗi (bất kỳ loại nào, kể cả TypeError từ json.dumps trên meta
+              # không serialize được) không được làm gián đoạn hội thoại.

@@ -112,6 +112,9 @@ def scan_once(force=False, dry_run=False):
                     except Exception as e:
                         print(f"  [SEND-ERROR] {appt.get('code','?')} · {rule['key']} · "
                               f"lỗi khi gửi/đánh dấu nhắc lịch: {e}")
+                elif not force and now > appt_dt:
+                    print(f"  [EXPIRED] {appt.get('code','?')} · {rule['key']} · "
+                          f"bỏ qua vì đã quá giờ hẹn (không gửi nhắc trễ)")
         except Exception as e:
             print(f"  [SKIP] {appt.get('code', '?')} · dữ liệu lịch hẹn lỗi: {e}")
             continue

@@ -15,6 +15,7 @@ biến môi trường `DATABASE_URL`.
 
 import json
 import os
+import threading
 
 # Nạp biến môi trường từ file .env nếu có (tùy chọn — không có python-dotenv vẫn chạy).
 try:
@@ -31,6 +32,26 @@ APPOINTMENTS_PATH = os.path.join(_BASE, "appointments.json")
 TOKENS_PATH = os.path.join(_BASE, "device_tokens.json")
 
 _schema_ready = False
+
+# Khoá trong-process cho MỌI thao tác JSON đọc-sửa-ghi (add_appointment,
+# set_reminder_sent, set_status, add_token, remove_token) — chỉ bảo vệ trong 1
+# process (nhất quán với quyết định "1 process" của dự án), không bảo vệ đa
+# process/đa worker cùng ghi 1 file JSON.
+_JSON_LOCK = threading.Lock()
+
+
+class DuplicateCodeError(Exception):
+    """Mã lịch hẹn đã tồn tại (JSON mode) — tương đương UniqueViolation trên
+    appointments_pkey ở Postgres."""
+
+
+class SlotTakenError(Exception):
+    """Khung giờ (doctor_id, date, time) đã có lịch 'confirmed' khác (JSON
+    mode) — tương đương UNIQUE INDEX ux_appointments_doctor_slot ở Postgres."""
+
+    def __init__(self, existing):
+        super().__init__(existing.get("code"))
+        self.existing = existing
 
 
 # ===========================================================================
@@ -169,8 +190,12 @@ def _json_load(path, default):
 
 
 def _json_save(path, data):
-    with open(path, "w", encoding="utf-8") as f:
+    """Ghi atomic: viết ra file tạm cùng thư mục rồi os.replace() — không bao
+    giờ để lại file nửa-ghi nếu process chết giữa chừng."""
+    tmp_path = f"{path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_path, path)
 
 
 # ===========================================================================
@@ -219,9 +244,19 @@ def add_appointment(appt):
             )
             conn.commit()
         return
-    items = _json_load(APPOINTMENTS_PATH, [])
-    items.append(appt)
-    _json_save(APPOINTMENTS_PATH, items)
+    with _JSON_LOCK:
+        items = _json_load(APPOINTMENTS_PATH, [])
+        if any(a["code"] == appt["code"] for a in items):
+            raise DuplicateCodeError(appt["code"])
+        if appt.get("status") == "confirmed":
+            for a in items:
+                if (a.get("status") == "confirmed"
+                        and a.get("doctor_id") == appt.get("doctor_id")
+                        and a.get("date") == appt.get("date")
+                        and a.get("time") == appt.get("time")):
+                    raise SlotTakenError(a)
+        items.append(appt)
+        _json_save(APPOINTMENTS_PATH, items)
 
 
 def set_reminder_sent(code, reminder_key):
@@ -241,15 +276,16 @@ def set_reminder_sent(code, reminder_key):
             updated = cur.rowcount
             conn.commit()
         return updated > 0
-    items = _json_load(APPOINTMENTS_PATH, [])
-    for a in items:
-        if a["code"] == code:
-            sent = set(a.get("reminders_sent", []))
-            sent.add(reminder_key)
-            a["reminders_sent"] = sorted(sent)
-            _json_save(APPOINTMENTS_PATH, items)
-            return True
-    return False
+    with _JSON_LOCK:
+        items = _json_load(APPOINTMENTS_PATH, [])
+        for a in items:
+            if a["code"] == code:
+                sent = set(a.get("reminders_sent", []))
+                sent.add(reminder_key)
+                a["reminders_sent"] = sorted(sent)
+                _json_save(APPOINTMENTS_PATH, items)
+                return True
+        return False
 
 
 def set_status(code, status):
@@ -262,15 +298,16 @@ def set_status(code, status):
             updated = cur.rowcount
             conn.commit()
         return updated > 0
-    items = _json_load(APPOINTMENTS_PATH, [])
-    changed = False
-    for a in items:
-        if a["code"] == code:
-            a["status"] = status
-            changed = True
-    if changed:
-        _json_save(APPOINTMENTS_PATH, items)
-    return changed
+    with _JSON_LOCK:
+        items = _json_load(APPOINTMENTS_PATH, [])
+        changed = False
+        for a in items:
+            if a["code"] == code:
+                a["status"] = status
+                changed = True
+        if changed:
+            _json_save(APPOINTMENTS_PATH, items)
+        return changed
 
 
 # ===========================================================================
@@ -299,11 +336,34 @@ def add_token(session_id, token):
             )
             conn.commit()
         return
-    data = _json_load(TOKENS_PATH, {})
-    tokens = set(data.get(session_id, []))
-    tokens.add(token)
-    data[session_id] = sorted(tokens)
-    _json_save(TOKENS_PATH, data)
+    with _JSON_LOCK:
+        data = _json_load(TOKENS_PATH, {})
+        tokens = set(data.get(session_id, []))
+        tokens.add(token)
+        data[session_id] = sorted(tokens)
+        _json_save(TOKENS_PATH, data)
+
+
+def remove_token(token):
+    """Xoá 1 token khỏi mọi session (token hết hạn/DeviceNotRegistered thì hết
+    hạn ở mọi session, không cần biết session nào)."""
+    if not token:
+        return
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute("DELETE FROM device_tokens WHERE token = %s", (token,))
+            conn.commit()
+        return
+    with _JSON_LOCK:
+        data = _json_load(TOKENS_PATH, {})
+        changed = False
+        for sess_id, tokens in list(data.items()):
+            if token in tokens:
+                tokens.remove(token)
+                changed = True
+        if changed:
+            _json_save(TOKENS_PATH, data)
 
 
 # ===========================================================================

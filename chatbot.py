@@ -36,7 +36,7 @@ _SESSION_TTL_SECONDS = 3600  # 1 giờ không hoạt động -> hết hạn
 _SESSIONS_LOCK = threading.Lock()
 
 
-def _new_session():
+def _new_session(reuse_lock=None):
     return {
         "state": "GREET",
         "dept_code": None,
@@ -50,6 +50,9 @@ def _new_session():
         "cancel_code": None,  # mã lịch hẹn đang chờ xác nhận hủy
         "resume_booking": False,  # hủy lịch trùng xong thì đặt tiếp lịch đang dở
         "_last_seen": time.time(),  # không phải dữ liệu nghiệp vụ, chỉ dùng cho eviction
+        # _lock KHÔNG serialize được (threading.Lock) — nếu sau này chuyển SESSIONS
+        # sang Redis/DB, phải loại bỏ field này khỏi payload lưu trữ, tái tạo Lock khi đọc lại.
+        "_lock": reuse_lock or threading.Lock(),
     }
 
 
@@ -67,8 +70,11 @@ def get_session(session_id: str):
                 existing["_last_seen"] = time.time()
                 SESSIONS.move_to_end(session_id)
                 return existing
-            # Hết hạn -> coi như mới, tạo lại.
+            # Hết hạn -> coi như mới, NHƯNG giữ lại cùng Lock object.
             del SESSIONS[session_id]
+            _evict_if_full_locked()
+            SESSIONS[session_id] = _new_session(reuse_lock=existing["_lock"])
+            return SESSIONS[session_id]
 
         _evict_if_full_locked()
         SESSIONS[session_id] = _new_session()
@@ -77,10 +83,11 @@ def get_session(session_id: str):
 
 def reset_session(session_id: str):
     with _SESSIONS_LOCK:
-        if session_id in SESSIONS:
-            del SESSIONS[session_id]
+        old = SESSIONS.pop(session_id, None)
         _evict_if_full_locked()
-        SESSIONS[session_id] = _new_session()
+        SESSIONS[session_id] = _new_session(
+            reuse_lock=old["_lock"] if old is not None else None
+        )
 
 
 def _reply(text, options=None, state=None, done=False, **extra):
@@ -113,103 +120,116 @@ def start(session_id: str):
 def handle_message(session_id: str, raw_message: str):
     """Xử lý một lượt tin nhắn của bệnh nhân và trả về phản hồi của bot."""
     sess = get_session(session_id)
-    sess["_id"] = session_id
-    message = (raw_message or "").strip()
-
-    # --- Ghi audit (đã ẩn PII) ---
-    # State ASK_NAME: message chính là tên bệnh nhân -> mask_pii() không bắt được
-    # (không phải phone/email/CCCD) -> ẩn thủ công trước khi ghi log.
-    logged_message = "[TÊN ĐÃ ẨN]" if sess["state"] == "ASK_NAME" else message
-    safety.audit(session_id, "user", logged_message, {"state": sess["state"]})
-
-    # --- Lệnh tiện ích ---
-    low = message.lower()
-    if low in {"/reset", "bắt đầu lại", "làm lại"}:
-        reset_session(session_id)
-        sess = get_session(session_id)
+    with sess["_lock"]:
         sess["_id"] = session_id
-        resp = greeting()
-        sess["state"] = resp["state"]
-        safety.audit(session_id, "bot", resp["reply"], {"state": resp["state"]})
-        return resp
+        message = (raw_message or "").strip()
 
-    # --- GUARDRAIL ưu tiên cao nhất: CẤP CỨU ---
-    if safety.check_emergency(message):
-        resp = _reply(safety.EMERGENCY_MESSAGE, state=sess["state"])
-        safety.audit(session_id, "bot", "[EMERGENCY]", {"flag": "emergency"})
-        return resp
+        # --- Ghi audit (đã ẩn PII) ---
+        # State ASK_NAME: message chính là tên bệnh nhân -> mask_pii() không bắt được
+        # (không phải phone/email/CCCD) -> ẩn thủ công trước khi ghi log.
+        logged_message = "[TÊN ĐÃ ẨN]" if sess["state"] == "ASK_NAME" else message
+        safety.audit(session_id, "user", logged_message, {"state": sess["state"]})
 
-    # --- GUARDRAIL: yêu cầu gặp người thật (human handoff) ---
-    if safety.needs_human_handoff(message):
-        resp = _reply(
-            "Tôi sẽ chuyển bạn tới <b>nhân viên/điều dưỡng</b> kèm toàn bộ nội dung "
-            "trao đổi để được hỗ trợ trực tiếp. Vui lòng chờ trong giây lát. ☎️",
-            state="HANDOFF",
-        )
-        sess["state"] = "HANDOFF"
-        safety.audit(session_id, "bot", resp["reply"], {"flag": "handoff"})
-        return resp
-
-    # --- Ý định HỦY lịch đã đặt ("hủy lịch", "muốn hủy lịch hẹn"...) ---
-    # Chỉ nhận ở bước nhập tự do; trong lúc đang đặt, "hủy" mang nghĩa hủy thao tác.
-    if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"} and _is_cancel_request(message):
-        resp = _start_cancel(sess)
-        sess["state"] = resp["state"]
-        safety.audit(session_id, "bot", resp["reply"],
-                     {"state": resp["state"], "intent": "cancel"})
-        return resp
-
-    # --- Câu hỏi thông tin về dịch vụ ("X là khám gì / là gì / gồm gì") ---
-    # Chỉ nhận ở các bước nhập tự do (tránh cướp lượt khi đang bấm chọn giờ/nhập tên).
-    if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"}:
-        info_code = triage.info_question_service(message)
-        if info_code:
-            resp = _describe_service(sess, info_code)
+        # --- Lệnh tiện ích ---
+        low = message.lower()
+        if low in {"/reset", "bắt đầu lại", "làm lại"}:
+            reset_session(session_id)
+            sess = get_session(session_id)
+            sess["_id"] = session_id
+            resp = greeting()
             sess["state"] = resp["state"]
-            safety.audit(session_id, "bot", resp["reply"],
-                         {"state": resp["state"], "intent": "info"})
+            safety.audit(session_id, "bot", resp["reply"], {"state": resp["state"]})
             return resp
 
-    # --- Định tuyến theo trạng thái ---
-    state = sess["state"]
-    if state == "GREET":
-        resp = greeting()
-    elif state == "TRIAGE":
-        resp = _do_triage(sess, message)
-    elif state == "CONFIRM_DEPT":
-        resp = _confirm_dept(sess, message)
-    elif state == "PICK_DOCTOR":
-        resp = _pick_doctor(sess, message)
-    elif state == "PICK_DATE":
-        resp = _pick_date(sess, message)
-    elif state == "PICK_TIME":
-        resp = _pick_time(sess, message)
-    elif state == "ASK_NAME":
-        resp = _ask_name(sess, message)
-    elif state == "ASK_PHONE":
-        resp = _ask_phone(sess, message)
-    elif state == "CONFIRM_BOOKING":
-        resp = _confirm_booking(sess, message)
-    elif state == "CANCEL_ASK_PHONE":
-        resp = _cancel_ask_phone(sess, message)
-    elif state == "CANCEL_PICK":
-        resp = _cancel_pick(sess, message)
-    elif state == "CANCEL_CONFIRM":
-        resp = _cancel_confirm(sess, message)
-    elif state == "DONE":
-        resp = _reply(
-            "Lịch hẹn của bạn đã hoàn tất. Gõ <b>“làm lại”</b> nếu muốn đặt lịch mới "
-            "hoặc mô tả triệu chứng khác nhé.",
-            state="DONE",
-        )
-    else:
-        resp = greeting()
+        # --- GUARDRAIL ưu tiên cao nhất: CẤP CỨU ---
+        if safety.check_emergency(message):
+            resp = _reply(safety.EMERGENCY_MESSAGE, state=sess["state"])
+            safety.audit(session_id, "bot", "[EMERGENCY]", {"flag": "emergency"})
+            return resp
 
-    # Lưu trạng thái mới vào phiên để lượt sau định tuyến đúng.
-    if resp.get("state"):
-        sess["state"] = resp["state"]
-    safety.audit(session_id, "bot", resp["reply"], {"state": resp["state"]})
-    return resp
+        # --- GUARDRAIL: yêu cầu gặp người thật (human handoff) ---
+        if safety.needs_human_handoff(message):
+            resp = _reply(
+                "Tôi sẽ chuyển bạn tới <b>nhân viên/điều dưỡng</b> kèm toàn bộ nội dung "
+                "trao đổi để được hỗ trợ trực tiếp. Vui lòng chờ trong giây lát. ☎️",
+                state="HANDOFF",
+            )
+            sess["state"] = "HANDOFF"
+            safety.audit(session_id, "bot", resp["reply"], {"flag": "handoff"})
+            return resp
+
+        # --- Ý định HỦY lịch đã đặt ("hủy lịch", "muốn hủy lịch hẹn"...) ---
+        # Chỉ nhận ở bước nhập tự do; trong lúc đang đặt, "hủy" mang nghĩa hủy thao tác.
+        if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"} and _is_cancel_request(message):
+            resp = _start_cancel(sess)
+            sess["state"] = resp["state"]
+            safety.audit(session_id, "bot", resp["reply"],
+                         {"state": resp["state"], "intent": "cancel"})
+            return resp
+
+        # --- Câu hỏi thông tin về dịch vụ ("X là khám gì / là gì / gồm gì") ---
+        # Chỉ nhận ở các bước nhập tự do (tránh cướp lượt khi đang bấm chọn giờ/nhập tên).
+        if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"}:
+            info_code = triage.info_question_service(message)
+            if info_code:
+                resp = _describe_service(sess, info_code)
+                sess["state"] = resp["state"]
+                safety.audit(session_id, "bot", resp["reply"],
+                             {"state": resp["state"], "intent": "info"})
+                return resp
+
+        # --- Chặn yêu cầu chẩn đoán ngoài TRIAGE (TRIAGE tự xử lý inline trong
+        # _do_triage, không lặp lại ở đây) ---
+        if sess["state"] != "TRIAGE" and safety.is_diagnosis_request(message):
+            resp = _reply(
+                "Mình không thể chẩn đoán bệnh hay kê đơn thuốc nhé. Mình có thể giúp "
+                "bạn chọn đúng dịch vụ nha khoa và đặt lịch khám — bạn tiếp tục ở bước "
+                "hiện tại nha.",
+                state=sess["state"],
+            )
+            safety.audit(session_id, "bot", resp["reply"], {"flag": "diagnosis_request"})
+            return resp
+
+        # --- Định tuyến theo trạng thái ---
+        state = sess["state"]
+        if state == "GREET":
+            resp = greeting()
+        elif state == "TRIAGE":
+            resp = _do_triage(sess, message)
+        elif state == "CONFIRM_DEPT":
+            resp = _confirm_dept(sess, message)
+        elif state == "PICK_DOCTOR":
+            resp = _pick_doctor(sess, message)
+        elif state == "PICK_DATE":
+            resp = _pick_date(sess, message)
+        elif state == "PICK_TIME":
+            resp = _pick_time(sess, message)
+        elif state == "ASK_NAME":
+            resp = _ask_name(sess, message)
+        elif state == "ASK_PHONE":
+            resp = _ask_phone(sess, message)
+        elif state == "CONFIRM_BOOKING":
+            resp = _confirm_booking(sess, message)
+        elif state == "CANCEL_ASK_PHONE":
+            resp = _cancel_ask_phone(sess, message)
+        elif state == "CANCEL_PICK":
+            resp = _cancel_pick(sess, message)
+        elif state == "CANCEL_CONFIRM":
+            resp = _cancel_confirm(sess, message)
+        elif state == "DONE":
+            resp = _reply(
+                "Lịch hẹn của bạn đã hoàn tất. Gõ <b>“làm lại”</b> nếu muốn đặt lịch mới "
+                "hoặc mô tả triệu chứng khác nhé.",
+                state="DONE",
+            )
+        else:
+            resp = greeting()
+
+        # Lưu trạng thái mới vào phiên để lượt sau định tuyến đúng.
+        if resp.get("state"):
+            sess["state"] = resp["state"]
+        safety.audit(session_id, "bot", resp["reply"], {"state": resp["state"]})
+        return resp
 
 
 # ---------------------------------------------------------------------------

@@ -10,7 +10,11 @@ App native (Expo) gọi cùng các endpoint /api/*, truyền "session" trong bod
 
 import hmac
 import os
+import re
+import threading
+import time
 import uuid
+from collections import OrderedDict
 from flask import Flask, render_template, request, jsonify, session, Response, abort
 
 import chatbot
@@ -20,6 +24,7 @@ import push
 import storage
 
 app = Flask(__name__)
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB — đủ rộng cho tin nhắn text, chặn DoS
 # Production: đặt biến môi trường SECRET_KEY. Demo: dùng key mặc định.
 app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
 
@@ -50,14 +55,59 @@ for _w in _default_key_warnings(app.secret_key, ADMIN_KEY):
 print(f"[storage] Chế độ lưu trữ: {'Postgres/Supabase' if storage.USE_DB else 'file JSON (local)'}")
 
 
+_SID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
 def resolve_sid(data=None):
-    """Lấy session id từ body JSON (app native) hoặc cookie (web)."""
+    """Lấy session id từ body JSON (app native) hoặc cookie (web).
+
+    Giá trị client gửi trong body phải đúng định dạng uuid4-hex (32 ký tự hex
+    thường) — sai định dạng bị bỏ qua, coi như không gửi, tránh session id
+    đoán được/cố định do client tự chọn tuỳ ý.
+    """
     data = data or {}
-    sid = data.get("session") or session.get("sid")
+    client_sid = data.get("session")
+    if client_sid and (not isinstance(client_sid, str) or not _SID_RE.match(client_sid)):
+        client_sid = None
+    sid = client_sid or session.get("sid")
     if not sid:
         sid = uuid.uuid4().hex
     session["sid"] = sid
     return sid
+
+
+_RATE_LOCK = threading.Lock()
+_RATE_BUCKETS = OrderedDict()  # ip -> list[timestamp], LRU-cap giống SESSIONS ở chatbot.py
+_RATE_LIMIT = 30          # request
+_RATE_WINDOW = 60         # giây
+_RATE_MAX_IPS = 5000      # trần số IP theo dõi, tránh unbounded growth
+
+
+def _is_rate_limited(ip):
+    now = time.time()
+    with _RATE_LOCK:
+        bucket = _RATE_BUCKETS.get(ip)
+        if bucket is None:
+            if len(_RATE_BUCKETS) >= _RATE_MAX_IPS:
+                _RATE_BUCKETS.popitem(last=False)  # loại IP cũ nhất
+            bucket = []
+            _RATE_BUCKETS[ip] = bucket
+        else:
+            _RATE_BUCKETS.move_to_end(ip)
+        bucket[:] = [t for t in bucket if now - t < _RATE_WINDOW]
+        if len(bucket) >= _RATE_LIMIT:
+            return True
+        bucket.append(now)
+        return False
+
+
+@app.before_request
+def _rate_limit_guard():
+    if not request.path.startswith("/api/"):
+        return None  # trang web (/, /admin) không giới hạn
+    if _is_rate_limited(request.remote_addr or "unknown"):
+        return jsonify({"error": "Quá nhiều yêu cầu, vui lòng thử lại sau."}), 429
+    return None
 
 
 

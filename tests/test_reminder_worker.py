@@ -138,6 +138,41 @@ def test_test_mode_does_not_mark_reminders_sent(monkeypatch):
     assert mark_calls == []
 
 
+def test_scan_once_logs_expired_reminder(monkeypatch, capsys):
+    appts = [_valid_appt()]
+    monkeypatch.setattr(booking, "all_appointments", lambda: appts)
+
+    appt_dt = reminder_worker._appt_datetime(_valid_appt())
+    monkeypatch.setattr(reminder_worker, "_now_vn", lambda: appt_dt + timedelta(hours=1))
+
+    send_calls = []
+    monkeypatch.setattr(push, "send_push", lambda *a, **k: send_calls.append(a) or {"ok": True})
+    monkeypatch.setattr(booking, "mark_reminder_sent", lambda *a, **k: None)
+
+    n_sent = reminder_worker.scan_once(force=False)
+
+    out = capsys.readouterr().out
+    assert "[EXPIRED]" in out
+    assert send_calls == []
+    assert n_sent == 0
+
+
+def test_scan_once_test_mode_does_not_log_expired(monkeypatch, capsys):
+    appts = [_valid_appt()]
+    monkeypatch.setattr(booking, "all_appointments", lambda: appts)
+
+    appt_dt = reminder_worker._appt_datetime(_valid_appt())
+    monkeypatch.setattr(reminder_worker, "_now_vn", lambda: appt_dt + timedelta(hours=1))
+
+    monkeypatch.setattr(push, "send_push", lambda *a, **k: {"ok": True})
+    monkeypatch.setattr(booking, "mark_reminder_sent", lambda *a, **k: None)
+
+    reminder_worker.scan_once(force=True, dry_run=True)
+
+    out = capsys.readouterr().out
+    assert "[EXPIRED]" not in out
+
+
 def test_now_vn_is_utc_plus_7():
     assert reminder_worker._now_vn().utcoffset() == timedelta(hours=7)
 

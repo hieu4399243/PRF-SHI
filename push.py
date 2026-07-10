@@ -87,8 +87,31 @@ def send_push(tokens, title: str, body: str, data: dict | None = None):
                 method="POST",
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
-                resp.read()
-                sent = len(real)
+                body_raw = resp.read()
+            # HTTP call thành công (không lỗi mạng) -> mặc định coi là đã gửi.
+            sent = len(real)
+            failed = 0
+            # Parse ticket là TỐI ƯU (dọn token hết hạn) — lỗi ở đây KHÔNG được
+            # đổi kết luận "đã gửi thành công" ở trên (fail-open, không crash
+            # send_push — hàm này được gọi từ chatbot.py KHÔNG có try/except
+            # bao quanh, SAU KHI lịch hẹn đã lưu thành công).
+            try:
+                body = json.loads(body_raw)
+                tickets = body.get("data", [])
+                ticket_failed = 0
+                for token, ticket in zip(real, tickets):
+                    if ticket.get("status") == "error":
+                        ticket_failed += 1
+                        details = ticket.get("details") or {}
+                        if details.get("error") == "DeviceNotRegistered":
+                            try:
+                                storage.remove_token(token)
+                            except Exception:
+                                pass  # dọn token lỗi không được ảnh hưởng kết quả gửi
+                sent = len(real) - ticket_failed
+                failed = ticket_failed
+            except Exception:
+                pass  # không parse được ticket -> giữ nguyên sent/failed đã tính ở trên
         except (urllib.error.URLError, OSError):
             # Lỗi mạng -> không làm gián đoạn nghiệp vụ; ghi outbox để thử lại.
             _write_outbox([{"to": t, "title": title, "body": body,

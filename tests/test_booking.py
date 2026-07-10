@@ -394,6 +394,92 @@ def test_book_appointment_same_doctor_same_slot_blocked(monkeypatch):
 
 
 # ---------------------------------------------------------------------------
+# M6 — JSON mode: storage.add_appointment() raise DuplicateCodeError/
+# SlotTakenError (thay vì psycopg.errors.UniqueViolation) khi USE_DB=False.
+# _insert_with_race_guard phải bắt riêng 2 exception này TRƯỚC nhánh
+# `except Exception` chung (mới xử lý UniqueViolation của Postgres).
+# ---------------------------------------------------------------------------
+def test_book_appointment_json_mode_retries_on_duplicate_code(monkeypatch):
+    date_str, time_str, dept_code, doctor_id = _pick_slot()
+    monkeypatch.setattr(storage, "USE_DB", False)
+    monkeypatch.setattr(booking, "_confirmed_at", lambda doc, d, t: None)
+
+    codes_seen = []
+    calls = {"n": 0}
+
+    def fake_add_appointment(appt):
+        codes_seen.append(appt["code"])
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise storage.DuplicateCodeError(appt["code"])
+        return None
+
+    monkeypatch.setattr(storage, "add_appointment", fake_add_appointment)
+
+    ok, payload = booking.book_appointment(
+        "sess1", dept_code, doctor_id, date_str, time_str,
+        patient_name="Nguyễn Văn A", patient_phone="0911111111")
+
+    assert ok is True
+    assert payload["code"] == codes_seen[1]
+    assert codes_seen[0] != codes_seen[1]
+    assert calls["n"] == 2
+
+
+def test_book_appointment_json_mode_slot_taken(monkeypatch):
+    date_str, time_str, dept_code, doctor_id = _pick_slot()
+    monkeypatch.setattr(storage, "USE_DB", False)
+    monkeypatch.setattr(booking, "_confirmed_at", lambda doc, d, t: None)
+
+    existing_appt = {"code": "SHI-WINNER", "patient_phone": "0900000000"}
+    generate_code_calls = {"n": 0}
+    orig_generate = booking._generate_code
+
+    def counting_generate():
+        generate_code_calls["n"] += 1
+        return orig_generate()
+
+    monkeypatch.setattr(booking, "_generate_code", counting_generate)
+
+    def fake_add_appointment(appt):
+        raise storage.SlotTakenError(existing_appt)
+
+    monkeypatch.setattr(storage, "add_appointment", fake_add_appointment)
+
+    ok, payload = booking.book_appointment(
+        "sess1", dept_code, doctor_id, date_str, time_str,
+        patient_name="Nguyễn Văn A", patient_phone="0911111111")
+
+    assert ok is False
+    assert "error" in payload
+    assert "vừa có người đặt" in payload["error"]
+    # _generate_code() chỉ được gọi 1 lần (lúc tạo appointment ban đầu ở
+    # book_appointment()) — KHÔNG bị gọi lại trong nhánh SlotTakenError.
+    assert generate_code_calls["n"] == 1
+
+
+def test_book_appointment_json_mode_slot_taken_dedupe_by_phone(monkeypatch):
+    date_str, time_str, dept_code, doctor_id = _pick_slot()
+    monkeypatch.setattr(storage, "USE_DB", False)
+    monkeypatch.setattr(booking, "_confirmed_at", lambda doc, d, t: None)
+
+    existing_appt = {"code": "SHI-WINNER", "patient_phone": "0911111111"}
+
+    def fake_add_appointment(appt):
+        raise storage.SlotTakenError(existing_appt)
+
+    monkeypatch.setattr(storage, "add_appointment", fake_add_appointment)
+
+    ok, payload = booking.book_appointment(
+        "sess1", dept_code, doctor_id, date_str, time_str,
+        patient_name="Nguyễn Văn A", patient_phone="0911111111")
+
+    assert ok is False
+    assert payload.get("duplicate") is True
+    assert payload.get("existing") == existing_appt
+
+
+# ---------------------------------------------------------------------------
 # Integration test thật trên Postgres — CHỈ chạy nếu có DATABASE_URL khả dụng.
 # Trong môi trường dev/CI hiện tại KHÔNG có DATABASE_URL -> test này bị skip.
 # GHI CHÚ QUAN TRỌNG: race condition thật trên Postgres CHƯA được verify khi

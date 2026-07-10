@@ -18,12 +18,18 @@ Quy ước rút ra từ mã hiện có. Giữ nhất quán khi thêm/sửa.
 - **Danh mục qua `data.py`**, không hardcode danh sách dịch vụ/nha sĩ ở nơi khác.
 - `chatbot.py` là nơi duy nhất giữ state machine; các khối khác thuần hàm, dễ test riêng.
 
-## Nguyên tắc an toàn (bắt buộc)
+## Nguyên tắc an toàn & đồng thời (bắt buộc)
 
-- Guardrail phải **fail-safe**: mất DB / pattern rỗng → dùng seed baseline trong `safety.py`.
+- **Guardrail fail-safe:** mất DB / pattern rỗng → dùng seed baseline trong `safety.py`.
   Không được để guardrail biến mất vì lỗi cấu hình.
-- **Ẩn PII trước khi ghi** audit log. Không log số điện thoại/tên thô.
-- Không thêm luồng chẩn đoán/kê đơn; giữ ưu tiên EMERGENCY/HANDOFF cao nhất mọi state.
+- **Ẩn PII trước khi ghi** audit log. Không log số điện thoại/tên thô. Audit log được
+  bảo vệ bằng `_AUDIT_LOCK` + tự động xoay vòng tại 5MB (giữ 1 backup generation).
+- **Không thêm luồng chẩn đoán/kê đơn**; giữ ưu tiên EMERGENCY/HANDOFF cao nhất mọi state.
+- **Concurrency:** `chatbot.py` giữ `threading.Lock` per session (`session["_lock"]`),
+  serialize các request cho cùng user. `storage.py` dùng process-wide `_JSON_LOCK` cho tất cả
+  read-modify-write JSON (atomic writes via temp file + rename, chặn race condition slot booking).
+  Khi lỗi concurrency: Postgres ném `psycopg.errors.UniqueViolation`, JSON mode ném
+  `storage.SlotTakenError` hoặc `storage.DuplicateCodeError` — `booking.py` bắt cả 2.
 
 ## Cấu hình & bí mật
 

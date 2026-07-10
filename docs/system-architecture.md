@@ -63,7 +63,8 @@ doctors(id PK, service_code → services.code, name, sort_order)
 safety_patterns(kind, pattern, PRIMARY KEY(kind, pattern))  -- emergency/diagnosis/handoff
 ```
 **Fallback JSON:** `appointments.json`, `device_tokens.json`; danh mục lấy từ `_SEED_*` trong
-`data.py`. Chi tiết + hướng dẫn migrate: [database-storage-guide.md](database-storage-guide.md).
+`data.py`. JSON mode sử dụng file atomic writes (viết file tạm rồi rename) + process-wide lock
+để tránh data corruption. Chi tiết + hướng dẫn migrate: [database-storage-guide.md](database-storage-guide.md).
 
 > Quy tắc: dữ liệu **phát sinh** (lịch, token) → chỉ ở DB. **Danh mục** → DB là nguồn chính,
 > `data.py` là seed dự phòng. Guardrail (`safety_patterns`) → DB chỉ mở rộng, luôn fail-safe.
@@ -74,7 +75,25 @@ Python 3 / Flask · rule-based NLU (từ khóa, không dấu) + chỗ cắm LLM 
 (Postgres qua `psycopg`) fallback JSON · Expo Push + `.ics` · React Native / Expo SDK 54 ·
 cấu hình `.env` (`python-dotenv`).
 
-## 7. Nguyên tắc thiết kế
+## 7. Bảo vệ đồng thời & DoS
+
+**Session concurrency:** Mỗi session (user) có `threading.Lock` riêng; các request cho cùng session
+được serialize (không chạy đồng thời). Lock được tái dùng khi session reset/expire, tránh
+data race trên session state (`SESSIONS[sid]`).
+
+**Slot collision (appointment booking):** 2 request cùng lúc booking cùng khung giờ cho cùng
+bác sĩ đều bị phát hiện — Postgres dùng UNIQUE INDEX, JSON mode dùng process-wide lock
++ kiểm tra trước ghi (xem [database-storage-guide.md](database-storage-guide.md)).
+
+**Rate limiting:** Tất cả `/api/*` routes bị giới hạn ~30 request / 60 giây per IP (`app.py` → `_is_rate_limited()`).
+Trang web (`/`, `/admin`) không giới hạn. Khi vượt ngưỡng → HTTP 429.
+
+**Request body limit:** `MAX_CONTENT_LENGTH = 64KB` — chặn DoS upload file/payload khổng lồ.
+
+**Session ID validation:** Client gửi session ID phải đúng định dạng uuid4 (32 ký tự hex) —
+malformed ID bị bỏ qua, cấp ID mới. Tránh session id đoán được, cố định do client tự chọn.
+
+## 8. Nguyên tắc thiết kế
 
 1. Tách tầng client/backend/lưu trữ. 2. Một khối một việc (triage/booking/safety/push độc lập).
 3. Tách logic khỏi nơi lưu (`storage.py`). 4. Offline-first (fallback → dễ demo/chấm).

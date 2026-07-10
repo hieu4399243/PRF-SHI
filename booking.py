@@ -179,6 +179,24 @@ def _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
     doctor_id = appointment.get("doctor_id")
     try:
         storage.add_appointment(appointment)
+    except storage.SlotTakenError as exc:
+        # JSON mode: check-và-insert atomic dưới _JSON_LOCK đã phát hiện trùng
+        # slot ngay trong add_appointment (xem storage.py). Exception mang sẵn
+        # `existing` (bản ghi thắng race) nên không cần gọi lại _confirmed_at.
+        taken = exc.existing
+        if patient_phone and taken.get("patient_phone") == patient_phone:
+            return False, {"duplicate": True, "existing": taken,
+                           "error": "Bạn đã đặt lịch vào khung giờ này rồi."}
+        return False, {"error": "Khung giờ này vừa có người đặt. "
+                                "Vui lòng chọn giờ khác."}
+    except storage.DuplicateCodeError:
+        # JSON mode: trùng code ngẫu nhiên (_generate_code()) — không liên quan
+        # tới slot, retry với code mới giống nhánh appointments_pkey ở Postgres.
+        if not retry:
+            return False, {"error": "Lỗi hệ thống, vui lòng thử lại."}
+        appointment = dict(appointment, code=_generate_code())
+        return _insert_with_race_guard(appointment, date_str, time_str,
+                                       patient_phone, retry=False)
     except Exception as exc:
         try:
             import psycopg

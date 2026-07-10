@@ -114,22 +114,68 @@ worker), 2026-07-09. Đầy đủ hơn ở
 
 ## 🟡 Medium
 
-- [ ] Chặn chẩn đoán chỉ chạy ở state TRIAGE, các state khác không chặn (`chatbot.py:177`).
-- [ ] Chế độ JSON: race điều kiện đọc-sửa-ghi + ghi không atomic (`storage.py:124-126,156-226`).
-- [ ] Không giới hạn `MAX_CONTENT_LENGTH` → DoS bằng message khổng lồ (`app.py:62`).
-- [ ] Mỗi lần đặt lịch mở connection mới + quét toàn bảng, không có `WHERE` (`storage.py:39,132-139`).
-- [ ] Token Expo hết hạn (`DeviceNotRegistered`) không bao giờ bị xóa; lỗi ticket HTTP 200 bị bỏ qua (`push.py:88-90`).
-- [ ] Trùng mã lịch hẹn không được xử lý → 500 (DB) hoặc dữ liệu trùng âm thầm (JSON) (`booking.py:66`).
-- [ ] Client tự chọn `session` id (giảm nhẹ nhờ entropy uuid4) (`app.py:34`).
-- [ ] Không có rate limiting trên endpoint công khai.
-- [ ] Audit log: không xoay vòng, timestamp không theo UTC, chỉ bắt `OSError` (meta lỗi kiểu dữ liệu sẽ crash lượt chat) (`safety.py:137-150`).
-- [ ] Sửa session dict không có khóa (lock) khi Flask threaded → state có thể bị ghi đè (`chatbot.py`).
+- [x] Chặn chẩn đoán chỉ chạy ở state TRIAGE, các state khác không chặn (`chatbot.py:177`).
+  **Đã fix** (2026-07-10, `plans/260710-1000-fix-medium-low-issues/phase-01-...md`):
+  guardrail áp dụng mọi state trừ TRIAGE, chèn SAU cancel-intent/info-question (red-team bắt
+  vị trí chèn sai ở bản nháp đầu — trước 2 khối đó sẽ nuốt mất ý định hủy lịch/hỏi thông
+  tin). Test: `tests/test_chatbot_guardrail.py` (4/4).
+- [x] Chế độ JSON: race điều kiện đọc-sửa-ghi + ghi không atomic (`storage.py:124-126,156-226`).
+  **Đã fix** (2026-07-10, `phase-02-...md`): `_json_save` atomic (temp file + `os.replace`),
+  `_JSON_LOCK` bọc TẤT CẢ thao tác đọc-sửa-ghi (kể cả `add_token` có từ trước — red-team bắt
+  bản nháp đầu bỏ sót). Test: `tests/test_storage.py` (11/11, có test thread thật).
+- [x] Không giới hạn `MAX_CONTENT_LENGTH` → DoS bằng message khổng lồ (`app.py:62`).
+  **Đã fix** (2026-07-10, `phase-03-...md`): `MAX_CONTENT_LENGTH = 64KB`. Test:
+  `tests/test_app_hardening.py`.
+- [ ] Mỗi lần đặt lịch mở connection mới + quét toàn bảng, không có `WHERE`
+  (`storage.py:39,132-139`). **Đóng bằng ghi chú, không code** (2026-07-10) — quyết định
+  user: quy mô đồ án nhỏ, tối ưu connection pooling + WHERE clause là premature optimization
+  (YAGNI). Xem `plans/260710-1000-fix-medium-low-issues/plan.md` mục "Đã xử lý trước khi lên
+  plan này".
+- [x] Token Expo hết hạn (`DeviceNotRegistered`) không bao giờ bị xóa; lỗi ticket HTTP 200 bị
+  bỏ qua (`push.py:88-90`). **Đã fix** (2026-07-10, `phase-02-...md`): parse ticket response
+  Expo, xoá token khi `DeviceNotRegistered`, `failed` phản ánh cả lỗi ticket. Parse lỗi
+  fail-open (KHÔNG crash push đã gửi thành công — red-team bắt lỗ hổng crash xuyên qua
+  booking đã commit ở bản nháp đầu). Test: `tests/test_push.py` (7/7).
+- [x] Trùng mã lịch hẹn không được xử lý → 500 (DB) hoặc dữ liệu trùng âm thầm (JSON)
+  (`booking.py:66`). **Đã fix** (2026-07-10, `phase-02-...md`): JSON mode giờ phát hiện CẢ
+  trùng code LẪN trùng slot `(doctor_id,date,time)` atomic dưới `_JSON_LOCK` (red-team bắt
+  bản nháp đầu chỉ đóng nửa vấn đề — chỉ fix trùng code, không đóng race trùng giờ thật).
+  Test: `tests/test_storage.py`/`tests/test_booking.py`, có test 10-thread race thật.
+- [x] Client tự chọn `session` id (giảm nhẹ nhờ entropy uuid4) (`app.py:34`). **Đã fix**
+  (2026-07-10, `phase-03-...md`): validate `session` client gửi đúng định dạng uuid4-hex
+  (kèm `isinstance` check — red-team bắt lỗi crash `TypeError` nếu client gửi kiểu không
+  phải string, DoS 500 không cần auth). Test: `tests/test_app_hardening.py`.
+- [x] Không có rate limiting trên endpoint công khai. **Đã fix** (2026-07-10, `phase-03-...md`):
+  rate limit in-memory theo IP cho MỌI route `/api/*` (kể cả `/api/admin/*` — red-team đảo
+  ngược quyết định loại trừ admin ban đầu, vì admin key chỉ chống timing attack không chống
+  brute-force số lượng). Test: `tests/test_app_hardening.py`.
+- [x] Audit log: không xoay vòng, timestamp không theo UTC, chỉ bắt `OSError` (meta lỗi kiểu
+  dữ liệu sẽ crash lượt chat) (`safety.py:137-150`). **Đã fix** (2026-07-10, `phase-04-...md`):
+  xoay vòng 1 thế hệ khi vượt 5MB, timestamp UTC, bắt `Exception` rộng, `_AUDIT_LOCK` bảo vệ
+  rotate+ghi khỏi race giữa các session (red-team bắt thiếu khoá ở bản nháp đầu). Test:
+  `tests/test_safety.py` (12/12).
+- [x] Sửa session dict không có khóa (lock) khi Flask threaded → state có thể bị ghi đè
+  (`chatbot.py`). **Đã fix** (2026-07-10, `phase-01-...md`): mỗi session có `threading.Lock`
+  riêng, `handle_message` giữ khoá suốt xử lý. **Fix quan trọng nhất từ red-team** (3
+  reviewer độc lập cùng bắt): khoá phải TÁI SỬ DỤNG xuyên suốt `/reset`/TTL-expire (qua
+  `reuse_lock`), nếu không dict/lock mới thay thế giữa chừng sẽ vô hiệu hoá hoàn toàn tác
+  dụng bảo vệ — đúng bug ban đầu định sửa. Test: `tests/test_chatbot_session_lock.py` (5/5).
 
 ## 🟢 Low
 
-- [ ] So sánh khóa admin không constant-time (`app.py:98`, dùng `hmac.compare_digest`).
+- [x] So sánh khóa admin không constant-time (`app.py:98`, dùng `hmac.compare_digest`).
+  **Đã fix từ trước** (2026-07-10, thực ra được giải quyết như 1 tác dụng phụ của H6 —
+  `plans/260709-2230-fix-high-issues/phase-04-...md` đã đổi `_check_admin()` sang
+  `hmac.compare_digest`). Phát hiện lại khi rà `ISSUES.md` cho vòng Medium/Low, xác nhận qua
+  đọc `app.py:129` hiện tại — không cần code thêm.
 - [ ] SĐT chấp nhận số hợp lệ về hình thức nhưng không tồn tại (`chatbot.py:601-611`).
-- [ ] Nhắc lịch quá hạn bị bỏ qua âm thầm (`reminder_worker.py:88`).
+  **Đóng, không fix** (2026-07-10) — quyết định user: xác minh SĐT thật cần dịch vụ
+  SMS/telco ngoài, ngoài phạm vi đồ án. Xem
+  `plans/260710-1000-fix-medium-low-issues/plan.md`.
+- [x] Nhắc lịch quá hạn bị bỏ qua âm thầm (`reminder_worker.py:88`). **Đã fix** (2026-07-10,
+  `plans/260710-1000-fix-medium-low-issues/phase-05-...md`): log `[EXPIRED]` khi bỏ qua
+  nhắc quá hạn (vẫn không gửi nhắc trễ — chỉ thêm observability). Test:
+  `tests/test_reminder_worker.py`.
 
 ## Thứ tự fix đề xuất
 
