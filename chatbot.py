@@ -117,7 +117,10 @@ def handle_message(session_id: str, raw_message: str):
     message = (raw_message or "").strip()
 
     # --- Ghi audit (đã ẩn PII) ---
-    safety.audit(session_id, "user", message, {"state": sess["state"]})
+    # State ASK_NAME: message chính là tên bệnh nhân -> mask_pii() không bắt được
+    # (không phải phone/email/CCCD) -> ẩn thủ công trước khi ghi log.
+    logged_message = "[TÊN ĐÃ ẨN]" if sess["state"] == "ASK_NAME" else message
+    safety.audit(session_id, "user", logged_message, {"state": sess["state"]})
 
     # --- Lệnh tiện ích ---
     low = message.lower()

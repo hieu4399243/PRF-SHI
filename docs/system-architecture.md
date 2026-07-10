@@ -56,7 +56,7 @@ Nhánh hủy:  CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM → DONE
 ```sql
 appointments(code PK, session, patient_name, patient_phone, department, department_code,
              doctor, doctor_id, date, time, created_at, status, reminders_sent jsonb;
-             UNIQUE INDEX (date, time) WHERE status='confirmed')  -- chặn race booking
+             UNIQUE INDEX (doctor_id, date, time) WHERE status='confirmed')  -- chặn race booking
 device_tokens(session, token, PRIMARY KEY(session, token))
 services(code PK, name, descr, keywords jsonb, sort_order)
 doctors(id PK, service_code → services.code, name, sort_order)

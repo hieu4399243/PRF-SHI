@@ -13,9 +13,21 @@ Push gửi tới token đã đăng ký theo session của lịch hẹn (xem push
 import sys
 import time
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 import booking
 import push
+
+VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")
+
+
+def _now_vn():
+    return datetime.now(VN_TZ)
+
+
+def _appt_datetime(appt):
+    naive = datetime.fromisoformat(f"{appt['date']}T{appt['time']}:00")
+    return naive.replace(tzinfo=VN_TZ)
 
 
 def _format_date(iso: str):
@@ -56,20 +68,27 @@ def _rules(appt):
     ]
 
 
-def _send_for(appt, rule):
+def _send_for(appt, rule, dry_run=False):
     tokens = push.get_tokens(appt.get("session", ""))
     res = push.send_push(
         tokens, rule["title"], rule["body"],
         data={"type": "reminder", "key": rule["key"], "code": appt["code"]},
     )
-    booking.mark_reminder_sent(appt["code"], rule["key"])
+    should_mark = (not dry_run) and res.get("failed", 0) == 0
+    if should_mark:
+        booking.mark_reminder_sent(appt["code"], rule["key"])
     target = tokens or ["(chưa có thiết bị — ghi outbox)"]
-    print(f"  [SENT] {appt['code']} · {rule['key']} -> {target} · {res}")
+    status = "DRY-RUN" if dry_run else ("SENT" if should_mark else "RETRY-PENDING")
+    print(f"  [{status}] {appt['code']} · {rule['key']} -> {target} · {res}")
 
 
-def scan_once(force=False):
-    """Quét toàn bộ lịch hẹn, gửi các nhắc tới hạn (hoặc tất cả nếu force)."""
-    now = datetime.now()
+def scan_once(force=False, dry_run=False):
+    """Quét toàn bộ lịch hẹn, gửi các nhắc tới hạn (hoặc tất cả nếu force).
+
+    dry_run=True (dùng cho `--test`): vẫn gửi push thật để kiểm thử thiết bị,
+    nhưng KHÔNG ghi `reminders_sent` cho bất kỳ lịch hẹn nào (tránh phá dedup thật).
+    """
+    now = _now_vn()
     appts = booking.all_appointments()
     n_sent = 0
     for appt in appts:
@@ -77,7 +96,7 @@ def scan_once(force=False):
             if appt.get("status") != "confirmed":
                 continue
             try:
-                appt_dt = datetime.fromisoformat(f"{appt['date']}T{appt['time']}:00")
+                appt_dt = _appt_datetime(appt)
             except ValueError:
                 continue
             already = set(appt.get("reminders_sent", []))
@@ -88,7 +107,7 @@ def scan_once(force=False):
                 # gửi nếu: ép gửi (test), HOẶC đã tới thời điểm nhắc và chưa quá giờ hẹn
                 if force or (now >= due_time and now <= appt_dt):
                     try:
-                        _send_for(appt, rule)
+                        _send_for(appt, rule, dry_run=dry_run)
                         n_sent += 1
                     except Exception as e:
                         print(f"  [SEND-ERROR] {appt.get('code','?')} · {rule['key']} · "
@@ -102,13 +121,13 @@ def scan_once(force=False):
 def main():
     mode = sys.argv[1] if len(sys.argv) > 1 else "--once"
     if mode == "--test":
-        print("== TEST: gửi thử mọi loại nhắc cho mọi lịch hẹn ==")
-        total = scan_once(force=True)
+        print("== TEST: gửi thử mọi loại nhắc cho mọi lịch hẹn (không ghi reminders_sent) ==")
+        total = scan_once(force=True, dry_run=True)
         print(f"Hoàn tất. Đã gửi {total} nhắc.")
     elif mode == "--watch":
         print("== WATCH: quét mỗi 60 giây (Ctrl+C để dừng) ==")
         while True:
-            t = datetime.now().strftime("%H:%M:%S")
+            t = _now_vn().strftime("%H:%M:%S")
             sent = scan_once()
             print(f"[{t}] quét xong, gửi {sent} nhắc.")
             time.sleep(60)

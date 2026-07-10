@@ -8,6 +8,7 @@ Web demo: http://127.0.0.1:5000
 App native (Expo) gọi cùng các endpoint /api/*, truyền "session" trong body.
 """
 
+import hmac
 import os
 import uuid
 from flask import Flask, render_template, request, jsonify, session, Response, abort
@@ -24,6 +25,27 @@ app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
 
 # Khóa truy cập trang quản trị (admin/bác sĩ). Production: đặt ADMIN_KEY trong .env.
 ADMIN_KEY = os.environ.get("ADMIN_KEY", "shi-admin-demo")
+
+_DEFAULT_SECRET_KEY = "shi-nha-khoa-demo-key"
+_DEFAULT_ADMIN_KEY = "shi-admin-demo"
+
+
+def _default_key_warnings(secret_key, admin_key):
+    """Trả về danh sách cảnh báo nếu SECRET_KEY/ADMIN_KEY còn giá trị demo mặc định.
+
+    Hàm THUẦN (không print trực tiếp) để test được mà không cần reload module."""
+    warnings = []
+    if secret_key == _DEFAULT_SECRET_KEY:
+        warnings.append("[CẢNH BÁO] SECRET_KEY đang dùng giá trị demo mặc định — "
+                         "production PHẢI đặt biến môi trường SECRET_KEY (xem .env.example).")
+    if admin_key == _DEFAULT_ADMIN_KEY:
+        warnings.append("[CẢNH BÁO] ADMIN_KEY đang dùng giá trị demo mặc định — "
+                         "production PHẢI đặt biến môi trường ADMIN_KEY (xem .env.example).")
+    return warnings
+
+
+for _w in _default_key_warnings(app.secret_key, ADMIN_KEY):
+    print(_w)
 
 print(f"[storage] Chế độ lưu trữ: {'Postgres/Supabase' if storage.USE_DB else 'file JSON (local)'}")
 
@@ -97,12 +119,14 @@ def download_ics(code):
 
 # ===========================================================================
 # KHU VỰC QUẢN TRỊ (admin / bác sĩ) — chỉ ĐỌC lịch đã đặt & lịch làm việc.
-# Bảo vệ bằng khóa ADMIN_KEY (header 'X-Admin-Key' hoặc query '?key='). Đây là
-# lớp bảo vệ tối thiểu cho demo; production nên thay bằng đăng nhập thật + vai trò.
+# Bảo vệ bằng khóa ADMIN_KEY (chỉ qua header 'X-Admin-Key'). Đây là lớp bảo vệ
+# tối thiểu cho demo; production nên thay bằng đăng nhập thật + vai trò.
 # ===========================================================================
 def _check_admin():
-    key = request.headers.get("X-Admin-Key") or request.args.get("key", "")
-    return key == ADMIN_KEY
+    """Chỉ chấp nhận khoá qua header X-Admin-Key — query string bị log lại
+    (access log, lịch sử trình duyệt, Referer) nên không còn được chấp nhận."""
+    key = request.headers.get("X-Admin-Key", "")
+    return hmac.compare_digest(key, ADMIN_KEY)
 
 
 @app.route("/admin")
@@ -164,4 +188,8 @@ def admin_cancel():
 if __name__ == "__main__":
     # host=0.0.0.0 để điện thoại trong cùng mạng Wi-Fi gọi được.
     # Dùng cổng 5001 vì macOS (AirPlay Receiver) thường chiếm cổng 5000.
+    if os.environ.get("FLASK_DEBUG_WARN_SUPPRESS") != "1":
+        print("[CẢNH BÁO] Đang chạy debug=True trên host=0.0.0.0 — Werkzeug interactive "
+              "debugger có thể bị khai thác từ xa (RCE) nếu máy này lộ ra mạng ngoài. "
+              "Production PHẢI tắt debug (đặt debug=False) hoặc bind 127.0.0.1.")
     app.run(debug=True, host="0.0.0.0", port=5001)

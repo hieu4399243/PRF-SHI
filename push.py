@@ -63,7 +63,7 @@ def send_push(tokens, title: str, body: str, data: dict | None = None):
     if isinstance(tokens, str):
         tokens = [tokens]
     if not tokens:
-        return {"sent": 0, "skipped": 0, "outbox": 0}
+        return {"sent": 0, "skipped": 0, "outbox": 0, "failed": 0}
 
     real, demo = [], []
     for t in tokens:
@@ -74,6 +74,7 @@ def send_push(tokens, title: str, body: str, data: dict | None = None):
         _write_outbox([{"to": t, "title": title, "body": body, "data": data or {}} for t in demo])
 
     sent = 0
+    failed = 0
     if real:
         messages = [{"to": t, "title": title, "body": body, "sound": "default",
                      "data": data or {}} for t in real]
@@ -92,5 +93,6 @@ def send_push(tokens, title: str, body: str, data: dict | None = None):
             # Lỗi mạng -> không làm gián đoạn nghiệp vụ; ghi outbox để thử lại.
             _write_outbox([{"to": t, "title": title, "body": body,
                             "data": data or {}, "error": "network"} for t in real])
+            failed = len(real)
 
-    return {"sent": sent, "outbox": len(demo)}
+    return {"sent": sent, "outbox": len(demo), "failed": failed}

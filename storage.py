@@ -84,14 +84,24 @@ CREATE TABLE IF NOT EXISTS safety_patterns (
 """
 
 # Tách riêng khỏi SCHEMA_SQL: UNIQUE index này có thể FAIL nếu dữ liệu prod đã có
-# sẵn >=2 lịch 'confirmed' trùng (date, time) — đúng tình huống mà index này tồn
-# tại để ngăn. `IF NOT EXISTS` chỉ chặn chạy lại DDL, KHÔNG chặn lỗi vì dữ liệu
-# trùng sẵn có. Bọc try/except riêng để 1 lỗi ở đây không chặn các bảng/index
+# sẵn >=2 lịch 'confirmed' trùng (doctor_id, date, time) — đúng tình huống mà index
+# này tồn tại để ngăn. `IF NOT EXISTS` chỉ chặn chạy lại DDL, KHÔNG chặn lỗi vì dữ
+# liệu trùng sẵn có. Bọc try/except riêng để 1 lỗi ở đây không chặn các bảng/index
 # khác trong SCHEMA_SQL (degrade an toàn: app vẫn chạy, tạm thời mất bảo vệ
 # UNIQUE, thay vì _schema_ready không bao giờ True -> mọi request storage fail).
+#
+# Khoá theo (doctor_id, date, time) thay vì (date, time): 2 bác sĩ khác nhau đặt
+# cùng giờ, cùng ngày phải đều thành công (chỉ trùng giờ CÙNG 1 bác sĩ mới bị
+# chặn). Tên index cũ `ux_appointments_slot` (khoá (date, time), coi cả phòng
+# khám là 1 ghế) bị DROP sau khi index mới tạo xong — xem DROP_OLD_SLOT_INDEX_SQL
+# và init_schema() bên dưới.
 UNIQUE_SLOT_INDEX_SQL = """
-CREATE UNIQUE INDEX IF NOT EXISTS ux_appointments_slot
-    ON appointments (date, time) WHERE status = 'confirmed';
+CREATE UNIQUE INDEX IF NOT EXISTS ux_appointments_doctor_slot
+    ON appointments (doctor_id, date, time) WHERE status = 'confirmed';
+"""
+
+DROP_OLD_SLOT_INDEX_SQL = """
+DROP INDEX IF EXISTS ux_appointments_slot;
 """
 
 _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
@@ -108,7 +118,16 @@ def init_schema():
         cur.execute(SCHEMA_SQL)
         conn.commit()
         try:
+            # THỨ TỰ BẮT BUỘC: CREATE index mới TRƯỚC, DROP index cũ SAU. Nếu
+            # CREATE fail (vd. dữ liệu trùng sẵn có theo bộ khoá mới), index cũ
+            # vẫn còn nguyên -> ứng dụng vẫn có 1 lớp bảo vệ UNIQUE (chặt hơn
+            # cần thiết nhưng còn hơn không). Nếu DROP chạy trước mà CREATE fail,
+            # ứng dụng mất HOÀN TOÀN bảo vệ unique cho tới lần deploy sau. Tách 2
+            # lệnh execute() riêng biệt (không gộp 1 chuỗi SQL): psycopg3 xử lý
+            # multi-statement trong 1 lần execute() không đảm bảo, có thể lỗi/
+            # no-op âm thầm.
             cur.execute(UNIQUE_SLOT_INDEX_SQL)
+            cur.execute(DROP_OLD_SLOT_INDEX_SQL)
             conn.commit()
         except Exception as exc:  # noqa: BLE001 - phải bắt mọi lỗi DB ở đây
             # Không để lỗi tạo UNIQUE index (vd. dữ liệu trùng sẵn có) chặn schema
@@ -117,12 +136,12 @@ def init_schema():
             conn.rollback()
             print(
                 "[storage] CẢNH BÁO: không tạo được UNIQUE INDEX "
-                "ux_appointments_slot (appointments.date, time). Lỗi: "
-                f"{exc}. Có thể do đã tồn tại lịch 'confirmed' trùng "
-                "(date, time) trong dữ liệu hiện có — cần dọn dữ liệu thủ "
-                "công rồi khởi động lại app để bật lại bảo vệ chống trùng "
-                "lịch ở tầng DB. App vẫn chạy tiếp nhưng KHÔNG có UNIQUE "
-                "constraint bảo vệ tạm thời."
+                "ux_appointments_doctor_slot (appointments.doctor_id, date, "
+                f"time). Lỗi: {exc}. Có thể do đã tồn tại lịch 'confirmed' "
+                "trùng (doctor_id, date, time) trong dữ liệu hiện có — cần dọn "
+                "dữ liệu thủ công rồi khởi động lại app để bật lại bảo vệ "
+                "chống trùng lịch ở tầng DB. App vẫn chạy tiếp nhưng KHÔNG có "
+                "UNIQUE constraint bảo vệ tạm thời."
             )
     _schema_ready = True
 

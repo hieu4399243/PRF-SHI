@@ -133,9 +133,9 @@ cho **admin/bác sĩ** xem lại lịch đã đặt & lịch làm việc:
 > liệu với chatbot nên chạy đúng cả chế độ file JSON lẫn Supabase. Muốn thấy dữ liệu, hãy đặt
 > vài lịch bằng chatbot trước.
 
-Test nhanh bằng dòng lệnh (khóa qua header hoặc `?key=`):
+Test nhanh bằng dòng lệnh (khóa qua header `X-Admin-Key`):
 ```bash
-curl "http://127.0.0.1:5001/api/admin/appointments?status=confirmed&key=shi-admin-demo"
+curl -H "X-Admin-Key: shi-admin-demo" "http://127.0.0.1:5001/api/admin/appointments?status=confirmed"
 ```
 
 ---

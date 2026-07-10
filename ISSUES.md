@@ -57,24 +57,60 @@ worker), 2026-07-09. Đầy đủ hơn ở
 
 ## 🟠 High
 
-- [ ] **H1 — Kiểm tra trùng giờ bỏ qua `doctor_id`** (`booking.py:98-105`) — cả phòng khám coi
+- [x] **H1 — Kiểm tra trùng giờ bỏ qua `doctor_id`** (`booking.py:98-105`) — cả phòng khám coi
   như 1 ghế; đặt bác sĩ A giờ X chặn luôn bác sĩ B giờ X. **Cần xác nhận: đúng thiết kế hay bug?**
-- [ ] **H2 — Đánh dấu đã nhắc dù gửi push thất bại** (`push.py:91-94`, `reminder_worker.py:65`)
+  **Đã fix** (2026-07-10, `plans/260709-2230-fix-high-issues/phase-01-...md`): xác nhận là
+  bug. `_confirmed_at` + UNIQUE INDEX đổi sang khoá `(doctor_id, date, time)` (đổi tên
+  `ux_appointments_slot` → `ux_appointments_doctor_slot`, CREATE-trước-DROP-sau). Đã sửa cả
+  2 chỗ gọi `_confirmed_at` (kể cả bên trong `_insert_with_race_guard` — chỗ dễ bỏ sót nhất,
+  bị bắt bởi 2 reviewer độc lập ở red-team). Test: `tests/test_booking.py`.
+- [x] **H2 — Đánh dấu đã nhắc dù gửi push thất bại** (`push.py:91-94`, `reminder_worker.py:65`)
   → mất nhắc lịch vĩnh viễn, không có cơ chế retry từ `outbox/`.
-- [ ] **H3 — `--test` làm hỏng dedup thật** (`reminder_worker.py:98`) chạy 1 lần là mọi nhắc
+  **Đã fix (thu hẹp phạm vi)** (2026-07-10, `phase-02-...md`): không có tiến trình đọc
+  outbox để retry → chỉ sửa phần khả thi: `push.send_push` trả thêm `failed`, không đánh
+  dấu `reminders_sent` khi push tới token thật lỗi mạng (tự thử lại ở lần quét sau). Residual
+  risk: chưa bắt lỗi ticket cấp ứng dụng của Expo (HTTP 200 nhưng ticket lỗi) — chấp nhận,
+  ghi trong Risk Assessment phase-02. Test: `tests/test_reminder_worker.py`.
+- [x] **H3 — `--test` làm hỏng dedup thật** (`reminder_worker.py:98`) chạy 1 lần là mọi nhắc
   lịch thật bị coi là "đã gửi" vĩnh viễn.
-- [ ] **H4 — So giờ dùng local-time naive, lệch múi giờ VN khi host chạy UTC**
+  **Đã fix** (2026-07-10, `phase-02-...md`): thêm `dry_run` xuyên suốt `scan_once`/`_send_for`,
+  `--test` gọi `scan_once(force=True, dry_run=True)`, không bao giờ gọi
+  `mark_reminder_sent`. Verify thủ công: `appointments.json` không đổi sau khi chạy `--test`.
+- [x] **H4 — So giờ dùng local-time naive, lệch múi giờ VN khi host chạy UTC**
   (`reminder_worker.py:72`).
-- [ ] **H5 — `.ics` không escape `patient_name` → chèn được nội dung lịch (calendar injection)**
+  **Đã fix** (2026-07-10, `phase-02-...md`): `_now_vn()`/`_appt_datetime()` gắn tường minh
+  `zoneinfo.ZoneInfo("Asia/Ho_Chi_Minh")` cho cả 2 vế so sánh, không phụ thuộc giờ hệ thống
+  host. Test: `tests/test_reminder_worker.py`.
+- [x] **H5 — `.ics` không escape `patient_name` → chèn được nội dung lịch (calendar injection)**
   (`calendar_ics.py:29,56-57`; `chatbot.py:362` giữ nguyên `\n` nội bộ).
-- [ ] **H6 — Khóa admin nhận qua query string `?key=`** → lộ trong log/lịch sử trình duyệt/Referer
+  **Đã fix** (2026-07-10, `phase-03-...md`): thêm `_esc()` escape đúng RFC 5545 (backslash →
+  `;` → `,` → xuống dòng, đúng thứ tự tránh escape-kép), áp dụng cho mọi field nội suy vào
+  `.ics`. Test: `tests/test_calendar_ics.py`.
+- [x] **H6 — Khóa admin nhận qua query string `?key=`** → lộ trong log/lịch sử trình duyệt/Referer
   (`app.py:97`).
-- [ ] **H7 — `SECRET_KEY`/`ADMIN_KEY` mặc định + `debug=True` trên `0.0.0.0`** (`app.py:23,26,160`)
+  **Đã fix** (2026-07-10, `phase-04-...md`): `_check_admin()` chỉ chấp nhận header
+  `X-Admin-Key`, so sánh bằng `hmac.compare_digest` (constant-time, red-team bắt thêm lỗi
+  timing side-channel). Cập nhật `docs/getting-started-guide.md` (ví dụ curl cũ dùng `?key=`
+  — đã đổi sang header). Test: `tests/test_app_admin.py`.
+- [x] **H7 — `SECRET_KEY`/`ADMIN_KEY` mặc định + `debug=True` trên `0.0.0.0`** (`app.py:23,26,160`)
   — production phải set env + tắt debug (đã ghi trong docs, nhắc lại vì nghiêm trọng).
-- [ ] **H8 — Tên bệnh nhân không được ẩn trước khi ghi audit log** (`safety.py:45-57`;
+  **Đã fix** (2026-07-10, `phase-04-...md`): cảnh báo runtime khi `SECRET_KEY`/`ADMIN_KEY`
+  còn giá trị demo mặc định (hàm thuần `_default_key_warnings`, test không cần reload
+  module) + cảnh báo riêng khi chạy `debug=True`+`host=0.0.0.0` (rủi ro RCE qua Werkzeug
+  debugger — phần này bị bỏ sót ở bản nháp đầu, 2 reviewer độc lập bắt được ở red-team).
+  KHÔNG đổi `debug=True` mặc định (vẫn cần cho demo local). Test: `tests/test_app_admin.py`.
+- [x] **H8 — Tên bệnh nhân không được ẩn trước khi ghi audit log** (`safety.py:45-57`;
   `mask_pii` chỉ ẩn phone/email/CCCD).
-- [ ] **H9 — Session in-memory hỏng khi chạy nhiều worker/gunicorn hoặc restart**
+  **Đã fix** (2026-07-10, `phase-05-...md`): `chatbot.handle_message` ẩn message thành
+  `"[TÊN ĐÃ ẨN]"` trước khi ghi audit log khi state là `ASK_NAME` (nơi duy nhất message = tên
+  thật). `patient_name` lưu trong nghiệp vụ không bị ảnh hưởng. Test:
+  `tests/test_chatbot_audit.py`.
+- [x] **H9 — Session in-memory hỏng khi chạy nhiều worker/gunicorn hoặc restart**
   (`chatbot.py:16`, đã ghi trong docs).
+  **Đóng bằng ghi chú, không code** (2026-07-10): quyết định "1 process, không Redis" đã
+  chốt ở `plans/260709-2126-fix-critical-issues/` (C3) trả lời đúng phần multi-worker của
+  H9. Mất session khi restart là rủi ro chấp nhận cho quy mô đồ án — không xây persistence
+  (YAGNI). Xem comment tại khai báo `SESSIONS`/`_MAX_SESSIONS` trong `chatbot.py`.
 
 ## 🟡 Medium
 

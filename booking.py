@@ -96,10 +96,16 @@ def cancel_appointment(code):
     return appt
 
 
-def _confirmed_at(date_str, time_str):
-    """Lịch hẹn 'confirmed' đang chiếm đúng khung ngày+giờ (nếu có). Đối chiếu DB."""
+def _confirmed_at(doctor_id, date_str, time_str):
+    """Lịch hẹn 'confirmed' đang chiếm đúng khung bác sĩ+ngày+giờ (nếu có).
+
+    Khoá theo (doctor_id, date, time), KHÔNG chỉ (date, time): 2 bác sĩ khác
+    nhau đặt cùng giờ, cùng ngày không được coi là trùng — chỉ cùng bác sĩ mới
+    tính là trùng. Đối chiếu DB.
+    """
     for a in storage.list_appointments():
         if (a.get("status") == "confirmed"
+                and a.get("doctor_id") == doctor_id
                 and a.get("date") == date_str
                 and a.get("time") == time_str):
             return a
@@ -123,8 +129,9 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
     if not doctor_name:
         return False, {"error": "Không tìm thấy bác sĩ phù hợp."}
 
-    # NGUỒN CHÂN LÝ = DB: kiểm tra ngay lúc xác nhận xem khung giờ đã bị đặt chưa.
-    taken = _confirmed_at(date_str, time_str)
+    # NGUỒN CHÂN LÝ = DB: kiểm tra ngay lúc xác nhận xem khung giờ đã bị đặt chưa
+    # (theo đúng bác sĩ này — bác sĩ khác cùng giờ không tính là trùng).
+    taken = _confirmed_at(doctor_id, date_str, time_str)
     
     if taken:
         if patient_phone and taken.get("patient_phone") == patient_phone:
@@ -155,19 +162,21 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
 def _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
                             retry):
     """Gọi storage.add_appointment, bắt UniqueViolation do race giữa 2 request
-    đặt cùng khung giờ gần như đồng thời (xem UNIQUE INDEX ux_appointments_slot
-    trong storage.py).
+    đặt cùng khung giờ + cùng bác sĩ gần như đồng thời (xem UNIQUE INDEX
+    ux_appointments_doctor_slot trong storage.py).
 
     `UniqueViolation` có thể đến từ 2 nguồn khác nhau vì `appointments.code` là
-    PRIMARY KEY từ trước khi có `ux_appointments_slot`:
-      - constraint ux_appointments_slot -> đúng ý: khung giờ vừa bị bên khác
-        chiếm trong lúc race. Trả lỗi giống nhánh "đã có người đặt" ở trên.
+    PRIMARY KEY từ trước khi có `ux_appointments_doctor_slot`:
+      - constraint ux_appointments_doctor_slot -> đúng ý: khung giờ (của đúng
+        bác sĩ này) vừa bị bên khác chiếm trong lúc race. Trả lỗi giống nhánh
+        "đã có người đặt" ở trên.
       - constraint khác (vd appointments_pkey, do _generate_code() hiếm khi
         sinh trùng mã) -> khung giờ KHÔNG thực sự bị chiếm, KHÔNG được gọi
         _confirmed_at (sẽ trả None -> AttributeError khi code cũ giả định
         taken luôn có giá trị). Sinh mã mới và retry insert một lần; nếu vẫn
         lỗi, trả lỗi hệ thống chung thay vì để exception rò rỉ ra route Flask.
     """
+    doctor_id = appointment.get("doctor_id")
     try:
         storage.add_appointment(appointment)
     except Exception as exc:
@@ -179,8 +188,8 @@ def _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
             raise
         constraint_name = getattr(getattr(exc, "diag", None),
                                   "constraint_name", None)
-        if constraint_name == "ux_appointments_slot":
-            taken = _confirmed_at(date_str, time_str)
+        if constraint_name == "ux_appointments_doctor_slot":
+            taken = _confirmed_at(doctor_id, date_str, time_str)
             if patient_phone and taken and taken.get("patient_phone") == patient_phone:
                 return False, {"duplicate": True, "existing": taken,
                                "error": "Bạn đã đặt lịch vào khung giờ này rồi."}

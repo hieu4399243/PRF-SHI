@@ -16,19 +16,29 @@ def _fmt(dt: datetime) -> str:
     return dt.strftime("%Y%m%dT%H%M%S")
 
 
+def _esc(value) -> str:
+    """Escape 1 giá trị theo RFC 5545 §3.3.11 trước khi nội suy vào nội dung .ics."""
+    s = str(value)
+    s = s.replace("\\", "\\\\")  # backslash TRƯỚC TIÊN
+    s = s.replace(";", "\\;")
+    s = s.replace(",", "\\,")
+    s = s.replace("\r\n", "\\n").replace("\n", "\\n").replace("\r", "\\n")
+    return s
+
+
 def build_ics(appointment: dict) -> str:
     """Tạo nội dung file .ics từ một lịch hẹn (dict trả về bởi booking)."""
     start = datetime.fromisoformat(f"{appointment['date']}T{appointment['time']}:00")
     end = start + timedelta(minutes=APPT_DURATION_MIN)
     now = datetime.now()
 
-    summary = f"Nha khoa SHI: {appointment['department']} - {appointment['doctor']}"
+    summary = f"Nha khoa SHI: {_esc(appointment['department'])} - {_esc(appointment['doctor'])}"
     description = (
         f"Lịch hẹn tại Nha khoa SHI.\\n"
-        f"Mã lịch hẹn: {appointment['code']}\\n"
-        f"Bệnh nhân: {appointment.get('patient_name', 'Khách')}\\n"
-        f"Dịch vụ: {appointment['department']}\\n"
-        f"Bác sĩ: {appointment['doctor']}\\n"
+        f"Mã lịch hẹn: {_esc(appointment['code'])}\\n"
+        f"Bệnh nhân: {_esc(appointment.get('patient_name', 'Khách'))}\\n"
+        f"Dịch vụ: {_esc(appointment['department'])}\\n"
+        f"Bác sĩ: {_esc(appointment['doctor'])}\\n"
         f"Lưu ý: vui lòng đến trước giờ hẹn 15 phút."
     )
 
