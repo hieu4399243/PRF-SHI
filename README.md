@@ -1,104 +1,142 @@
 # Trợ lý Nha khoa SHI
 
-Chatbot tiếng Việt cho **một phòng khám nha khoa**: phân loại mô tả triệu chứng răng
-miệng → **đúng nhóm dịch vụ** (triage) và **đặt lịch hẹn**.
-Kiến trúc: **app native React Native (Expo)** làm giao diện + **backend Python (Flask)**
-làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
+Chatbot tiếng Việt cho **một phòng khám nha khoa**: bệnh nhân mô tả triệu chứng răng
+miệng → bot phân loại **đúng nhóm dịch vụ** (triage) → đặt lịch → nhắc lịch qua
+push/`.ics`. Đề tài demo (PRF/SHI), có **hệ thống đánh giá AI** (Precision/Recall/F1,
+so sánh v1 vs v2) ở `eval/`.
 
-> 📊 Phần **đánh giá hệ thống AI** (Precision/Recall/F1, so sánh phiên bản) nằm ở
-> `docs/BAOCAO_DANHGIA.md` và thư mục `eval/`.
+## Kiến trúc
 
-## 📚 Tài liệu
+Hai phần, nối nhau qua REST JSON:
 
-| File                                                            | Nội dung                                                                                              |
-| --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
-| [docs/](docs/project-overview-pdr.md)                            | Bộ tài liệu chuẩn: tổng quan/PDR, kiến trúc, bản đồ mã, chuẩn mã, triển khai, lộ trình |
-| [docs/getting-started-guide.md](docs/getting-started-guide.md)   | <br />Dựng dự án từ đầu (máy trắng → chạy được), chi tiết cho người mới               |
-| [docs/database-storage-guide.md](docs/database-storage-guide.md) | Lưu trữ JSON ↔ Supabase, cách đưa dữ liệu lên cloud                                           |
-| [BAOCAO_DANHGIA.md](docs/BAOCAO_DANHGIA.md)                      | Báo cáo đánh giá AI (mục đích→mục tiêu→cách đo→kết quả→kết luận)                   |
-| [hoc/](docs/hoc/00-muc-luc.md)                                   | Tự học: viết lại từng khối từ con số 0                                                         |
+- **Backend** — Flask (Python), package `app/`. Phục vụ web demo (`app/templates/index.html`),
+  trang quản trị (`/admin`), và các endpoint `/api/*` cho app native.
+- **Mobile** — React Native / Expo (SDK 54), thư mục `mobile/`. Mở bằng **Expo Go** + QR.
 
 ```
 ┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐
-│  App native (Expo)  │  ───────────────────► │  Backend Flask (Python)  │
+│  App native (Expo)  │  ───────────────────► │  Backend Flask (app/)   │
 │  mobile/  (RN UI)   │  ◄─── push token ──── │  triage · booking · safe │
 └─────────────────────┘                       └────────────┬─────────────┘
         ▲   push notification (Expo Push)                   │
         └───────────────────────────────────────────────────┘
-                         app/reminder_worker.py (nhắc lịch/ăn uống)
+                       app/reminder_worker.py (nhắc lịch)
 ```
 
-## Chức năng (backend)
+Mobile gọi backend qua IP LAN cấu hình ở `mobile/src/config.js` (`API_BASE`).
+Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 
-| Khối                         | File                         | Mô tả                                                                                                                                                                        |
-| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Triage engine**       | `app/triage.py`               | Phân loại triệu chứng răng miệng → đúng**dịch vụ** (chấm điểm từ khóa, có v1/v2; có chỗ cắm LLM Claude).                                             |
-| **Booking**             | `app/booking.py`              | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `app/data/appointments.json`.                                     |
-| **Safety / guardrails** | `app/safety.py`               | Phát hiện**cấp cứu** (→ gọi 115), **lọc PII**, chặn **chẩn đoán/kê đơn**, **human handoff**, **audit log** (Nghị định 13/2023). |
-| **Conversational core** | `app/chatbot.py`              | Máy trạng thái điều phối hội thoại, kết nối các khối.                                                                                                              |
-| **Push**                | `app/push.py`                 | Lưu device token + gửi push qua Expo Push Service.                                                                                                                           |
-| **Reminder worker**     | `app/reminder_worker.py`      | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ).                                                                                                                         |
-| **API server**          | `app/app.py`                  | Flask API cho app native (`/api/start`, `/api/chat`, `/api/register-push`, `/api/ics`).                                                                                |
-| **Dữ liệu**           | `app/data.py`                 | Danh mục**dịch vụ nha khoa**, nha sĩ, khung giờ trống (thay bằng DB trong thực tế).                                                                             |
-| **Đánh giá AI**      | `eval/`              | `dataset.jsonl` + `evaluate.py` (Precision/Recall/F1, v1 vs v2) + `docs/eval/rubric.md`; báo cáo ở `docs/BAOCAO_DANHGIA.md`.                                                       |
+## Sơ đồ file (backend — `app/`)
 
-> Giao diện chính là **app native trong `mobile/`** (xem `mobile/README.md`).
-> File `templates/index.html` là bản web cũ, giữ lại để test nhanh trên trình duyệt.
+| File | Vai trò |
+|------|---------|
+| `app/app.py` | Flask app + routes (public + admin). Chạy `host=0.0.0.0 port=5001`. |
+| `app/chatbot.py` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
+| `app/triage.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. Rule-based scoring theo keyword, có **2 phiên bản** (`v1` có dấu, `v2` không phân biệt dấu — mặc định); khớp theo ranh giới từ. `classify_with_llm()` là điểm cắm LLM (Claude). |
+| `app/safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→ 115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `app/data/audit_log.jsonl` (Nghị định 13/2023). |
+| `app/booking.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
+| `app/data.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
+| `app/storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON trong `app/data/`. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
+| `app/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `outbox/push_outbox.jsonl`. |
+| `app/reminder_worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
+| `app/calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
+| `app/templates/index.html` | Web demo (bản thay thế nhanh cho app native). |
+| `app/templates/admin.html` | Trang quản trị (chỉ đọc lịch đã đặt/lịch làm việc), khóa bằng `ADMIN_KEY`. |
+| `eval/` | **Đánh giá AI**: `dataset.jsonl` / `dataset_complex.jsonl` (câu gán nhãn), `evaluate.py` (Accuracy/Precision/Recall/Macro-F1, v1 vs v2). |
+| `scripts/migrate_to_supabase.py` | Đưa dữ liệu từ file JSON lên Postgres/Supabase. |
+| `scripts/clean_stale_appointments.py` | Dọn lịch hẹn quá hạn/không hợp lệ. |
+| `tests/` | Bộ test pytest cho toàn bộ backend (booking, safety, chatbot, push, storage, ...). |
 
-## Chạy backend
+## API endpoints (`app/app.py`)
+
+| Method | Path | Việc |
+|--------|------|------|
+| GET | `/` | Web demo (`app/templates/index.html`) |
+| POST | `/api/start` | Bắt đầu phiên, trả `session` |
+| POST | `/api/chat` | Gửi `message`, nhận phản hồi bot |
+| POST | `/api/register-push` | App native gửi Expo `token` |
+| GET | `/api/ics/<code>` | Tải file `.ics` của 1 lịch hẹn |
+| GET | `/admin` | Trang quản trị (đọc lịch/lịch làm việc) |
+| GET | `/api/admin/appointments` | Danh sách lịch hẹn (yêu cầu header `X-Admin-Key`) |
+| GET | `/api/admin/schedule` | Lịch làm việc nha sĩ (yêu cầu `X-Admin-Key`) |
+| GET | `/api/admin/meta` | Metadata phòng khám cho trang quản trị |
+| POST | `/api/admin/cancel` | Hủy lịch hẹn (yêu cầu `X-Admin-Key`) |
+
+Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem `resolve_sid()` trong `app/app.py`.
+
+## Cài đặt & chạy local
 
 ```bash
-cd /Users/hieutm3/Desktop/PRF
+# 1. Backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python -m app.app        # API tại http://0.0.0.0:5001
-```
+PORT=5001 .venv/bin/python -m app.app        # API tại http://0.0.0.0:5001
 
-## Chạy app native
+# 2. Worker nhắc lịch (tùy chọn)
+.venv/bin/python -m app.reminder_worker --watch   # quét mỗi 60s
+.venv/bin/python -m app.reminder_worker --test    # gửi thử mọi loại nhắc ngay
 
-```bash
+# 3. App native
 cd mobile
 npm install
-npx expo start                 # quét QR bằng Expo Go trên điện thoại
+npx expo start -c              # quét QR bằng Expo Go trên điện thoại
 ```
 
-Nhớ sửa `mobile/src/config.js` → `API_BASE` thành IP LAN của máy chạy backend.
-Chi tiết: **`mobile/README.md`**.
-
-## Chạy worker nhắc lịch
+Hoặc dùng script cài đặt gộp:
 
 ```bash
-.venv/bin/python -m app.reminder_worker --watch   # quét mỗi 60s, tự bắn khi tới hạn
-.venv/bin/python -m app.reminder_worker --test    # gửi thử mọi loại nhắc ngay
+./setup.sh              # cài backend (Python) + app (npm) + tự dò IP LAN
+./setup.sh ip            # đổi Wi-Fi -> chỉ dò lại IP và cập nhật mobile/src/config.js
+./setup.sh backend       # chỉ cài backend Python
+./setup.sh mobile        # chỉ cài app native (npm)
 ```
+
+Nhớ sửa `mobile/src/config.js` → `API_BASE` thành IP LAN của máy chạy backend (hoặc
+chạy `./setup.sh ip` để tự cập nhật). Chi tiết cấu hình app native: `mobile/README.md`.
+
+> Lưu ý: macOS chiếm cổng 5000 (AirPlay Receiver) → backend chạy ở cổng 5001.
+
+## Biến môi trường
+
+Sao chép `.env.example` thành `.env` rồi điền giá trị thật (xem file để biết chi tiết
+từng biến):
+
+- `DATABASE_URL` — kết nối Postgres/Supabase; bỏ trống thì app dùng file JSON local.
+- `SECRET_KEY` — khóa Flask session; production **phải** đặt chuỗi ngẫu nhiên.
+- `ADMIN_KEY` — khóa truy cập `/api/admin/*`; production **phải** đổi khỏi giá trị demo.
 
 ## Thử nhanh
 
-- *“răng tôi bị sâu và ê buốt khi ăn ngọt”* → dịch vụ **Trám răng / Sâu răng** → đặt lịch.
-- *“toi muon nieng rang”* (không dấu) → **Chỉnh nha** (nhờ engine v2 không phân biệt dấu).
-- *“chảy máu chân răng và hôi miệng”* → **Nha chu**.
-- *“mặt tôi sưng mặt lan và khó nuốt”* → cảnh báo **cấp cứu, gọi 115**.
-- *“cho tôi gặp nhân viên”* → **chuyển người thật** (handoff).
-- Gõ **“làm lại”** để bắt đầu phiên mới.
+- *"răng tôi bị sâu và ê buốt khi ăn ngọt"* → dịch vụ **Trám răng / Sâu răng** → đặt lịch.
+- *"toi muon nieng rang"* (không dấu) → **Chỉnh nha** (nhờ engine v2 không phân biệt dấu).
+- *"chảy máu chân răng và hôi miệng"* → **Nha chu**.
+- *"mặt tôi sưng mặt lan và khó nuốt"* → cảnh báo **cấp cứu, gọi 115**.
+- *"cho tôi gặp nhân viên"* → **chuyển người thật** (handoff).
+- Gõ **"làm lại"** để bắt đầu phiên mới.
 
-## Đánh giá hệ thống AI
+## Test & đánh giá hệ thống AI
 
 ```bash
-./.venv/bin/python eval/evaluate.py   # Accuracy/Macro-F1 cho v1 & v2 → ghi docs/eval/results.md
+.venv/bin/python -m pytest                 # bộ test backend (tests/)
+.venv/bin/python eval/evaluate.py          # Accuracy/Precision/Recall/Macro-F1 cho v1 & v2
 ```
 
-Kết quả mới nhất (tập dev 63 câu): **v2 đạt Accuracy 100%, Macro-F1 1.0** (v1: 77.8% / 0.87).
-Lưu ý: từ khóa hiệu chỉnh trên chính tập này nên là số "lạc quan"; chi tiết & phân tích
-trung thực trong `docs/BAOCAO_DANHGIA.md`.
+`eval/evaluate.py` chạy triage engine trên `eval/dataset.jsonl` (và `dataset_complex.jsonl`),
+so với nhãn vàng, in kết quả ra màn hình và ghi bảng chi tiết vào `eval/results.md`.
 
 ## File sinh ra khi chạy
 
 - `app/data/appointments.json` — lịch hẹn đã đặt.
+- `app/data/device_tokens.json` — token push đã đăng ký.
 - `app/data/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
+- `outbox/push_outbox.jsonl` — push chưa gửi được (thiếu token/lỗi mạng).
+
+Khi đặt `DATABASE_URL`, các dữ liệu trên chuyển sang lưu ở Postgres/Supabase thay vì file JSON
+(xem `app/storage.py`, `scripts/migrate_to_supabase.py`).
 
 ## Thêm vào lịch + nhắc tự động
 
-Sau khi đặt lịch thành công, bệnh nhân có 2 nút:
+Sau khi đặt lịch thành công, bệnh nhân có 2 lựa chọn:
 
 - **Thêm vào Lịch (.ics)** — tải file mà `app/calendar_ics.py` sinh ra, thêm được vào
   Lịch iPhone/Mac, Outlook, Google Calendar; kèm **2 lời nhắc** (trước 1 ngày &
@@ -107,7 +145,20 @@ Sau khi đặt lịch thành công, bệnh nhân có 2 nút:
 
 Không cần OAuth / API key, hoạt động trên mọi thiết bị.
 
+## Khoảng trống trước khi lên production
+
+1. **Dev server** — `app/app.py` chạy bằng Flask dev server; production nên dùng `gunicorn`
+   và tắt `debug`.
+2. **`SECRET_KEY` / `ADMIN_KEY`** — đọc từ env, có fallback demo; production **phải** đặt
+   giá trị ngẫu nhiên riêng (xem `.env.example`).
+3. **Lưu trữ** — có `DATABASE_URL` thì dùng Postgres/Supabase (bền vững), không thì fallback
+   file JSON (local). Session hội thoại vẫn **in-memory** (`app.chatbot.SESSIONS`) → cần
+   Redis/DB khi scale nhiều worker.
+4. **CORS** — chưa cấu hình; cần thêm khi backend khác origin với client web.
+5. **`API_BASE`** — đang là IP LAN; khi deploy phải đổi sang URL HTTPS công khai.
+
 ## Nâng cấp (ngoài phạm vi demo)
 
-- `triage.classify_with_llm()` — cắm Claude (`claude-opus-4-8` / `claude-sonnet-4-6`) để NLU tiếng Việt mạnh hơn.
-- Đồng bộ 2 chiều Google Calendar bằng OAuth (`google-api-python-client`) — để chặn trùng lịch phía bác sĩ.
+- `triage.classify_with_llm()` — cắm Claude để NLU tiếng Việt mạnh hơn.
+- Đồng bộ 2 chiều Google Calendar bằng OAuth (`google-api-python-client`) — để chặn trùng
+  lịch phía bác sĩ.
