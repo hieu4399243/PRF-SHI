@@ -37,7 +37,7 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 | `app/booking.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
 | `app/data.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
 | `app/storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON trong `app/data/`. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
-| `app/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `outbox/push_outbox.jsonl`. |
+| `app/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `app/data/outbox/push_outbox.jsonl`. |
 | `app/reminder_worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
 | `app/calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
 | `app/templates/index.html` | Web demo (bản thay thế nhanh cho app native). |
@@ -46,6 +46,8 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 | `scripts/migrate_to_supabase.py` | Đưa dữ liệu từ file JSON lên Postgres/Supabase. |
 | `scripts/clean_stale_appointments.py` | Dọn lịch hẹn quá hạn/không hợp lệ. |
 | `tests/` | Bộ test pytest cho toàn bộ backend (booking, safety, chatbot, push, storage, ...). |
+| `Dockerfile` | Image gunicorn (python:3.11-slim, non-root) cho service `web`/`worker`. |
+| `docker-compose.yml` | Orchestrate `web` + `worker` + `db` (Postgres 16 local) — xem mục "Chạy bằng Docker". |
 
 ## API endpoints (`app/app.py`)
 
@@ -105,6 +107,28 @@ từng biến):
 - `SECRET_KEY` — khóa Flask session; production **phải** đặt chuỗi ngẫu nhiên.
 - `ADMIN_KEY` — khóa truy cập `/api/admin/*`; production **phải** đổi khỏi giá trị demo.
 
+## Chạy bằng Docker
+
+Cách khác để chạy backend, không cần cài Python/venv trên máy. Gồm 3 service:
+`web` (gunicorn), `worker` (nhắc lịch, `--watch`), `db` (Postgres 16 local).
+
+```bash
+cp .env.docker.example .env    # điền POSTGRES_PASSWORD, SECRET_KEY, ADMIN_KEY riêng
+docker compose up --build -d
+docker compose logs -f web     # xem log; Ctrl+C để thoát (service vẫn chạy nền)
+docker compose down            # dừng (thêm -v để xóa luôn Postgres + app_data — audit log, outbox)
+```
+
+API chạy ở `http://localhost:5001` (map từ container ra máy host) — mobile app native
+qua Expo Go vẫn trỏ `API_BASE` vào IP LAN của máy này, không đổi hành vi so với chạy
+backend không-Docker (xem mục "Chạy app native").
+
+`.env` ở đây là biến riêng cho Docker Compose (`POSTGRES_DB/USER/PASSWORD` +
+`SECRET_KEY`/`ADMIN_KEY`) — khác với `.env` dùng khi chạy `python -m app.app` trực tiếp
+(mẫu ở `.env.example`, trỏ `DATABASE_URL` ra Supabase thay vì Postgres local). Muốn dùng
+Supabase thay vì Postgres local trong Docker: đổi `DATABASE_URL` của service `web`/`worker`
+trong `docker-compose.yml` trỏ ra Supabase, bỏ qua service `db`.
+
 ## Thử nhanh
 
 - *"răng tôi bị sâu và ê buốt khi ăn ngọt"* → dịch vụ **Trám răng / Sâu răng** → đặt lịch.
@@ -129,7 +153,7 @@ so với nhãn vàng, in kết quả ra màn hình và ghi bảng chi tiết và
 - `app/data/appointments.json` — lịch hẹn đã đặt.
 - `app/data/device_tokens.json` — token push đã đăng ký.
 - `app/data/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
-- `outbox/push_outbox.jsonl` — push chưa gửi được (thiếu token/lỗi mạng).
+- `app/data/outbox/push_outbox.jsonl` — push chưa gửi được (thiếu token/lỗi mạng).
 
 Khi đặt `DATABASE_URL`, các dữ liệu trên chuyển sang lưu ở Postgres/Supabase thay vì file JSON
 (xem `app/storage.py`, `scripts/migrate_to_supabase.py`).

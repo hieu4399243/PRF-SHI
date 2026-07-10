@@ -1,4 +1,5 @@
 Flask==3.0.3
+gunicorn==23.0.0
 # Database (tùy chọn) — chỉ cần khi dùng Postgres/Supabase qua DATABASE_URL.
 # Không đặt DATABASE_URL thì app vẫn chạy với file JSON, không cần 2 gói dưới.
 psycopg[binary]==3.2.3

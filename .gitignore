@@ -14,3 +14,6 @@ mobile/node_modules/
 
 # Công cụ AI (Claude Code: skills/agents/hooks/rules/settings cục bộ)
 .claude/
+
+# Plan làm việc của Claude Code (không phải tài liệu dự án chính thức)
+plans/
