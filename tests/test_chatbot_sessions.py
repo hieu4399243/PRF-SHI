@@ -28,6 +28,9 @@ def test_session_cap_evicts_oldest(monkeypatch):
 
 
 def test_session_ttl_expires():
+    """Hết hạn TTL -> nội dung reset về mặc định, NHƯNG dict object được TÁI SỬ
+    DỤNG (reset tại chỗ) thay vì thay bằng object mới — xem
+    chatbot._reset_in_place() và test_chatbot_session_lock.py."""
     sid = "ttl-user"
     sess = chatbot.get_session(sid)
     old_state_obj = sess
@@ -37,7 +40,7 @@ def test_session_ttl_expires():
     sess["_last_seen"] = time.time() - chatbot._SESSION_TTL_SECONDS - 1
 
     refreshed = chatbot.get_session(sid)
-    assert refreshed is not old_state_obj
+    assert refreshed is old_state_obj
     assert refreshed["state"] == "GREET"
 
 

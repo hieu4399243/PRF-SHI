@@ -32,6 +32,12 @@ def test_reset_session_reuses_same_lock_object():
 
 
 def test_ttl_expired_session_reuses_same_lock_object(monkeypatch):
+    """Hết hạn TTL -> reset TẠI CHỖ, giữ cùng dict object lẫn cùng Lock object.
+
+    Giữ cùng dict object (không thay bằng object mới) tránh bug: 1 request
+    khác đang giữ tham chiếu dict cũ (lấy ra TRƯỚC khi hết hạn) và đang ghi
+    vào nó trong lúc giữ sess["_lock"] sẽ không bị "mất ghi" vào 1 object đã
+    bị bỏ rơi. Xem chatbot._reset_in_place()."""
     sid = "lock-ttl"
     sess = chatbot.get_session(sid)
     lock_before = sess["_lock"]
@@ -39,7 +45,7 @@ def test_ttl_expired_session_reuses_same_lock_object(monkeypatch):
 
     sess2 = chatbot.get_session(sid)
 
-    assert sess2 is not sess
+    assert sess2 is sess
     assert sess2["_lock"] is lock_before
 
 

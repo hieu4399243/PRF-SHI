@@ -32,6 +32,7 @@ APPOINTMENTS_PATH = os.path.join(_BASE, "appointments.json")
 TOKENS_PATH = os.path.join(_BASE, "device_tokens.json")
 
 _schema_ready = False
+_SCHEMA_LOCK = threading.Lock()
 
 # Khoá trong-process cho MỌI thao tác JSON đọc-sửa-ghi (add_appointment,
 # set_reminder_sent, set_status, add_token, remove_token) — chỉ bảo vệ trong 1
@@ -131,40 +132,49 @@ _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
 
 
 def init_schema():
-    """Tạo bảng nếu chưa có (idempotent). Tự gọi trước thao tác DB đầu tiên."""
+    """Tạo bảng nếu chưa có (idempotent). Tự gọi trước thao tác DB đầu tiên.
+
+    Khoá bằng _SCHEMA_LOCK: 2 request đầu tiên gọi gần như đồng thời (trước
+    khi _schema_ready=True) mà không khoá có thể cùng chạy CREATE TABLE/INDEX
+    IF NOT EXISTS đồng thời -> Postgres có thể báo lỗi trùng khoá hệ thống dù
+    DDL "idempotent". Double-checked locking: kiểm tra cờ lần 2 sau khi có
+    khoá để tránh chạy lại DDL nếu request khác đã hoàn tất trong lúc chờ."""
     global _schema_ready
     if _schema_ready or not USE_DB:
         return
-    with _connect() as conn, conn.cursor() as cur:
-        cur.execute(SCHEMA_SQL)
-        conn.commit()
-        try:
-            # THỨ TỰ BẮT BUỘC: CREATE index mới TRƯỚC, DROP index cũ SAU. Nếu
-            # CREATE fail (vd. dữ liệu trùng sẵn có theo bộ khoá mới), index cũ
-            # vẫn còn nguyên -> ứng dụng vẫn có 1 lớp bảo vệ UNIQUE (chặt hơn
-            # cần thiết nhưng còn hơn không). Nếu DROP chạy trước mà CREATE fail,
-            # ứng dụng mất HOÀN TOÀN bảo vệ unique cho tới lần deploy sau. Tách 2
-            # lệnh execute() riêng biệt (không gộp 1 chuỗi SQL): psycopg3 xử lý
-            # multi-statement trong 1 lần execute() không đảm bảo, có thể lỗi/
-            # no-op âm thầm.
-            cur.execute(UNIQUE_SLOT_INDEX_SQL)
-            cur.execute(DROP_OLD_SLOT_INDEX_SQL)
+    with _SCHEMA_LOCK:
+        if _schema_ready:  # request khác đã chạy xong DDL trong lúc chờ khoá
+            return
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(SCHEMA_SQL)
             conn.commit()
-        except Exception as exc:  # noqa: BLE001 - phải bắt mọi lỗi DB ở đây
-            # Không để lỗi tạo UNIQUE index (vd. dữ liệu trùng sẵn có) chặn schema
-            # init của các bảng khác. Rollback để connection còn dùng được tiếp
-            # (Postgres yêu cầu rollback sau lỗi trong transaction).
-            conn.rollback()
-            print(
-                "[storage] CẢNH BÁO: không tạo được UNIQUE INDEX "
-                "ux_appointments_doctor_slot (appointments.doctor_id, date, "
-                f"time). Lỗi: {exc}. Có thể do đã tồn tại lịch 'confirmed' "
-                "trùng (doctor_id, date, time) trong dữ liệu hiện có — cần dọn "
-                "dữ liệu thủ công rồi khởi động lại app để bật lại bảo vệ "
-                "chống trùng lịch ở tầng DB. App vẫn chạy tiếp nhưng KHÔNG có "
-                "UNIQUE constraint bảo vệ tạm thời."
-            )
-    _schema_ready = True
+            try:
+                # THỨ TỰ BẮT BUỘC: CREATE index mới TRƯỚC, DROP index cũ SAU. Nếu
+                # CREATE fail (vd. dữ liệu trùng sẵn có theo bộ khoá mới), index cũ
+                # vẫn còn nguyên -> ứng dụng vẫn có 1 lớp bảo vệ UNIQUE (chặt hơn
+                # cần thiết nhưng còn hơn không). Nếu DROP chạy trước mà CREATE fail,
+                # ứng dụng mất HOÀN TOÀN bảo vệ unique cho tới lần deploy sau. Tách 2
+                # lệnh execute() riêng biệt (không gộp 1 chuỗi SQL): psycopg3 xử lý
+                # multi-statement trong 1 lần execute() không đảm bảo, có thể lỗi/
+                # no-op âm thầm.
+                cur.execute(UNIQUE_SLOT_INDEX_SQL)
+                cur.execute(DROP_OLD_SLOT_INDEX_SQL)
+                conn.commit()
+            except Exception as exc:  # noqa: BLE001 - phải bắt mọi lỗi DB ở đây
+                # Không để lỗi tạo UNIQUE index (vd. dữ liệu trùng sẵn có) chặn schema
+                # init của các bảng khác. Rollback để connection còn dùng được tiếp
+                # (Postgres yêu cầu rollback sau lỗi trong transaction).
+                conn.rollback()
+                print(
+                    "[storage] CẢNH BÁO: không tạo được UNIQUE INDEX "
+                    "ux_appointments_doctor_slot (appointments.doctor_id, date, "
+                    f"time). Lỗi: {exc}. Có thể do đã tồn tại lịch 'confirmed' "
+                    "trùng (doctor_id, date, time) trong dữ liệu hiện có — cần dọn "
+                    "dữ liệu thủ công rồi khởi động lại app để bật lại bảo vệ "
+                    "chống trùng lịch ở tầng DB. App vẫn chạy tiếp nhưng KHÔNG có "
+                    "UNIQUE constraint bảo vệ tạm thời."
+                )
+        _schema_ready = True
 
 
 def _row_to_appt(row):

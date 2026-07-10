@@ -189,8 +189,11 @@ def _load_catalog():
             dr = storage.list_doctors()
             if sv:  # DB đã có dữ liệu (đã seed)
                 return sv, (dr or _SEED_DOCTORS)
-    except Exception:
-        pass  # lỗi DB/mạng -> dùng seed tĩnh, không làm app chết
+    except Exception as exc:
+        # lỗi DB/mạng -> dùng seed tĩnh, không làm app chết, NHƯNG phải log lại:
+        # nếu không, một query DB bị lỗi thật (vd. sai cột do migrate dở dang)
+        # trông giống hệt "DB chưa seed dữ liệu" -> khó phát hiện khi vận hành.
+        print(f"[data] CẢNH BÁO: lỗi khi nạp danh mục từ DB, dùng seed tĩnh. Lỗi: {exc}")
     return _SEED_DEPARTMENTS, _SEED_DOCTORS
 
 

@@ -96,8 +96,10 @@ def _load_patterns():
         from . import storage
         if storage.USE_DB:
             db = storage.list_safety_patterns() or {}
-    except Exception:
+    except Exception as exc:
         db = {}  # lỗi DB/mạng -> dùng seed, KHÔNG để guardrail biến mất
+        print(f"[safety] CẢNH BÁO: lỗi khi nạp guardrail patterns từ DB, "
+              f"dùng seed tĩnh. Lỗi: {exc}")
     # Mỗi nhóm ưu tiên DB; nhóm nào rỗng -> fallback seed (không bao giờ để trống).
     return {kind: (db.get(kind) or seed) for kind, seed in seeds.items()}
 

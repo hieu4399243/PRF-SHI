@@ -62,6 +62,21 @@ def _evict_if_full_locked():
         SESSIONS.popitem(last=False)
 
 
+def _reset_in_place(sess, reuse_lock):
+    """Ghi đè nội dung 1 session dict TẠI CHỖ (giữ nguyên object), thay vì tạo
+    dict mới rồi thay thế trong SESSIONS.
+
+    Lý do: nếu 1 request khác đang giữ tham chiếu tới dict cũ (đã lấy ra từ
+    get_session TRƯỚC KHI session này hết hạn/bị reset) và đang ghi vào nó bên
+    trong `with sess["_lock"]:` ở chatbot.py, thay dict bằng object mới sẽ làm
+    những thay đổi đó biến mất (không bao giờ được ghi vào bản mà các request
+    sau đọc). Reset tại chỗ tránh được lớp bug "mất trạng thái hội thoại" này."""
+    fresh = _new_session(reuse_lock=reuse_lock)
+    sess.clear()
+    sess.update(fresh)
+    return sess
+
+
 def get_session(session_id: str):
     with _SESSIONS_LOCK:
         existing = SESSIONS.get(session_id)
@@ -70,11 +85,11 @@ def get_session(session_id: str):
                 existing["_last_seen"] = time.time()
                 SESSIONS.move_to_end(session_id)
                 return existing
-            # Hết hạn -> coi như mới, NHƯNG giữ lại cùng Lock object.
-            del SESSIONS[session_id]
-            _evict_if_full_locked()
-            SESSIONS[session_id] = _new_session(reuse_lock=existing["_lock"])
-            return SESSIONS[session_id]
+            # Hết hạn -> reset tại chỗ (coi như mới), giữ lại cùng Lock object
+            # VÀ cùng dict object — xem _reset_in_place().
+            _reset_in_place(existing, reuse_lock=existing["_lock"])
+            SESSIONS.move_to_end(session_id)
+            return existing
 
         _evict_if_full_locked()
         SESSIONS[session_id] = _new_session()
@@ -83,11 +98,13 @@ def get_session(session_id: str):
 
 def reset_session(session_id: str):
     with _SESSIONS_LOCK:
-        old = SESSIONS.pop(session_id, None)
+        existing = SESSIONS.get(session_id)
+        if existing is not None:
+            _reset_in_place(existing, reuse_lock=existing["_lock"])
+            SESSIONS.move_to_end(session_id)
+            return
         _evict_if_full_locked()
-        SESSIONS[session_id] = _new_session(
-            reuse_lock=old["_lock"] if old is not None else None
-        )
+        SESSIONS[session_id] = _new_session()
 
 
 def _reply(text, options=None, state=None, done=False, **extra):
@@ -367,10 +384,10 @@ def _pick_doctor(sess, message):
     return _reply("Bạn chọn giúp mình một bác sĩ ở các nút bên trên nhé.", state="PICK_DOCTOR")
 
 
-def _start_date_pick(sess):
+def _start_date_pick(sess, prefix=""):
     dates = booking.get_available_dates()
     options = [{"label": _format_date(d), "value": d} for d in dates]
-    return _reply("Bạn muốn khám vào ngày nào?", options=options, state="PICK_DATE")
+    return _reply(prefix + "Bạn muốn khám vào ngày nào?", options=options, state="PICK_DATE")
 
 
 def _pick_date(sess, message):
@@ -385,7 +402,10 @@ def _pick_date(sess, message):
 def _start_time_pick(sess, prefix=""):
     times = booking.get_available_times(sess["date"])
     if not times:
-        return _start_date_pick(sess)
+        # Ngày đã chọn rơi ra khỏi cửa sổ 5 ngày làm việc (vd. phiên kéo dài
+        # qua nửa đêm) -> quay lại chọn ngày, GIỮ nguyên `prefix` (lý do/lỗi)
+        # để người dùng không bị đưa về bước chọn ngày mà không hiểu vì sao.
+        return _start_date_pick(sess, prefix=prefix)
     options = [{"label": t, "value": t} for t in times]
     return _reply(
         prefix + f"Các khung giờ trống ngày <b>{_format_date(sess['date'])}</b>:",

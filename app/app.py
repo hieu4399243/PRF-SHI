@@ -174,9 +174,18 @@ def download_ics(code):
 # ===========================================================================
 def _check_admin():
     """Chỉ chấp nhận khoá qua header X-Admin-Key — query string bị log lại
-    (access log, lịch sử trình duyệt, Referer) nên không còn được chấp nhận."""
+    (access log, lịch sử trình duyệt, Referer) nên không còn được chấp nhận.
+
+    Nếu ADMIN_KEY còn là giá trị demo mặc định (quên đặt biến môi trường khi
+    chạy ngoài Docker Compose — compose đã tự chặn khởi động qua `:?`), chỉ
+    chấp nhận từ localhost. Tránh việc quên cấu hình khiến API quản trị lộ ra
+    mạng ngoài với khoá ai cũng đoán được (đọc thấy trong mã nguồn)."""
     key = request.headers.get("X-Admin-Key", "")
-    return hmac.compare_digest(key, ADMIN_KEY)
+    if not hmac.compare_digest(key, ADMIN_KEY):
+        return False
+    if ADMIN_KEY == _DEFAULT_ADMIN_KEY and request.remote_addr not in ("127.0.0.1", "::1"):
+        return False
+    return True
 
 
 @app.route("/admin")

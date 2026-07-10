@@ -131,8 +131,14 @@ def main():
         print("== WATCH: quét mỗi 60 giây (Ctrl+C để dừng) ==")
         while True:
             t = _now_vn().strftime("%H:%M:%S")
-            sent = scan_once()
-            print(f"[{t}] quét xong, gửi {sent} nhắc.")
+            try:
+                sent = scan_once()
+                print(f"[{t}] quét xong, gửi {sent} nhắc.")
+            except Exception as e:
+                # Lỗi ở 1 vòng quét (vd. DB tạm mất kết nối) không được làm
+                # tiến trình chết hẳn -> mất nhắc lịch vĩnh viễn cho tới khi
+                # có người khởi động lại thủ công. Log rồi thử lại vòng sau.
+                print(f"[{t}] [SCAN-ERROR] vòng quét lỗi, sẽ thử lại sau 60s: {e}")
             time.sleep(60)
     else:
         sent = scan_once()

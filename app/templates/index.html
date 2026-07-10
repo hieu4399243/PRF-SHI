@@ -173,6 +173,11 @@ function showTyping(){
 }
 function hideTyping(){ if(typingEl){ typingEl.remove(); typingEl = null; } }
 
+// Phiên (sid) trả về từ /api/start được gửi lại trong body của mọi request
+// sau đó, giống app native — để hội thoại không bị mất phiên khi cookie bị
+// trình duyệt chặn/xoá (cookie session lúc đó không dùng được).
+let sessionId = null;
+
 async function send(message){
   sendBtn.disabled = true;
   showTyping();
@@ -180,9 +185,10 @@ async function send(message){
     const res = await fetch('/api/chat', {
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({ message })
+      body: JSON.stringify({ message, session: sessionId })
     });
     const data = await res.json();
+    sessionId = data.session || sessionId;
     await new Promise(r => setTimeout(r, 450)); // cảm giác "đang gõ"
     hideTyping();
     addMessage(data.reply, 'bot');
@@ -209,6 +215,7 @@ async function start(){
   showTyping();
   const res = await fetch('/api/start', {method:'POST'});
   const data = await res.json();
+  sessionId = data.session || null;
   await new Promise(r => setTimeout(r, 400));
   hideTyping();
   addMessage(data.reply, 'bot');
