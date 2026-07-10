@@ -83,7 +83,7 @@ def resolve_sid(data):
 | `POST /api/register-push` | App gửi device token |
 | `GET /api/ics/<code>` | Tải file lịch `.ics` |
 
-Mở [app.py](../app.py) — bạn sẽ thấy mỗi route chỉ vài dòng: lấy `sid` → gọi chatbot/booking
+Mở [app.py](../app/app.py) — bạn sẽ thấy mỗi route chỉ vài dòng: lấy `sid` → gọi chatbot/booking
 → `jsonify`. **app.py không chứa logic nghiệp vụ**, nó chỉ là người gác cổng.
 
 ## Bài tập

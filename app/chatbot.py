@@ -12,9 +12,9 @@ import time
 import threading
 from collections import OrderedDict
 
-import triage
-import booking
-import safety
+from . import triage
+from . import booking
+from . import safety
 
 # Bộ nhớ phiên (in-memory). Sản phẩm thật nên dùng Redis/DB.
 #
@@ -306,7 +306,7 @@ def _dental_followup(diag_note=""):
 
 def _describe_service(sess, code, diag_note=""):
     """Trả lời câu hỏi 'X là khám gì / là gì' bằng mô tả dịch vụ + mời đặt lịch."""
-    from data import DEPARTMENTS, SERVICE_INFO
+    from .data import DEPARTMENTS, SERVICE_INFO
     dept = DEPARTMENTS.get(code, {})
     name = dept.get("name", code)
     info = SERVICE_INFO.get(code) or dept.get("desc", "")
@@ -332,7 +332,7 @@ def _confirm_dept(sess, message):
         return _start_doctor_pick(sess)
 
     # message có thể là mã dịch vụ (từ nút bấm) hoặc tên dịch vụ.
-    from data import DEPARTMENTS
+    from .data import DEPARTMENTS
     for code, dept in DEPARTMENTS.items():
         if low == code or dept["name"].lower() in low:
             sess["dept_code"] = code
@@ -347,7 +347,7 @@ def _confirm_dept(sess, message):
 # ---------------------------------------------------------------------------
 def _start_doctor_pick(sess):
     doctors = booking.get_doctors(sess["dept_code"])
-    from data import DEPARTMENTS
+    from .data import DEPARTMENTS
     dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
     options = [{"label": d["name"], "value": d["id"]} for d in doctors]
     return _reply(
@@ -445,7 +445,7 @@ def _ask_phone(sess, message):
 
 
 def _booking_summary(sess):
-    from data import DEPARTMENTS
+    from .data import DEPARTMENTS
     dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
     doctor_name = booking.get_doctor_name(sess["dept_code"], sess["doctor_id"])
     return (
@@ -498,7 +498,7 @@ def _finalize_booking(sess):
         return _start_time_pick(sess, prefix=payload["error"] + " Mời bạn chọn lại khung giờ.<br><br>")
 
     # Bắn push xác nhận tới điện thoại của bệnh nhân (nếu app đã đăng ký token).
-    import push
+    from . import push
     tokens = push.get_tokens(sess.get("_id", "anon"))
     push.send_push(
         tokens,
@@ -508,7 +508,7 @@ def _finalize_booking(sess):
         data={"type": "booking_confirmed", "code": payload["code"]},
     )
 
-    import calendar_ics
+    from . import calendar_ics
     gcal = calendar_ics.google_calendar_link(payload)
     ics_url = f"/api/ics/{payload['code']}"
     return _reply(
@@ -639,7 +639,7 @@ def _cancel_confirm(sess, message):
         return _finalize_booking(sess)
 
     # Hủy chủ động: báo push + xác nhận đã hủy.
-    import push
+    from . import push
     tokens = push.get_tokens(sess.get("_id", "anon"))
     push.send_push(
         tokens,

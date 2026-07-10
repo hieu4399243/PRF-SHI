@@ -19,10 +19,10 @@ import sys
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import storage  # noqa: E402
+from app import storage  # noqa: E402
 
-APPTS = os.path.join(ROOT, "appointments.json")
-TOKENS = os.path.join(ROOT, "device_tokens.json")
+APPTS = storage.APPOINTMENTS_PATH
+TOKENS = storage.TOKENS_PATH
 
 
 def main():
@@ -34,12 +34,12 @@ def main():
     print("✅ Đã tạo/đảm bảo bảng trên Postgres.")
 
     # Danh mục dịch vụ + nha sĩ (seed từ dict tĩnh trong data.py)
-    import data
+    from app import data
     n_sv, n_dr = storage.seed_catalog(data._SEED_DEPARTMENTS, data._SEED_DOCTORS)
     print(f"✅ Đã nạp danh mục: {n_sv} dịch vụ, {n_dr} nha sĩ (bỏ qua phần đã có).")
 
     # Bộ pattern an toàn (guardrail): cấp cứu / chặn chẩn đoán / human handoff
-    import safety
+    from app import safety
     n_sp = storage.seed_safety_patterns({
         "emergency": safety._SEED_EMERGENCY_PATTERNS,
         "diagnosis": safety._SEED_DIAGNOSIS_REQUEST_PATTERNS,

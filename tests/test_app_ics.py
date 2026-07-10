@@ -16,8 +16,8 @@ Fix:
 
 import string
 
-import app as app_module
-import booking
+from app import app as app_module
+from app import booking
 
 
 def _fake_appointment(code, session_id):

@@ -24,8 +24,8 @@ import time
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-import triage  # noqa: E402
-from data import DEPARTMENTS  # noqa: E402
+from app import triage  # noqa: E402
+from app.data import DEPARTMENTS  # noqa: E402
 
 DATASET_PATH = os.path.join(os.path.dirname(__file__), "dataset.jsonl")
 COMPLEX_PATH = os.path.join(os.path.dirname(__file__), "dataset_complex.jsonl")

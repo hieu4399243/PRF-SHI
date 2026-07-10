@@ -10,8 +10,8 @@ import json
 import threading
 from datetime import datetime, timezone
 
-import safety
-from triage import _normalize, _strip_accents
+from app import safety
+from app.triage import _normalize, _strip_accents
 
 
 def _to_no_accent(pattern: str) -> str:

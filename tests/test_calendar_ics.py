@@ -1,6 +1,6 @@
 """Tests cho calendar_ics.build_ics() - escape RFC 5545 chống calendar injection."""
 
-import calendar_ics
+from app import calendar_ics
 
 
 def _make_appointment(**overrides):

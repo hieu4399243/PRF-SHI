@@ -36,7 +36,7 @@ Người dùng → app.py → chatbot.py → (safety, triage, booking) → data.
 ```bash
 cd /Users/hieutm3/Desktop/PRF-SHI
 ./.venv/bin/python hoc/<file_ban_tao>.py     # chạy file tập
-./.venv/bin/python app.py                     # chạy server thật
+./.venv/bin/python -m app.app                 # chạy server thật
 ```
 
 > Quy ước: các file tập bạn tự tạo trong `hoc/` (vd `hoc/triage_demo.py`) để **không

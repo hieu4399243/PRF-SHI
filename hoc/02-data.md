@@ -87,7 +87,7 @@ Chạy sẽ thấy 2 ngày tới (trừ CN), mỗi ngày kèm list giờ.
 ---
 
 ## Điểm nâng cao trong file thật
-File [data.py](../data.py) thật có thêm đoạn:
+File [data.py](../app/data.py) thật có thêm đoạn:
 ```python
 DEPARTMENTS, DOCTORS = _load_catalog()
 ```

@@ -4,23 +4,23 @@
 
 ## Thứ tự đọc đề xuất
 
-`README.md` → `docs/system-architecture.md` → `chatbot.py` (nhạc trưởng) →
-`triage.py` (AI) → `booking.py` → `safety.py` → `storage.py`/`data.py`.
+`README.md` → `docs/system-architecture.md` → `app/chatbot.py` (nhạc trưởng) →
+`app/triage.py` (AI) → `app/booking.py` → `app/safety.py` → `app/storage.py`/`app/data.py`.
 
-## Backend (thư mục gốc)
+## Backend (package `app/`)
 
 | File | LOC | Vai trò |
 |------|-----|---------|
-| `app.py` | ~160 | API Flask + trang admin. `resolve_sid()`. Chạy `0.0.0.0:5001 debug=True`. |
-| `chatbot.py` | ~620 | Máy trạng thái hội thoại; session in-memory (`SESSIONS`). |
-| `triage.py` | ~220 | Phân loại triệu chứng → dịch vụ (v1/v2), Q&A dịch vụ, `classify_with_llm()` placeholder. |
-| `safety.py` | ~150 | Guardrails y tế + audit log `audit_log.jsonl`. |
-| `booking.py` | ~250 | Đặt/hủy lịch, chống trùng, sinh mã. |
-| `storage.py` | ~400 | Lớp lưu trữ Postgres ↔ JSON. |
-| `data.py` | ~220 | Danh mục dịch vụ/nha sĩ + khung giờ (seed + nạp DB), `SERVICE_INFO`. |
-| `push.py` | ~96 | Expo Push; fallback `outbox/push_outbox.jsonl`. |
-| `reminder_worker.py` | ~113 | Worker nhắc lịch nền. |
-| `calendar_ics.py` | ~98 | Sinh file `.ics` có lời nhắc. |
+| `app/app.py` | ~160 | API Flask + trang admin. `resolve_sid()`. Chạy `0.0.0.0:5001 debug=True`. |
+| `app/chatbot.py` | ~620 | Máy trạng thái hội thoại; session in-memory (`SESSIONS`). |
+| `app/triage.py` | ~220 | Phân loại triệu chứng → dịch vụ (v1/v2), Q&A dịch vụ, `classify_with_llm()` placeholder. |
+| `app/safety.py` | ~150 | Guardrails y tế + audit log `app/audit_log.jsonl`. |
+| `app/booking.py` | ~250 | Đặt/hủy lịch, chống trùng, sinh mã. |
+| `app/storage.py` | ~400 | Lớp lưu trữ Postgres ↔ JSON. |
+| `app/data.py` | ~220 | Danh mục dịch vụ/nha sĩ + khung giờ (seed + nạp DB), `SERVICE_INFO`. |
+| `app/push.py` | ~96 | Expo Push; fallback `app/outbox/push_outbox.jsonl`. |
+| `app/reminder_worker.py` | ~113 | Worker nhắc lịch nền. |
+| `app/calendar_ics.py` | ~98 | Sinh file `.ics` có lời nhắc. |
 
 ## API endpoints (`app.py`)
 
@@ -60,5 +60,5 @@
 
 ## File sinh ra khi chạy
 
-`appointments.json`, `device_tokens.json`, `audit_log.jsonl`, `outbox/push_outbox.jsonl`
+`app/appointments.json`, `app/device_tokens.json`, `app/audit_log.jsonl`, `app/outbox/push_outbox.jsonl`
 (chế độ JSON — khi có DB thì dữ liệu ở Supabase).

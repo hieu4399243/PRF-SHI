@@ -2,9 +2,9 @@
 
 from datetime import timedelta
 
-import booking
-import push
-import reminder_worker
+from app import booking
+from app import push
+from app import reminder_worker
 
 
 def _valid_appt(code="A001"):

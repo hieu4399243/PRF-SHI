@@ -25,21 +25,21 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 └─────────────────────┘                       └────────────┬─────────────┘
         ▲   push notification (Expo Push)                   │
         └───────────────────────────────────────────────────┘
-                         reminder_worker.py (nhắc lịch/ăn uống)
+                         app/reminder_worker.py (nhắc lịch/ăn uống)
 ```
 
 ## Chức năng (backend)
 
-| Khối                         | File                   | Mô tả                                                                                                                                                                        |
-| ----------------------------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| **Triage engine**       | `triage.py`          | Phân loại triệu chứng răng miệng → đúng**dịch vụ** (chấm điểm từ khóa, có v1/v2; có chỗ cắm LLM Claude).                                             |
-| **Booking**             | `booking.py`         | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu`appointments.json`.                                     |
-| **Safety / guardrails** | `safety.py`          | Phát hiện**cấp cứu** (→ gọi 115), **lọc PII**, chặn **chẩn đoán/kê đơn**, **human handoff**, **audit log** (Nghị định 13/2023). |
-| **Conversational core** | `chatbot.py`         | Máy trạng thái điều phối hội thoại, kết nối các khối.                                                                                                              |
-| **Push**                | `push.py`            | Lưu device token + gửi push qua Expo Push Service.                                                                                                                           |
-| **Reminder worker**     | `reminder_worker.py` | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ).                                                                                                                         |
-| **API server**          | `app.py`             | Flask API cho app native (`/api/start`, `/api/chat`, `/api/register-push`, `/api/ics`).                                                                                |
-| **Dữ liệu**           | `data.py`            | Danh mục**dịch vụ nha khoa**, nha sĩ, khung giờ trống (thay bằng DB trong thực tế).                                                                             |
+| Khối                         | File                         | Mô tả                                                                                                                                                                        |
+| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Triage engine**       | `app/triage.py`               | Phân loại triệu chứng răng miệng → đúng**dịch vụ** (chấm điểm từ khóa, có v1/v2; có chỗ cắm LLM Claude).                                             |
+| **Booking**             | `app/booking.py`              | Đặt lịch hội thoại: chọn dịch vụ → bác sĩ → ngày → giờ trống → xác nhận; tránh trùng slot; lưu `app/appointments.json`.                                     |
+| **Safety / guardrails** | `app/safety.py`               | Phát hiện**cấp cứu** (→ gọi 115), **lọc PII**, chặn **chẩn đoán/kê đơn**, **human handoff**, **audit log** (Nghị định 13/2023). |
+| **Conversational core** | `app/chatbot.py`              | Máy trạng thái điều phối hội thoại, kết nối các khối.                                                                                                              |
+| **Push**                | `app/push.py`                 | Lưu device token + gửi push qua Expo Push Service.                                                                                                                           |
+| **Reminder worker**     | `app/reminder_worker.py`      | Quét lịch hẹn, bắn nhắc lịch (1 ngày / 2 giờ).                                                                                                                         |
+| **API server**          | `app/app.py`                  | Flask API cho app native (`/api/start`, `/api/chat`, `/api/register-push`, `/api/ics`).                                                                                |
+| **Dữ liệu**           | `app/data.py`                 | Danh mục**dịch vụ nha khoa**, nha sĩ, khung giờ trống (thay bằng DB trong thực tế).                                                                             |
 | **Đánh giá AI**      | `eval/`              | `dataset.jsonl` + `evaluate.py` (Precision/Recall/F1, v1 vs v2) + `rubric.md`; báo cáo ở `BAOCAO_DANHGIA.md`.                                                       |
 
 > Giao diện chính là **app native trong `mobile/`** (xem `mobile/README.md`).
@@ -51,7 +51,7 @@ làm API, có **push notification** (xác nhận đặt lịch, nhắc lịch).
 cd /Users/hieutm3/Desktop/PRF
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-.venv/bin/python app.py        # API tại http://0.0.0.0:5000
+.venv/bin/python -m app.app        # API tại http://0.0.0.0:5001
 ```
 
 ## Chạy app native
@@ -68,8 +68,8 @@ Chi tiết: **`mobile/README.md`**.
 ## Chạy worker nhắc lịch
 
 ```bash
-.venv/bin/python reminder_worker.py --watch   # quét mỗi 60s, tự bắn khi tới hạn
-.venv/bin/python reminder_worker.py --test    # gửi thử mọi loại nhắc ngay
+.venv/bin/python -m app.reminder_worker --watch   # quét mỗi 60s, tự bắn khi tới hạn
+.venv/bin/python -m app.reminder_worker --test    # gửi thử mọi loại nhắc ngay
 ```
 
 ## Thử nhanh
@@ -93,14 +93,14 @@ trung thực trong `BAOCAO_DANHGIA.md`.
 
 ## File sinh ra khi chạy
 
-- `appointments.json` — lịch hẹn đã đặt.
-- `audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
+- `app/appointments.json` — lịch hẹn đã đặt.
+- `app/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
 
 ## Thêm vào lịch + nhắc tự động
 
 Sau khi đặt lịch thành công, bệnh nhân có 2 nút:
 
-- **Thêm vào Lịch (.ics)** — tải file `calendar_ics.py` sinh ra, thêm được vào
+- **Thêm vào Lịch (.ics)** — tải file mà `app/calendar_ics.py` sinh ra, thêm được vào
   Lịch iPhone/Mac, Outlook, Google Calendar; kèm **2 lời nhắc** (trước 1 ngày &
   trước 1 giờ) nên app lịch của họ tự **thông báo**. Route: `/api/ics/<mã>`.
 - **Thêm vào Google Calendar** — link mở sẵn form tạo sự kiện trên web.

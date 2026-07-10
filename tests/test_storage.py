@@ -25,7 +25,7 @@ import threading
 
 import pytest
 
-import storage
+from app import storage
 
 
 @pytest.fixture(autouse=True)

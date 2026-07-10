@@ -17,3 +17,17 @@
 {"ts": "2026-07-01T18:36:14", "to": "DEMO-NO-PROJECTID-TOKEN", "title": "✅ Đặt lịch thành công", "body": "Trám răng / Sâu răng - BS. Lê Minh Châu lúc 10:00 ngày Thứ 5, 02/07. Mã: SHI-A01JQN", "data": {"type": "booking_confirmed", "code": "SHI-A01JQN"}}
 {"ts": "2026-07-01T18:37:27", "to": "DEMO-NO-PROJECTID-TOKEN", "title": "✅ Đặt lịch thành công", "body": "Trám răng / Sâu răng - BS. Lê Minh Châu lúc 14:00 ngày Thứ 5, 02/07. Mã: SHI-LMW7OT", "data": {"type": "booking_confirmed", "code": "SHI-LMW7OT"}}
 {"ts": "2026-07-02T14:43:41", "to": "DEMO-NO-PROJECTID-TOKEN", "title": "✅ Đặt lịch thành công", "body": "Trám răng / Sâu răng - BS. Lê Minh Châu lúc 09:30 ngày Thứ 6, 03/07. Mã: SHI-LB6ZD8", "data": {"type": "booking_confirmed", "code": "SHI-LB6ZD8"}}
+{"ts": "2026-07-10T11:08:13", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:08:13", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:25:38", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:25:38", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:31:45", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:31:45", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:39:31", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:39:31", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:40:28", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:40:28", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:44:17", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:44:17", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:45:21", "to": "ExponentPushToken[x]", "title": "Tiêu đề", "body": "Nội dung", "data": {}, "error": "network"}
+{"ts": "2026-07-10T11:45:21", "to": "ExponentPushToken[x]", "title": "title", "body": "body", "data": {}, "error": "network"}

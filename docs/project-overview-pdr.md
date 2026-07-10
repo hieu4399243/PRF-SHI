@@ -26,15 +26,15 @@ miệng → hệ thống **phân loại đúng nhóm dịch vụ nha khoa** (tri
 
 ## 4. Yêu cầu chức năng (đã hiện thực)
 
-1. **Triage** — phân loại triệu chứng → 1 trong 9 nhóm dịch vụ (`triage.py`, v1 có dấu /
+1. **Triage** — phân loại triệu chứng → 1 trong 9 nhóm dịch vụ (`app/triage.py`, v1 có dấu /
    v2 không dấu mặc định). Fallback than phiền chung; trả lời câu hỏi "dịch vụ X là gì".
 2. **Đặt lịch hội thoại** — chọn dịch vụ → bác sĩ → ngày → giờ trống → tên → SĐT → xác nhận
-   (`booking.py`), kiểm tra trùng giờ/trùng SĐT trực tiếp với DB lúc xác nhận.
+   (`app/booking.py`), kiểm tra trùng giờ/trùng SĐT trực tiếp với DB lúc xác nhận.
 3. **Hủy lịch** — tra theo SĐT, chọn lịch, xác nhận (`status='cancelled'`).
 4. **An toàn (guardrails)** — cấp cứu → 115, chặn chẩn đoán/kê đơn, human handoff, ẩn PII,
-   audit log (`safety.py`).
-5. **Nhắc lịch** — worker nền quét lịch, bắn push trước 1 ngày / 2 giờ (`reminder_worker.py`).
-6. **Thêm vào lịch** — sinh file `.ics` (có VALARM) + link Google Calendar (`calendar_ics.py`).
+   audit log (`app/safety.py`).
+5. **Nhắc lịch** — worker nền quét lịch, bắn push trước 1 ngày / 2 giờ (`app/reminder_worker.py`).
+6. **Thêm vào lịch** — sinh file `.ics` (có VALARM) + link Google Calendar (`app/calendar_ics.py`).
 7. **Đánh giá AI** — `eval/evaluate.py` tính Accuracy/Macro-F1 cho v1 & v2.
 
 ## 5. Yêu cầu phi chức năng
@@ -42,8 +42,8 @@ miệng → hệ thống **phân loại đúng nhóm dịch vụ nha khoa** (tri
 | Thuộc tính | Cách đáp ứng hiện tại |
 |-----------|----------------------|
 | **Offline-first / dễ demo** | Không cần DB/LLM vẫn chạy: fallback file JSON + rule-based. |
-| **Lưu trữ bền vững** | Có `DATABASE_URL` → Postgres/Supabase; không thì file JSON (`storage.py`). |
-| **An toàn tính mạng** | Guardrail fail-safe: pattern rỗng/mất DB → dùng seed trong `safety.py`. |
+| **Lưu trữ bền vững** | Có `DATABASE_URL` → Postgres/Supabase; không thì file JSON (`app/storage.py`). |
+| **An toàn tính mạng** | Guardrail fail-safe: pattern rỗng/mất DB → dùng seed trong `app/safety.py`. |
 | **Bảo mật cấu hình** | `SECRET_KEY`, `ADMIN_KEY`, `DATABASE_URL` qua `.env` (không commit). |
 | **Quyền riêng tư** | Ẩn PII trước khi ghi audit log (NĐ 13/2023). |
 

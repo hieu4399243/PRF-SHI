@@ -12,8 +12,8 @@ import secrets
 import string
 from datetime import datetime
 
-import storage
-from data import DOCTORS, DEPARTMENTS, WORK_SLOTS, generate_available_slots
+from . import storage
+from .data import DOCTORS, DEPARTMENTS, WORK_SLOTS, generate_available_slots
 
 
 # LƯU Ý THIẾT KẾ: không còn bảng slot in-memory. Danh sách khung giờ luôn hiển thị

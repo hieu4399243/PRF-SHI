@@ -101,11 +101,11 @@ File thật có thêm các endpoint: `/api/admin/schedule` (lịch làm việc),
 | Nơi | Vai trò |
 |-----|---------|
 | `booking.py` | `all_doctors()`, `query_appointments()`, `doctor_day_schedule()`, `admin_summary()` — **read-only** |
-| `app.py` | 4 route `/api/admin/*` + `/admin` (trang HTML), tất cả sau `_check_admin()` |
-| `templates/admin.html` | Giao diện: nhập khóa → tab **Danh sách lịch hẹn** (lọc) + tab **Lịch làm việc bác sĩ** |
+| `app/app.py` | 4 route `/api/admin/*` + `/admin` (trang HTML), tất cả sau `_check_admin()` |
+| `app/templates/admin.html` | Giao diện: nhập khóa → tab **Danh sách lịch hẹn** (lọc) + tab **Lịch làm việc bác sĩ** |
 | `.env` | `ADMIN_KEY=...` (không có thì dùng khóa demo) |
 
-Mở thử: chạy `app.py` rồi vào `http://127.0.0.1:5001/admin`, nhập khóa `shi-admin-demo`.
+Mở thử: chạy `python -m app.app` rồi vào `http://127.0.0.1:5001/admin`, nhập khóa `shi-admin-demo`.
 
 **Vì sao read-only quan trọng?** Nhóm hàm admin chỉ **đọc** qua `storage`, nên:
 - Không có nguy cơ làm hỏng luồng đặt lịch của bệnh nhân.

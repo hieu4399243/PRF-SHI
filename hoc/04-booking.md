@@ -93,7 +93,7 @@ print("Giờ còn trống ngày đó:", get_available_times("2026-07-01"))  # 08
 ## Bước 4 — File thật khác demo thế nào? (đã đổi thiết kế 02/07)
 
 Bản demo giữ bảng giờ trống trong biến `AVAILABLE` và `remove()` slot khi đặt. File
-[booking.py](../booking.py) thật **từng làm y hệt**, nhưng giờ đã đổi thiết kế:
+[booking.py](../app/booking.py) thật **từng làm y hệt**, nhưng giờ đã đổi thiết kế:
 
 **Không còn bảng slot in-memory — DB là "nguồn chân lý" duy nhất.**
 - `get_available_times(ngay)` trả **đầy đủ** khung giờ theo lịch làm việc, *không* lọc sẵn.

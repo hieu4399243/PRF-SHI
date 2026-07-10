@@ -20,7 +20,7 @@ import urllib.request
 import urllib.error
 from datetime import datetime
 
-import storage
+from . import storage
 
 EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send"
 OUTBOX_DIR = os.path.join(os.path.dirname(__file__), "outbox")

@@ -15,8 +15,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import storage
-from data import DOCTORS
+from app import storage
+from app.data import DOCTORS
 
 # Tên bệnh nhân của các bản ghi test cần dọn (khớp chính xác).
 TEST_PATIENT_NAMES = {"Bệnh nhân Test"}

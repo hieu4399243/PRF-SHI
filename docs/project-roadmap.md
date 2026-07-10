@@ -6,8 +6,8 @@
 - Đặt lịch hội thoại + hủy lịch, chống trùng giờ/SĐT đối chiếu DB.
 - Guardrails an toàn: cấp cứu→115, chặn chẩn đoán, ẩn PII, audit log, human handoff.
 - Nhắc lịch (worker nền) + file `.ics` + link Google Calendar.
-- Push qua Expo Push Service; fallback `outbox/`.
-- Lưu trữ 2 chế độ (Supabase ↔ JSON) qua `storage.py` + script migrate.
+- Push qua Expo Push Service; fallback `app/outbox/`.
+- Lưu trữ 2 chế độ (Supabase ↔ JSON) qua `app/storage.py` + script migrate.
 - Trang admin (`/admin`, `ADMIN_KEY`) xem/hủy lịch.
 - Hệ thống đánh giá AI (`eval/`, Accuracy/Macro-F1, v1 vs v2) + báo cáo.
 - App native Expo + web demo.
@@ -16,9 +16,9 @@
 
 | # | Việc | File | Ghi chú |
 |---|------|------|---------|
-| 1 | Tắt `debug=True`, chạy `gunicorn` | `app.py` | Dev server không dùng cho production. |
-| 2 | Session bền vững (Redis/DB) | `chatbot.py` | `SESSIONS` in-memory → hỏng khi nhiều worker/restart. |
-| 3 | Cấu hình CORS | `app.py` | Khi web client khác origin. |
+| 1 | Tắt `debug=True`, chạy `gunicorn` | `app/app.py` | Dev server không dùng cho production. |
+| 2 | Session bền vững (Redis/DB) | `app/chatbot.py` | `SESSIONS` in-memory → hỏng khi nhiều worker/restart. |
+| 3 | Cấu hình CORS | `app/app.py` | Khi web client khác origin. |
 | 4 | `API_BASE` → URL HTTPS | `mobile/src/config.js` | Bỏ IP LAN khi deploy. |
 | 5 | Bật Row Level Security Supabase | (DB) | Dữ liệu sức khỏe khi mở public. |
 

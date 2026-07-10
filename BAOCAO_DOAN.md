@@ -163,7 +163,7 @@ dữ liệu cá nhân.
 | 4 | **Đặt lịch chống trùng (đối chiếu DB)** | Khung giờ **luôn hiển thị đầy đủ**; tới bước xác nhận mới **đối chiếu trực tiếp DB** (`_confirmed_at`): khung đã có người khác đặt → mời chọn giờ khác; cùng SĐT đã đặt đúng khung → hỏi hủy lịch cũ. Sinh mã `SHI-XXXXXX`, lưu bền vững. DB là nguồn chân lý duy nhất. |
 | 4b | **Thu thập & xác nhận số điện thoại** | Bước `ASK_PHONE` bắt buộc SĐT, có chuẩn hóa/kiểm tra (10 số, chấp nhận `+84`/khoảng trắng); dùng để nhắc lịch và nhận diện đặt trùng. |
 | 5 | **Guardrails an toàn y tế** | Phát hiện cấp cứu → gọi 115; chặn yêu cầu chẩn đoán/kê đơn; human handoff; gắn disclaimer. Bộ pattern quản lý online ở DB (`safety_patterns`) nhưng **fail-safe** (rỗng/mất DB → dùng seed code). |
-| 6 | **Bảo vệ dữ liệu cá nhân** | Ẩn PII (SĐT, email, CCCD) và ghi **audit log** `audit_log.jsonl` cho mỗi lượt hội thoại. |
+| 6 | **Bảo vệ dữ liệu cá nhân** | Ẩn PII (SĐT, email, CCCD) và ghi **audit log** `app/audit_log.jsonl` cho mỗi lượt hội thoại. |
 | 7 | **Push notification (Expo)** | Bắn thông báo xác nhận đặt lịch + nhắc lịch, miễn phí, không cần API key. |
 | 8 | **Worker nhắc lịch** | Nhắc trước **1 ngày**, **tối hôm trước** (chăm sóc), **2 giờ**; mỗi loại gửi đúng 1 lần. |
 | 9 | **Xuất lịch `.ics` + Google Calendar** | Thêm lịch hẹn vào iPhone/Outlook/Google, có chuông nhắc (VALARM), không cần OAuth. |
@@ -265,20 +265,24 @@ phép hủy — trả lời cho câu hỏi "chatbot có dùng cho admin/bác sĩ
 
 ```
 PRF-SHI/
-├── app.py                 # Flask app + routes (bệnh nhân + admin), chạy 0.0.0.0:5001
-├── chatbot.py             # Máy trạng thái hội thoại (SESSIONS in-memory)
-├── triage.py              # "Hàm lượng AI": phân loại triệu chứng → dịch vụ (v1/v2)
-├── safety.py              # Guardrails: cấp cứu, PII, chặn chẩn đoán, audit log
-├── booking.py             # Đặt lịch, hủy lịch, chống trùng + truy vấn cho admin/bác sĩ
-├── data.py                # 9 nhóm dịch vụ + bác sĩ + khung giờ + mô tả (SERVICE_INFO)
-├── storage.py             # Lớp lưu trữ kép: Postgres/Supabase ↔ file JSON
-├── push.py                # Gửi push qua Expo Push Service
-├── reminder_worker.py     # Quét lịch, bắn nhắc (--once/--watch/--test)
-├── calendar_ics.py        # Sinh file .ics (VALARM) + link Google Calendar
+├── app/
+│   ├── app.py                 # Flask app + routes (bệnh nhân + admin), chạy 0.0.0.0:5001
+│   ├── chatbot.py             # Máy trạng thái hội thoại (SESSIONS in-memory)
+│   ├── triage.py              # "Hàm lượng AI": phân loại triệu chứng → dịch vụ (v1/v2)
+│   ├── safety.py              # Guardrails: cấp cứu, PII, chặn chẩn đoán, audit log
+│   ├── booking.py             # Đặt lịch, hủy lịch, chống trùng + truy vấn cho admin/bác sĩ
+│   ├── data.py                # 9 nhóm dịch vụ + bác sĩ + khung giờ + mô tả (SERVICE_INFO)
+│   ├── storage.py             # Lớp lưu trữ kép: Postgres/Supabase ↔ file JSON
+│   ├── push.py                # Gửi push qua Expo Push Service
+│   ├── reminder_worker.py     # Quét lịch, bắn nhắc (--once/--watch/--test)
+│   ├── calendar_ics.py        # Sinh file .ics (VALARM) + link Google Calendar
+│   ├── templates/
+│   │   ├── index.html         #   Web demo cho bệnh nhân
+│   │   └── admin.html         #   Trang quản trị cho admin/bác sĩ
+│   ├── appointments.json / device_tokens.json   # lưu trữ JSON (fallback)
+│   ├── audit_log.jsonl        # nhật ký hội thoại (đã ẩn PII)
+│   └── outbox/push_outbox.jsonl  # push khi chưa có thiết bị thật
 ├── requirements.txt
-├── templates/
-│   ├── index.html         #   Web demo cho bệnh nhân
-│   └── admin.html         #   Trang quản trị cho admin/bác sĩ
 ├── eval/                  # Đánh giá AI
 │   ├── dataset.jsonl      #   90 câu đơn-ý gán nhãn
 │   ├── dataset_complex.jsonl  # 20 câu ghép nhiều ý (label chính + accept)
@@ -286,20 +290,17 @@ PRF-SHI/
 │   ├── results.md         #   kết quả
 │   └── rubric.md          #   tiêu chí định tính
 ├── scripts/migrate_to_supabase.py
-├── mobile/                # App native Expo (SDK 54)
-│   ├── App.js             #   UI chat
-│   └── src/{api,config,notify,usePush,calendar,html}.js
-├── appointments.json / device_tokens.json   # lưu trữ JSON (fallback)
-├── audit_log.jsonl        # nhật ký hội thoại (đã ẩn PII)
-└── outbox/push_outbox.jsonl  # push khi chưa có thiết bị thật
+└── mobile/                # App native Expo (SDK 54)
+    ├── App.js             #   UI chat
+    └── src/{api,config,notify,usePush,calendar,html}.js
 ```
 
 **Cách chạy local (3 terminal):**
 ```bash
 # Backend (cổng 5001 vì macOS chiếm 5000 cho AirPlay)
-PORT=5001 ./.venv/bin/python app.py
+PORT=5001 ./.venv/bin/python -m app.app
 # Worker nhắc lịch (tùy chọn)
-./.venv/bin/python reminder_worker.py --watch
+./.venv/bin/python -m app.reminder_worker --watch
 # App native
 cd mobile && npx expo start -c
 ```

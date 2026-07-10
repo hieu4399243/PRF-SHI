@@ -17,7 +17,7 @@ Cấu trúc tách rời nên có thể thay `classify_symptoms()` bằng một l
 
 import re
 import unicodedata
-from data import DEPARTMENTS
+from .data import DEPARTMENTS
 
 DEFAULT_VERSION = "v2"  # phiên bản dùng trong sản phẩm (chatbot)
 

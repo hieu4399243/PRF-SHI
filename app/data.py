@@ -183,7 +183,7 @@ _SEED_DOCTORS = {
 # ---------------------------------------------------------------------------
 def _load_catalog():
     try:
-        import storage
+        from . import storage
         if storage.USE_DB:
             sv = storage.list_services()
             dr = storage.list_doctors()

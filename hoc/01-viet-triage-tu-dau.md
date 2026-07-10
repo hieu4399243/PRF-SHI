@@ -310,7 +310,7 @@ File thật khác bản demo này ở chỗ:
    Mẹo: so khớp bằng **tập token** đã bỏ các từ quá chung ("răng", "khám", "gì"…),
    ưu tiên khớp có dấu trước ("trồng" ≠ "trong") rồi mới thử bản không dấu.
 
-Đối chiếu bản bạn vừa viết với [triage.py](../triage.py) — bạn sẽ thấy **cùng một ý tưởng**,
+Đối chiếu bản bạn vừa viết với [triage.py](../app/triage.py) — bạn sẽ thấy **cùng một ý tưởng**,
 chỉ "mặc áo chỉnh tề" hơn.
 
 ---

@@ -7,9 +7,9 @@
 
 ```bash
 # 1. Backend
-PORT=5001 ./.venv/bin/python app.py            # API tại http://0.0.0.0:5001
+PORT=5001 ./.venv/bin/python -m app.app            # API tại http://0.0.0.0:5001
 # 2. Worker nhắc lịch (tùy chọn)
-./.venv/bin/python reminder_worker.py --watch  # quét mỗi 60s
+./.venv/bin/python -m app.reminder_worker --watch  # quét mỗi 60s
 # 3. App native
 cd mobile && npx expo start -c                 # quét QR bằng Expo Go
 ```
@@ -33,7 +33,7 @@ Sao chép `.env.example` → `.env`. **Không commit `.env`.**
 | Mức | Cách làm |
 |-----|----------|
 | **Demo nhanh** | Giữ máy bật + `ngrok http 5001` (hoặc `npx expo start --tunnel`) → link tạm. |
-| **Backend cloud** | Deploy Render/Railway/Fly.io: thêm `gunicorn` vào `requirements.txt`, start `gunicorn app:app`, set `SECRET_KEY`, gắn DB/volume. Đổi `API_BASE` → URL HTTPS. |
+| **Backend cloud** | Deploy Render/Railway/Fly.io: thêm `gunicorn` vào `requirements.txt`, start `gunicorn app.app:app`, set `SECRET_KEY`, gắn DB/volume. Đổi `API_BASE` → URL HTTPS. |
 | **App cài thật** | Build EAS (`eas build -p android` → AAB/APK; `eas build -p ios`). Không qua Expo Go. |
 
 ## 4. Lên "chợ" (App Store / Google Play)
@@ -41,7 +41,7 @@ Sao chép `.env.example` → `.env`. **Không commit `.env`.**
 - **Google Play:** `eas build -p android` → AAB; Play Console **25 USD trả 1 lần**.
 - **App Store:** `eas build -p ios` + **Apple Developer 99 USD/năm**, `eas submit`. Review app
   **y tế** khắt khe → cần disclaimer "không thay thế tư vấn y khoa" + privacy policy
-  (hợp với `safety.py`).
+  (hợp với `app/safety.py`).
 - Điều kiện: backend đã ở cloud (HTTPS công khai, không còn IP LAN); chuẩn bị icon/splash,
   `app.json` (bundle id, version), xử lý dữ liệu sức khỏe (NĐ 13/2023 — đã có audit log).
 
@@ -54,14 +54,14 @@ APK/link cài trực tiếp.
 cp .env.example .env                                 # điền DATABASE_URL + SECRET_KEY
 ./.venv/bin/pip install -r requirements.txt          # đã có psycopg + python-dotenv
 ./.venv/bin/python scripts/migrate_to_supabase.py    # tạo bảng + seed danh mục (idempotent)
-PORT=5001 ./.venv/bin/python app.py                  # in "[storage] ... Postgres/Supabase"
+PORT=5001 ./.venv/bin/python -m app.app              # in "[storage] ... Postgres/Supabase"
 ```
 Chi tiết bảng, guardrail online, quản trị danh mục: [database-storage-guide.md](database-storage-guide.md).
 
 ## 6. Khoảng trống trước khi lên production
 
-1. `debug=True` + dev server (`app.py`) → dùng `gunicorn`, tắt debug.
-2. **Session hội thoại vẫn in-memory** (`chatbot.SESSIONS`) → cần Redis/DB khi nhiều worker.
+1. `debug=True` + dev server (`app/app.py`) → dùng `gunicorn`, tắt debug.
+2. **Session hội thoại vẫn in-memory** (`app/chatbot.SESSIONS`) → cần Redis/DB khi nhiều worker.
 3. **CORS** chưa cấu hình — thêm khi web client khác origin.
 4. `API_BASE` là IP LAN → đổi sang URL HTTPS công khai khi deploy.
 5. Bật Row Level Security trên Supabase khi mở public (dữ liệu sức khỏe).

@@ -2,8 +2,8 @@
 
 import uuid
 
-import chatbot
-import safety
+from app import chatbot
+from app import safety
 
 
 def _new_session_id():

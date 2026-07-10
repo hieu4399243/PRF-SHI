@@ -25,7 +25,7 @@ def add_appointment(appt):
 
 Thử xem đang ở chế độ nào:
 ```bash
-./.venv/bin/python -c "import storage; print('DB' if storage.USE_DB else 'JSON')"
+./.venv/bin/python -c "import app.storage; print('DB' if app.storage.USE_DB else 'JSON')"
 ```
 
 **Hiện có 5 bảng** (cập nhật 02/07): `appointments`, `device_tokens`, `services`,
@@ -81,8 +81,8 @@ def scan_once():
 ```
 Chạy:
 ```bash
-./.venv/bin/python reminder_worker.py --test    # gửi thử mọi nhắc ngay
-./.venv/bin/python reminder_worker.py --watch   # quét mỗi 60 giây (chạy nền)
+./.venv/bin/python -m app.reminder_worker --test    # gửi thử mọi nhắc ngay
+./.venv/bin/python -m app.reminder_worker --watch   # quét mỗi 60 giây (chạy nền)
 ```
 **Giải thích:**
 - `--watch` dùng `while True: ...; time.sleep(60)` → cứ 60 giây quét 1 lần.

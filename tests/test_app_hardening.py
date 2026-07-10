@@ -2,7 +2,7 @@
 
 import json
 
-import app
+from app import app
 
 
 def _client():

@@ -85,7 +85,7 @@ print("Mở hoc/push_outbox_demo.jsonl để xem token giả")
 
 ## Bước 3 — Gửi thật ở file thực (chỉ cần hiểu ý)
 
-File [push.py](../push.py) thật, phần token thật, gửi qua HTTP:
+File [push.py](../app/push.py) thật, phần token thật, gửi qua HTTP:
 ```python
 import urllib.request
 req = urllib.request.Request(EXPO_PUSH_URL, data=..., headers=..., method="POST")

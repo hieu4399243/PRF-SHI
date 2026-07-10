@@ -4,10 +4,10 @@ Dự án có **2 chế độ lưu trữ**, tự chọn theo biến môi trườn
 
 | Chế độ | Khi nào | Dữ liệu nằm ở |
 |---|---|---|
-| **File JSON (mặc định)** | Không đặt `DATABASE_URL` | `appointments.json`, `device_tokens.json` (local) |
+| **File JSON (mặc định)** | Không đặt `DATABASE_URL` | `app/appointments.json`, `app/device_tokens.json` (local) |
 | **Postgres / Supabase** | Có `DATABASE_URL` | Bảng `appointments`, `device_tokens` trên cloud, quản lý qua dashboard Supabase |
 
-Cùng một code, đổi chế độ **không phải sửa nghiệp vụ** — xem `storage.py`.
+Cùng một code, đổi chế độ **không phải sửa nghiệp vụ** — xem `app/storage.py`.
 
 > ⚠️ Lưu ý: `sqlitebrowser.org` (DB Browser for SQLite) là **phần mềm xem/sửa file
 > `.sqlite` trên máy**, KHÔNG phải dịch vụ lưu trữ online. Để có "kho quản lý data
@@ -45,7 +45,7 @@ Script tự tạo bảng (nếu chưa có) và đẩy dữ liệu từ JSON lên
 
 ### 6. Chạy app như bình thường
 ```bash
-PORT=5001 ./.venv/bin/python app.py
+PORT=5001 ./.venv/bin/python -m app.app
 # Khởi động sẽ in: [storage] Chế độ lưu trữ: Postgres/Supabase
 ```
 Mở **Supabase → Table editor** để xem/sửa lịch hẹn & token online.
@@ -76,9 +76,9 @@ CREATE UNIQUE INDEX ux_appointments_doctor_slot
   ON appointments (doctor_id, date, time) WHERE status = 'confirmed';
 ```
 
-**JSON mode:** `storage.py` giữ process-wide lock (`_JSON_LOCK`) quanh toàn bộ thao tác đọc-sửa-ghi,
+**JSON mode:** `app/storage.py` giữ process-wide lock (`_JSON_LOCK`) quanh toàn bộ thao tác đọc-sửa-ghi,
 phát hiện trùng slot TRƯỚC khi ghi file (hàm `add_appointment()` quét danh sách hiện có). Khi phát hiện trùng,
-ném exception `storage.SlotTakenError` — `booking.py` bắt nó tương tự như `psycopg.errors.UniqueViolation`
+ném exception `app/storage.SlotTakenError` — `app/booking.py` bắt nó tương tự như `psycopg.errors.UniqueViolation`
 ở Postgres, báo lỗi cho người dùng. **Lưu ý:** bảo vệ này chỉ hoạt động trong 1 process; nếu chạy 2+ worker
 process cùng JSON → vẫn có race condition (dùng Postgres để multi-process, hoặc 1 process + queue).
 
@@ -86,7 +86,7 @@ Lưu ý chung: **khoá theo (doctor_id, date, time)** — 2 bác sĩ khác nhau 
 cùng ngày mà không xung đột. Chỉ **cùng bác sĩ** thì mới bị chặn.
 
 Nếu index Postgres không thể tạo (vd. dữ liệu prod đã có 2+ lịch trùng), app in cảnh báo tại
-khởi động nhưng vẫn chạy; lúc này `booking.py` dựa vào `psycopg.errors.UniqueViolation`
+khởi động nhưng vẫn chạy; lúc này `app/booking.py` dựa vào `psycopg.errors.UniqueViolation`
 để bắt race và báo lỗi cho người dùng thay vì im lặng tạo lịch trùng.
 
 ## Guardrail an toàn (`safety_patterns`) — có fallback
@@ -95,15 +95,15 @@ khởi động nhưng vẫn chạy; lúc này `booking.py` dựa vào `psycopg.e
 - App nạp lúc khởi động (`safety._load_patterns`); đổi online xong cần **restart backend**.
 - ⚠️ **Khác danh mục ở chỗ luôn fail-safe:** đây là dữ liệu an toàn tính mạng, nên nếu
   không có DB / một nhóm bị rỗng / lỗi kết nối → nhóm đó **tự dùng seed baseline** trong
-  `safety.py` (guardrail không bao giờ biến mất). DB chỉ để **mở rộng**, không thể làm trống.
+  `app/safety.py` (guardrail không bao giờ biến mất). DB chỉ để **mở rộng**, không thể làm trống.
 
 ## Quản trị danh mục dịch vụ / nha sĩ online
-- Danh mục (services, doctors) đã được seed lên Supabase từ `data._SEED_DEPARTMENTS` /
+- Danh mục (services, doctors) đã được seed lên Supabase từ `app/data._SEED_DEPARTMENTS` /
   `_SEED_DOCTORS`. Sửa trực tiếp trong **Supabase → Table editor** (tên dịch vụ, mô tả,
   **keywords** dùng cho triage, thêm/bớt nha sĩ).
-- App **nạp danh mục từ DB lúc khởi động** (`data._load_catalog`). Đổi online xong cần
+- App **nạp danh mục từ DB lúc khởi động** (`app/data._load_catalog`). Đổi online xong cần
   **restart backend** để có hiệu lực.
-- Không có `DATABASE_URL` (hoặc DB lỗi) -> tự dùng dict tĩnh trong `data.py` → triage và
+- Không có `DATABASE_URL` (hoặc DB lỗi) -> tự dùng dict tĩnh trong `app/data.py` → triage và
   `eval/` vẫn chạy offline.
 - ⚠️ `keywords` là "hàm lượng AI" của triage. Sửa keywords trên DB nên **chạy lại
   `eval/evaluate.py`** để kiểm tra chất lượng không tụt.

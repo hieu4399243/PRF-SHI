@@ -8,28 +8,28 @@ Quy ước rút ra từ mã hiện có. Giữ nhất quán khi thêm/sửa.
   (`DEPARTMENTS`, `DOCTORS`, `SESSIONS`, `DEFAULT_VERSION`).
 - **JS (mobile)**: `camelCase`, file `mobile/src/*.js` theo kebab/camel hiện có.
 - Comment & chuỗi giao tiếp người dùng viết **tiếng Việt** (đúng bối cảnh dự án).
-- Docstring module đầu file mô tả vai trò (xem `triage.py`, `storage.py`).
+- Docstring module đầu file mô tả vai trò (xem `app/triage.py`, `app/storage.py`).
 
 ## Kiến trúc & ranh giới
 
 - **Một khối một việc:** triage / booking / safety / push / storage độc lập, không gọi chéo
   ngoài dependency đã khai báo (xem bảng phụ thuộc trong [codebase-summary.md](codebase-summary.md)).
-- **Tách logic khỏi lưu trữ:** nghiệp vụ gọi `storage.py`, không truy cập trực tiếp file/DB.
-- **Danh mục qua `data.py`**, không hardcode danh sách dịch vụ/nha sĩ ở nơi khác.
-- `chatbot.py` là nơi duy nhất giữ state machine; các khối khác thuần hàm, dễ test riêng.
+- **Tách logic khỏi lưu trữ:** nghiệp vụ gọi `app/storage.py`, không truy cập trực tiếp file/DB.
+- **Danh mục qua `app/data.py`**, không hardcode danh sách dịch vụ/nha sĩ ở nơi khác.
+- `app/chatbot.py` là nơi duy nhất giữ state machine; các khối khác thuần hàm, dễ test riêng.
 
 ## Nguyên tắc an toàn & đồng thời (bắt buộc)
 
-- **Guardrail fail-safe:** mất DB / pattern rỗng → dùng seed baseline trong `safety.py`.
+- **Guardrail fail-safe:** mất DB / pattern rỗng → dùng seed baseline trong `app/safety.py`.
   Không được để guardrail biến mất vì lỗi cấu hình.
 - **Ẩn PII trước khi ghi** audit log. Không log số điện thoại/tên thô. Audit log được
   bảo vệ bằng `_AUDIT_LOCK` + tự động xoay vòng tại 5MB (giữ 1 backup generation).
 - **Không thêm luồng chẩn đoán/kê đơn**; giữ ưu tiên EMERGENCY/HANDOFF cao nhất mọi state.
-- **Concurrency:** `chatbot.py` giữ `threading.Lock` per session (`session["_lock"]`),
-  serialize các request cho cùng user. `storage.py` dùng process-wide `_JSON_LOCK` cho tất cả
+- **Concurrency:** `app/chatbot.py` giữ `threading.Lock` per session (`session["_lock"]`),
+  serialize các request cho cùng user. `app/storage.py` dùng process-wide `_JSON_LOCK` cho tất cả
   read-modify-write JSON (atomic writes via temp file + rename, chặn race condition slot booking).
   Khi lỗi concurrency: Postgres ném `psycopg.errors.UniqueViolation`, JSON mode ném
-  `storage.SlotTakenError` hoặc `storage.DuplicateCodeError` — `booking.py` bắt cả 2.
+  `app.storage.SlotTakenError` hoặc `app.storage.DuplicateCodeError` — `app/booking.py` bắt cả 2.
 
 ## Cấu hình & bí mật
 
@@ -51,7 +51,7 @@ Quy ước rút ra từ mã hiện có. Giữ nhất quán khi thêm/sửa.
 
 ## Test
 
-- Dùng `pytest` (xem `requirements.txt`). Test file nằm trong `tests/` cùng cấp với `app.py`.
+- Dùng `pytest` (xem `requirements.txt`). Test file nằm trong `tests/` cùng cấp với `app/`.
 - Chạy tất cả test: `./.venv/bin/python -m pytest tests/ -v` (hoặc `pytest tests/ -v` nếu venv đã active).
 - Mỗi khối có thể test độc lập: `pytest tests/test_safety.py`, `pytest tests/test_booking.py`, v.v.
 - Chạy test lại **trước khi commit** khi sửa code liên quan.

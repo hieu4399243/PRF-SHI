@@ -1,6 +1,6 @@
 """Test H6 (khoá query string bị bỏ) + H7 (cảnh báo secret/admin key mặc định)."""
 
-import app
+from app import app
 
 
 def _client():

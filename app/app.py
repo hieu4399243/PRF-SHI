@@ -17,11 +17,11 @@ import uuid
 from collections import OrderedDict
 from flask import Flask, render_template, request, jsonify, session, Response, abort
 
-import chatbot
-import booking
-import calendar_ics
-import push
-import storage
+from . import chatbot
+from . import booking
+from . import calendar_ics
+from . import push
+from . import storage
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB — đủ rộng cho tin nhắn text, chặn DoS

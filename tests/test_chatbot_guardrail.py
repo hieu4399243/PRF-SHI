@@ -2,7 +2,7 @@
 
 import pytest
 
-import chatbot
+from app import chatbot
 
 
 @pytest.fixture(autouse=True)
