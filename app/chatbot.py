@@ -1,12 +1,4 @@
-"""
-Conversational core — máy trạng thái điều phối hội thoại của AI Health Assistant.
 
-Kết nối 3 khối: triage (phân khoa), booking (đặt lịch) và safety (guardrails).
-Mỗi phiên (session) giữ trạng thái riêng để dẫn dắt bệnh nhân qua các bước:
-    GREET -> TRIAGE -> CONFIRM_DEPT -> PICK_DOCTOR -> PICK_DATE
-          -> PICK_TIME -> ASK_NAME -> ASK_PHONE -> CONFIRM_BOOKING -> DONE
-Bất kỳ lúc nào, guardrails (cấp cứu / handoff / chặn chẩn đoán) đều được ưu tiên.
-"""
 
 import time
 import threading
@@ -15,19 +7,9 @@ from collections import OrderedDict
 from . import triage
 from . import booking
 from . import safety
+from . import nlu
 
-# Bộ nhớ phiên (in-memory). Sản phẩm thật nên dùng Redis/DB.
-#
-# OrderedDict được dùng làm cấu trúc LRU: mỗi lần một session được truy cập
-# (get_session) hoặc reset (reset_session), nó được đưa xuống cuối (move_to_end)
-# để đánh dấu "vừa hoạt động gần nhất". Khi số session chạm trần _MAX_SESSIONS,
-# session ở đầu (lâu-không-hoạt-động-nhất) bị loại bỏ trước.
-#
-# LƯU Ý: _MAX_SESSIONS chỉ giới hạn bộ nhớ TRONG 1 PROCESS. Nếu sau này deploy
-# nhiều worker process (vd `gunicorn --workers N`, N > 1), mỗi worker giữ
-# SESSIONS riêng của nó -> trần bộ nhớ thực tế nhân lên theo số worker. Deploy
-# nhiều THREAD trong 1 process (vd `--workers 1 --threads N`) không bị ảnh
-# hưởng vì đã có _SESSIONS_LOCK bên dưới.
+
 SESSIONS = OrderedDict()
 
 _MAX_SESSIONS = 2000
@@ -46,6 +28,10 @@ def _new_session(reuse_lock=None):
         "patient_name": "",
         "patient_phone": "",
         "candidates": [],  # các khoa ứng viên từ triage
+        # Đề xuất đổi dịch vụ đang CHỜ người dùng xác nhận (vd. gọi tên bác sĩ của
+        # dịch vụ khác). Chỉ ghi đè dept_code/doctor_id khi họ bấm đồng ý.
+        "pending_dept_code": None,
+        "pending_doctor_id": None,
         "cancel_phone": "",  # SĐT dùng khi tra cứu để hủy lịch
         "cancel_code": None,  # mã lịch hẹn đang chờ xác nhận hủy
         "resume_booking": False,  # hủy lịch trùng xong thì đặt tiếp lịch đang dở
@@ -105,6 +91,23 @@ def reset_session(session_id: str):
             return
         _evict_if_full_locked()
         SESSIONS[session_id] = _new_session()
+
+
+# Các bước có thể "dừng giữa chừng" (xem _stop_booking).
+_STOPPABLE_STATES = {"TRIAGE", "CONFIRM_DEPT", "PICK_DOCTOR", "PICK_DATE",
+                     "PICK_TIME", "CONFIRM_BOOKING"}
+
+
+def _stop_booking(message):
+    """Người dùng dừng đặt lịch. Nếu vì đã đỡ thì chúc mừng, kèm dặn dò an toàn."""
+    if nlu.recovered(message):
+        text = ("Rất mừng vì bạn đã đỡ hơn 💚 Vậy mình <b>không đặt lịch</b> nữa nhé.<br>"
+                "Nếu triệu chứng quay lại hoặc kéo dài, bạn nên đi khám để nha sĩ kiểm "
+                "tra trực tiếp — gõ <b>“làm lại”</b> là mình đặt lịch ngay.")
+    else:
+        text = ("Được, mình <b>dừng việc đặt lịch</b> ở đây nhé. Khi nào cần, bạn gõ "
+                "<b>“làm lại”</b> để bắt đầu lại.")
+    return _reply(text, state="DONE")
 
 
 def _reply(text, options=None, state=None, done=False, **extra):
@@ -184,6 +187,17 @@ def handle_message(session_id: str, raw_message: str):
                          {"state": resp["state"], "intent": "cancel"})
             return resp
 
+        # --- Ý định DỪNG ("thôi tôi không bị nữa", "hết đau rồi", "để hôm khác") ---
+        # Chỉ nhận ở các bước đang dẫn dắt đặt lịch. KHÔNG nhận ở ASK_NAME/ASK_PHONE
+        # (câu trả lời ở đó là tên/SĐT, không phải ý định) và ở luồng CANCEL_*
+        # (nơi "thôi" đã mang nghĩa "không hủy nữa").
+        if sess["state"] in _STOPPABLE_STATES and nlu.wants_stop(message):
+            resp = _stop_booking(message)
+            sess["state"] = resp["state"]
+            safety.audit(session_id, "bot", resp["reply"],
+                         {"state": resp["state"], "intent": "stop"})
+            return resp
+
         # --- Câu hỏi thông tin về dịch vụ ("X là khám gì / là gì / gồm gì") ---
         # Chỉ nhận ở các bước nhập tự do (tránh cướp lượt khi đang bấm chọn giờ/nhập tên).
         if sess["state"] in {"TRIAGE", "CONFIRM_DEPT", "DONE"}:
@@ -210,7 +224,14 @@ def handle_message(session_id: str, raw_message: str):
         # --- Định tuyến theo trạng thái ---
         state = sess["state"]
         if state == "GREET":
-            resp = greeting()
+            # start() luôn đặt state=TRIAGE, nên GREET ở đây nghĩa là phiên đã MẤT:
+            # server restart (SESSIONS in-memory), hết TTL, hoặc request rơi vào
+            # worker khác. Đừng NUỐT tin nhắn của người dùng — nếu nó đã là mô tả
+            # triệu chứng thì triage luôn, chỉ chào lại khi thật sự không hiểu.
+            if triage.classify_symptoms(message) or triage.mentions_dental_discomfort(message):
+                resp = _do_triage(sess, message)
+            else:
+                resp = greeting()
         elif state == "TRIAGE":
             resp = _do_triage(sess, message)
         elif state == "CONFIRM_DEPT":
@@ -263,6 +284,20 @@ def _do_triage(sess, message):
     conf = triage.confidence_level(results)
 
     if conf == "low":
+        # Người dùng PHỦ ĐỊNH triệu chứng ("tôi không bị đau răng") -> không được
+        # gợi ý đúng cái dịch vụ họ vừa loại trừ; ghi nhận rồi hỏi lại cho đúng ý.
+        negated = triage.negated_matches(message)
+        if negated:
+            return _reply(
+                diag_note + "Mình ghi nhận bạn <b>không</b> gặp vấn đề đó. "
+                "Vậy hiện tại bạn đang khó chịu ở đâu, cảm giác thế nào? "
+                "<i>(hoặc bạn chỉ muốn đi khám kiểm tra định kỳ?)</i>",
+                options=[
+                    {"label": "🦷 Khám tổng quát / cạo vôi", "value": "kham_tong_quat"},
+                    {"label": "🔁 Mô tả triệu chứng khác", "value": "redo"},
+                ],
+                state="CONFIRM_DEPT",
+            )
         # Không trúng từ khóa dịch vụ cụ thể, NHƯNG câu vẫn cho thấy vấn đề răng
         # miệng (bộ phận + cảm giác khó chịu) -> đưa lựa chọn có cấu trúc để chốt.
         if triage.mentions_dental_discomfort(message):
@@ -340,48 +375,283 @@ def _describe_service(sess, code, diag_note=""):
     )
 
 
+def _service_catalog(sess, prefix=""):
+    """Trả lời "còn dịch vụ nào khác không?" — liệt kê TOÀN BỘ danh mục để chọn."""
+    from .data import DEPARTMENTS
+    lines = "<br>".join(f"• <b>{d['name']}</b> <span class='muted'>— {d['desc']}</span>"
+                        for d in DEPARTMENTS.values())
+    options = [{"label": d["name"], "value": code} for code, d in DEPARTMENTS.items()]
+    options.append({"label": "🔁 Mô tả lại triệu chứng", "value": "redo"})
+    return _reply(
+        prefix + f"Phòng khám có <b>{len(DEPARTMENTS)} nhóm dịch vụ</b>:<br>{lines}<br><br>"
+        "Bạn muốn dùng dịch vụ nào? (hoặc mô tả triệu chứng để mình gợi ý giúp)",
+        options=options,
+        state="CONFIRM_DEPT",
+    )
+
+
 def _confirm_dept(sess, message):
     low = message.lower()
-    if low in {"no", "redo", "mô tả lại", "không"}:
+
+    # "còn dịch vụ nào khác không?" -> LIỆT KÊ danh mục, đừng lặp lại hướng dẫn chọn.
+    if nlu.asks_other_service(message):
+        return _service_catalog(sess)
+
+    # Đang chờ xác nhận ĐỔI dịch vụ (vd. vừa gọi tên bác sĩ của dịch vụ khác).
+    pending = sess.get("pending_dept_code")
+    if pending:
+        sess["pending_dept_code"] = None
+        if low in {"yes", "confirm"} or nlu.is_affirmative(message):
+            sess["dept_code"] = pending
+            return _advance_after_dept(sess)
+        if (low == "back" or nlu.is_negative(message)) and sess.get("dept_code"):
+            sess["pending_doctor_id"] = None
+            return _start_doctor_pick(sess, prefix="Được, mình giữ dịch vụ cũ. ")
+        sess["pending_doctor_id"] = None  # gõ thứ khác -> xử lý như bình thường
+
+    if low in {"redo", "mô tả lại"} or nlu.is_negative(message):
         return _reply("Không sao, bạn mô tả lại triệu chứng giúp mình nhé.", state="TRIAGE")
 
-    if low == "yes" and sess["dept_code"]:
-        return _start_doctor_pick(sess)
+    if (low == "yes" or nlu.is_affirmative(message)) and sess["dept_code"]:
+        return _advance_after_dept(sess)
 
     # message có thể là mã dịch vụ (từ nút bấm) hoặc tên dịch vụ.
     from .data import DEPARTMENTS
     for code, dept in DEPARTMENTS.items():
         if low == code or dept["name"].lower() in low:
             sess["dept_code"] = code
-            return _start_doctor_pick(sess)
+            return _advance_after_dept(sess)
 
-    return _reply("Bạn vui lòng chọn một dịch vụ ở các nút bên trên, hoặc gõ tên dịch vụ nhé.",
-                  state="CONFIRM_DEPT")
+    # Không bấm nút mà MÔ TẢ TIẾP triệu chứng ("răng tôi còn chảy máu chân răng nữa")
+    # -> triage lại trên câu mới thay vì bắt bấm nút.
+    if triage.classify_symptoms(message) or triage.mentions_dental_discomfort(message) \
+            or triage.negated_matches(message):
+        return _do_triage(sess, message)
+
+    options = [{"label": r["name"], "value": r["code"]}
+               for r in sess.get("candidates", [])[:3]]
+    options.append({"label": "📋 Xem tất cả dịch vụ", "value": "còn dịch vụ nào khác"})
+    options.append({"label": "🔁 Mô tả lại triệu chứng", "value": "redo"})
+    return _reply(
+        "Bạn vui lòng chọn một dịch vụ ở các nút bên trên, gõ <b>tên dịch vụ</b>, hoặc "
+        "<b>mô tả lại triệu chứng</b> nhé. Nếu không cần đặt lịch nữa, gõ <b>“thôi”</b>.",
+        options=options,
+        state="CONFIRM_DEPT")
+
+
+def _advance_after_dept(sess):
+    """Sau khi chốt dịch vụ: nếu đã có bác sĩ "đặt trước" (người dùng gọi tên bác sĩ
+    của dịch vụ đó) và bác sĩ này thuộc đúng dịch vụ -> xếp luôn, khỏi hỏi lại."""
+    pending_doc = sess.get("pending_doctor_id")
+    sess["pending_doctor_id"] = None
+    if pending_doc:
+        for d in booking.get_doctors(sess["dept_code"]):
+            if d["id"] == pending_doc:
+                sess["doctor_id"] = d["id"]
+                return _start_date_pick(
+                    sess, prefix=f"Đã chọn <b>{d['name']}</b>. ")
+    return _start_doctor_pick(sess)
 
 
 # ---------------------------------------------------------------------------
 # BƯỚC ĐẶT LỊCH
 # ---------------------------------------------------------------------------
-def _start_doctor_pick(sess):
+def _start_doctor_pick(sess, prefix=""):
     doctors = booking.get_doctors(sess["dept_code"])
     from .data import DEPARTMENTS
     dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
     options = [{"label": d["name"], "value": d["id"]} for d in doctors]
+    if len(doctors) > 1:
+        options.append({"label": "🤝 Ai cũng được", "value": "ai cũng được"})
     return _reply(
-        f"Tuyệt vời! Bạn muốn đặt lịch với bác sĩ nào cho dịch vụ <b>{dept_name}</b>?",
+        prefix + f"Tuyệt vời! Bạn muốn đặt lịch với bác sĩ nào cho dịch vụ <b>{dept_name}</b>?",
         options=options,
         state="PICK_DOCTOR",
     )
 
 
+# ---------------------------------------------------------------------------
+# LỚP "TRẢ LỜI LINH HOẠT" — dùng chung cho các bước PICK_*
+#
+# Trước đây mỗi bước chỉ chấp nhận đúng `value` của nút; gõ bất cứ thứ gì khác
+# đều bị lặp lại "bạn chọn ở các nút bên trên". Lớp này cho phép người dùng
+# QUAY LẠI, ĐỔI BƯỚC, hoặc HỎI THÔNG TIN ngay giữa luồng đặt lịch.
+# ---------------------------------------------------------------------------
+_PREV_STEP = {           # "quay lại" -> bước trước đó
+    "PICK_DOCTOR": "TRIAGE",
+    "PICK_DATE": "PICK_DOCTOR",
+    "PICK_TIME": "PICK_DATE",
+}
+
+
+def _goto_step(sess, state, prefix=""):
+    """Đưa hội thoại về đúng một bước, dựng lại câu hỏi + nút của bước đó."""
+    if state == "PICK_DOCTOR" and sess.get("dept_code"):
+        return _start_doctor_pick(sess, prefix=prefix)
+    if state == "PICK_DATE" and sess.get("dept_code") and sess.get("doctor_id"):
+        return _start_date_pick(sess, prefix=prefix)
+    if state == "PICK_TIME" and sess.get("date"):
+        return _start_time_pick(sess, prefix=prefix)
+    # Về mô tả triệu chứng: bỏ lựa chọn cũ để triage lại từ đầu.
+    sess["dept_code"] = None
+    sess["doctor_id"] = None
+    return _reply(prefix + "Bạn mô tả lại vấn đề răng miệng đang gặp giúp mình nhé.",
+                  state="TRIAGE")
+
+
+def _flex_intent(sess, message, current):
+    """Ý định "vượt bước" ở PICK_*: quay lại / đổi bước / hỏi thông tin dịch vụ.
+
+    Trả về response nếu bắt được ý định, None nếu để bước hiện tại tự xử lý.
+    """
+    # Phải đứng TRƯỚC wants_change: "còn dịch vụ nào khác không" là câu HỎI danh mục,
+    # nếu để wants_change bắt trước thì bị hiểu thành "đổi dịch vụ" -> bắt mô tả lại.
+    if nlu.asks_other_service(message):
+        return _service_catalog(sess)
+
+    target = nlu.wants_change(message)
+    if target and target != current:
+        return _goto_step(sess, target, prefix="Được, mình quay lại bước đó. ")
+
+    if nlu.wants_back(message):
+        return _goto_step(sess, _PREV_STEP.get(current, "TRIAGE"),
+                          prefix="Được, mình quay lại bước trước. ")
+
+    # "nội nha là khám gì?" ngay giữa lúc chọn ngày/giờ -> trả lời rồi mời đặt tiếp.
+    info_code = triage.info_question_service(message)
+    if info_code:
+        return _describe_service(sess, info_code)
+
+    return None
+
+
+def _maybe_new_symptom(sess, message):
+    """Người dùng mô tả TRIỆU CHỨNG MỚI giữa lúc đang đặt lịch -> đề nghị đổi dịch vụ.
+
+    Chỉ nhận khi triage đủ tự tin và ra dịch vụ KHÁC dịch vụ đang chọn; nếu không,
+    trả None để bước hiện tại hiển thị hướng dẫn của nó.
+    """
+    results = triage.classify_symptoms(message)
+    if not results or triage.confidence_level(results) != "high":
+        return None
+    top = results[0]
+    if top["code"] == sess.get("dept_code"):
+        return None
+
+    from .data import DEPARTMENTS
+    old = DEPARTMENTS.get(sess.get("dept_code"), {}).get("name", "dịch vụ đang chọn")
+    sess["dept_code"] = top["code"]
+    sess["doctor_id"] = None
+    return _reply(
+        safety.add_disclaimer(
+            f"Theo mô tả mới này, bạn phù hợp với dịch vụ <b>{top['name']}</b> "
+            f"<span class='muted'>({top['desc']})</span>.<br>"
+            f"Bạn muốn <b>đổi sang</b> dịch vụ này (thay cho {old}) không?"),
+        options=[
+            {"label": f"✅ Đổi sang: {top['name']}", "value": "yes"},
+            {"label": "🔁 Mô tả lại triệu chứng", "value": "no"},
+        ],
+        state="CONFIRM_DEPT",
+    )
+
+
 def _pick_doctor(sess, message):
     doctors = booking.get_doctors(sess["dept_code"])
-    low = message.lower()
-    for d in doctors:
-        if low == d["id"] or d["name"].lower() in low:
-            sess["doctor_id"] = d["id"]
-            return _start_date_pick(sess)
-    return _reply("Bạn chọn giúp mình một bác sĩ ở các nút bên trên nhé.", state="PICK_DOCTOR")
+
+    redirect = _flex_intent(sess, message, current="PICK_DOCTOR")
+    if redirect:
+        return redirect
+
+    # "bác sĩ nào cũng được", "tùy bạn" -> chọn giúp, KHÔNG bắt người dùng chọn lại.
+    if doctors and (nlu.wants_any(message) or nlu.wants_earliest(message)):
+        chosen = doctors[0]
+        sess["doctor_id"] = chosen["id"]
+        return _start_date_pick(
+            sess, prefix=f"Mình xếp bạn với <b>{chosen['name']}</b> nhé. ")
+
+    chosen = nlu.match_doctor(message, doctors)
+    if chosen:
+        sess["doctor_id"] = chosen["id"]
+        return _start_date_pick(sess)
+
+    # "có bác sĩ khác không?" -> TRẢ LỜI đúng câu hỏi (kể cả khi chỉ có 1 bác sĩ),
+    # thay vì lặp lại hướng dẫn chọn.
+    if nlu.asks_other_doctor(message):
+        return _doctor_roster(sess, doctors)
+
+    # Gọi tên một bác sĩ CÓ THẬT nhưng thuộc dịch vụ khác -> nói rõ, và mời đổi
+    # sang dịch vụ mà bác sĩ đó phụ trách.
+    other = nlu.match_doctor(message, booking.all_doctors())
+    if other and other["dept_code"] != sess["dept_code"]:
+        return _doctor_other_dept(sess, other)
+
+    switched = _maybe_new_symptom(sess, message)
+    if switched:
+        return switched
+
+    # Có nhắc "bác sĩ ..." nhưng không khớp ai -> báo không tìm thấy, đừng nói chung chung.
+    if nlu.mentions_doctor_word(message):
+        return _doctor_roster(
+            sess, doctors,
+            prefix="Mình <b>không tìm thấy bác sĩ nào có tên như vậy</b> ở phòng khám. ")
+
+    return _reply(
+        "Mình chưa rõ bạn muốn khám với bác sĩ nào. Bạn có thể <b>bấm nút</b>, gõ "
+        "<b>tên bác sĩ</b> (vd. <i>“bác sĩ Châu”</i>), gõ <b>“ai cũng được”</b> để mình "
+        "xếp giúp, hoặc <b>“đổi dịch vụ”</b> nếu muốn chọn dịch vụ khác.",
+        options=_doctor_options(doctors),
+        state="PICK_DOCTOR",
+    )
+
+
+def _doctor_options(doctors):
+    options = [{"label": d["name"], "value": d["id"]} for d in doctors]
+    if len(doctors) > 1:
+        options.append({"label": "🤝 Ai cũng được", "value": "ai cũng được"})
+    return options
+
+
+def _doctor_roster(sess, doctors, prefix=""):
+    """Trả lời câu hỏi "có bác sĩ nào khác không?" — nêu rõ số bác sĩ của dịch vụ này."""
+    from .data import DEPARTMENTS
+    dept_name = DEPARTMENTS[sess["dept_code"]]["name"]
+
+    if not doctors:  # danh mục thiếu bác sĩ -> không im lặng, mời đổi dịch vụ
+        return _reply(
+            prefix + f"Hiện <b>chưa có bác sĩ nào</b> nhận dịch vụ <b>{dept_name}</b>. "
+            "Bạn gõ <b>“đổi dịch vụ”</b> để mình gợi ý dịch vụ khác nhé.",
+            state="PICK_DOCTOR",
+        )
+
+    if len(doctors) == 1:
+        text = (prefix + f"Dịch vụ <b>{dept_name}</b> hiện chỉ có <b>một bác sĩ</b> phụ "
+                f"trách: <b>{doctors[0]['name']}</b>.<br>Bạn đặt lịch với bác sĩ này nhé, "
+                "hoặc gõ <b>“đổi dịch vụ”</b> nếu muốn khám dịch vụ khác.")
+    else:
+        names = "<br>".join(f"• <b>{d['name']}</b>" for d in doctors)
+        text = (prefix + f"Dịch vụ <b>{dept_name}</b> có <b>{len(doctors)} bác sĩ</b>:<br>"
+                f"{names}<br>Bạn muốn khám với ai?")
+    return _reply(text, options=_doctor_options(doctors), state="PICK_DOCTOR")
+
+
+def _doctor_other_dept(sess, doctor):
+    """Bác sĩ được gọi tên có thật, nhưng phụ trách dịch vụ KHÁC -> mời đổi dịch vụ."""
+    from .data import DEPARTMENTS
+    current = DEPARTMENTS[sess["dept_code"]]["name"]
+    # CHỜ xác nhận: KHÔNG ghi đè dept_code ngay, nếu không nút "Giữ dịch vụ cũ"
+    # sẽ chẳng còn dịch vụ cũ nào để giữ.
+    sess["pending_dept_code"] = doctor["dept_code"]
+    sess["pending_doctor_id"] = doctor["id"]  # đổi dịch vụ xong thì xếp luôn bác sĩ này
+    return _reply(
+        f"<b>{doctor['name']}</b> phụ trách dịch vụ <b>{doctor['dept_name']}</b>, "
+        f"không nhận dịch vụ <b>{current}</b> bạn đang chọn.<br>"
+        f"Bạn muốn <b>đổi sang {doctor['dept_name']}</b> để khám với bác sĩ này không?",
+        options=[
+            {"label": f"✅ Đổi sang: {doctor['dept_name']}", "value": "yes"},
+            {"label": f"↩️ Giữ {current}", "value": "no"},
+        ],
+        state="CONFIRM_DEPT",
+    )
 
 
 def _start_date_pick(sess, prefix=""):
@@ -392,11 +662,27 @@ def _start_date_pick(sess, prefix=""):
 
 def _pick_date(sess, message):
     dates = booking.get_available_dates()
-    msg = message.strip()
-    if msg in dates:
-        sess["date"] = msg
+
+    redirect = _flex_intent(sess, message, current="PICK_DATE")
+    if redirect:
+        return redirect
+
+    chosen = nlu.match_date(message, dates)
+    if chosen:
+        sess["date"] = chosen
         return _start_time_pick(sess)
-    return _reply("Bạn chọn giúp mình một ngày ở các nút bên trên nhé.", state="PICK_DATE")
+
+    switched = _maybe_new_symptom(sess, message)
+    if switched:
+        return switched
+
+    return _reply(
+        "Mình chưa nhận ra ngày bạn muốn. Bạn có thể <b>bấm nút</b>, hoặc gõ kiểu "
+        "<i>“mai”</i>, <i>“thứ 5”</i>, <i>“20/7”</i>, <i>“sớm nhất”</i> nhé.<br>"
+        "<i>Phòng khám chỉ nhận lịch trong các ngày dưới đây.</i>",
+        options=[{"label": _format_date(d), "value": d} for d in dates],
+        state="PICK_DATE",
+    )
 
 
 def _start_time_pick(sess, prefix=""):
@@ -416,9 +702,14 @@ def _start_time_pick(sess, prefix=""):
 
 def _pick_time(sess, message):
     times = booking.get_available_times(sess["date"])
-    msg = message.strip()
-    if msg in times:
-        sess["time"] = msg
+
+    redirect = _flex_intent(sess, message, current="PICK_TIME")
+    if redirect:
+        return redirect
+
+    chosen = nlu.match_time(message, times)
+    if chosen:
+        sess["time"] = chosen
         # Nếu đã có sẵn tên + SĐT (vd. chọn lại giờ sau khi slot bị chiếm) thì
         # đi thẳng tới bước xác nhận, không hỏi lại tên/số.
         if sess.get("patient_name") and sess.get("patient_phone"):
@@ -428,7 +719,29 @@ def _pick_time(sess, message):
             "(bạn có thể gõ tên).",
             state="ASK_NAME",
         )
-    return _reply("Bạn chọn giúp mình một khung giờ ở các nút bên trên nhé.", state="PICK_TIME")
+
+    # Nói "buổi sáng"/"buổi chiều" mà buổi đó còn nhiều khung -> thu hẹp danh sách
+    # thay vì bắt gõ lại từ đầu.
+    period = nlu.period_of(message)
+    pool = nlu.filter_by_period(times, period)
+    if period and pool:
+        label = "buổi sáng" if period == "sang" else "buổi chiều"
+        return _reply(
+            f"Các khung giờ <b>{label}</b> ngày {_format_date(sess['date'])} — bạn chọn giờ nào?",
+            options=[{"label": t, "value": t} for t in pool],
+            state="PICK_TIME",
+        )
+
+    switched = _maybe_new_symptom(sess, message)
+    if switched:
+        return switched
+
+    return _reply(
+        "Mình chưa nhận ra khung giờ bạn muốn. Bạn có thể <b>bấm nút</b>, hoặc gõ kiểu "
+        "<i>“9h”</i>, <i>“14h30”</i>, <i>“buổi sáng”</i>, <i>“sớm nhất”</i> nhé.",
+        options=[{"label": t, "value": t} for t in times],
+        state="PICK_TIME",
+    )
 
 
 def _ask_confirm(sess):

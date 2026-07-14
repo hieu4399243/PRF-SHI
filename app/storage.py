@@ -60,7 +60,15 @@ class SlotTakenError(Exception):
 # ===========================================================================
 def _connect():
     import psycopg  # import trễ: chỉ cần khi thực sự dùng DB
-    return psycopg.connect(DATABASE_URL)
+    # prepare_threshold=None -> TẮT auto-prepare của psycopg3.
+    #
+    # Mặc định psycopg3 tự PREPARE một câu lệnh sau 5 lần chạy giống nhau. Supabase
+    # (và mọi pgbouncer chạy transaction pooling — cổng 6543) KHÔNG giữ session giữa
+    # các transaction, nên prepared statement của lần trước vẫn còn tên nhưng lại
+    # nằm ở backend khác -> lỗi `DuplicatePreparedStatement: prepared statement
+    # "_pg3_0" already exists`. Lỗi này CHỈ xuất hiện từ lần chạy thứ 6 trở đi nên
+    # rất dễ lọt qua test/demo rồi mới nổ khi có nhiều lượt đặt lịch thật.
+    return psycopg.connect(DATABASE_URL, prepare_threshold=None)
 
 
 SCHEMA_SQL = """

@@ -495,6 +495,12 @@ def test_concurrent_booking_only_one_wins_real_postgres():
     date_str, time_str, dept_code, doctor_id = _pick_slot()
     results = []
 
+    # Test chạy trên DB THẬT và _pick_slot() luôn trả về CÙNG một khung giờ, nên
+    # lịch mà lần chạy trước đặt thắng vẫn còn 'confirmed' -> lần chạy sau cả 5
+    # thread đều thua và results.count(True) == 0. Giải phóng khung giờ trước khi
+    # chạy để test idempotent (chạy lại nhiều lần vẫn đúng).
+    _free_slot(doctor_id, date_str, time_str)
+
     def worker(phone):
         ok, payload = booking.book_appointment(
             f"sess-{phone}", dept_code, doctor_id, date_str, time_str,
@@ -503,9 +509,20 @@ def test_concurrent_booking_only_one_wins_real_postgres():
 
     threads = [threading.Thread(target=worker, args=(f"090000000{i}",))
               for i in range(5)]
-    for t in threads:
-        t.start()
-    for t in threads:
-        t.join()
+    try:
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
 
-    assert results.count(True) == 1
+        assert results.count(True) == 1
+    finally:
+        _free_slot(doctor_id, date_str, time_str)  # không để lại rác trên DB thật
+
+
+def _free_slot(doctor_id, date_str, time_str):
+    """Hủy mọi lịch 'confirmed' đang chiếm khung giờ này (dọn dữ liệu test)."""
+    for a in storage.list_appointments():
+        if (a.get("status") == "confirmed" and a.get("doctor_id") == doctor_id
+                and a.get("date") == date_str and a.get("time") == time_str):
+            storage.set_status(a["code"], "cancelled")

@@ -1,0 +1,18 @@
+{"text": "tôi không bị đau răng", "negated": ["sau_rang", "noi_nha"], "expect": []}
+{"text": "rang toi khong bi me vo gi ca", "negated": ["sau_rang"], "expect": []}
+{"text": "răng tôi không bị sâu", "negated": ["sau_rang"], "expect": []}
+{"text": "tôi không bị áp xe răng", "negated": ["noi_nha"], "expect": []}
+{"text": "chưa bị sâu răng bao giờ", "negated": ["sau_rang"], "expect": []}
+{"text": "tôi không bị hôi miệng", "negated": ["nha_chu"], "expect": []}
+{"text": "răng không bị lung lay", "negated": ["nha_chu"], "expect": []}
+{"text": "tôi chẳng bị ê buốt gì cả", "negated": ["sau_rang"], "expect": []}
+{"text": "khong bi viem loi", "negated": ["nha_chu"], "expect": []}
+{"text": "tôi không muốn niềng răng", "negated": ["chinh_nha"], "expect": []}
+{"text": "tôi không bị sâu răng nhưng bị chảy máu chân răng", "negated": ["sau_rang"], "expect": ["nha_chu"]}
+{"text": "không đau răng nhưng nướu sưng và hôi miệng", "negated": ["sau_rang", "noi_nha"], "expect": ["nha_chu"]}
+{"text": "răng không mẻ nhưng bị ố vàng muốn tẩy trắng", "negated": ["sau_rang"], "expect": ["tham_my"]}
+{"text": "kiểm tra xem có sâu răng không", "negated": [], "expect": ["sau_rang"]}
+{"text": "nhổ răng khôn có đau không", "negated": [], "expect": ["nho_rang"]}
+{"text": "tẩy trắng răng có hại men răng không", "negated": [], "expect": ["tham_my"]}
+{"text": "Bác sĩ xem giúp răng em có gì bất thường không, khám tổng quát", "negated": [], "expect": ["kham_tong_quat"]}
+{"text": "trồng răng implant có bền không", "negated": [], "expect": ["phuc_hinh"]}

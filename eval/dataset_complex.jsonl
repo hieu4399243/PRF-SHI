@@ -18,3 +18,23 @@
 {"text": "con toi bi sau rang sua va rang moc lech muon nieng", "label": "nha_nhi", "accept": ["nha_nhi", "chinh_nha"]}
 {"text": "Răng ê buốt khi ăn lạnh, có lỗ đen và muốn trám sớm", "label": "sau_rang", "accept": ["sau_rang"]}
 {"text": "toi bi mat rang muon trong implant va boc su rang ben canh", "label": "phuc_hinh", "accept": ["phuc_hinh"]}
+{"text": "Lợi trùm lên răng gây khó chịu khi nhai", "label": "nha_chu", "accept": ["nha_chu", "nho_rang"]}
+{"text": "Răng lung lay do chấn thương, không giữ được nữa", "label": "nho_rang", "accept": ["nho_rang", "nha_chu"]}
+{"text": "Răng vỡ lớn không trám được, bác sĩ khuyên bọc sứ", "label": "phuc_hinh", "accept": ["phuc_hinh", "sau_rang"]}
+{"text": "Tẩy trắng xong có bị ê buốt không bác sĩ", "label": "tham_my", "accept": ["tham_my", "sau_rang"]}
+{"text": "Trẻ bị sâu răng hàm, có trám được không", "label": "nha_nhi", "accept": ["nha_nhi", "sau_rang"]}
+{"text": "Con tôi ngã va vào răng cửa, răng bị lung lay", "label": "nha_nhi", "accept": ["nha_nhi", "nha_chu"]}
+{"text": "Con tôi bị viêm lợi, nướu đỏ và sưng", "label": "nha_nhi", "accept": ["nha_nhi", "nha_chu"]}
+{"text": "Trẻ 7 tuổi cần khám răng định kỳ ở đâu", "label": "nha_nhi", "accept": ["nha_nhi", "kham_tong_quat"]}
+{"text": "Vừa muốn cạo vôi vừa muốn tẩy trắng răng cho sáng", "label": "kham_tong_quat", "accept": ["kham_tong_quat", "tham_my"]}
+{"text": "Răng khôn đau nhức dữ dội, nhổ xong có phải lấy tủy không", "label": "nho_rang", "accept": ["nho_rang", "noi_nha"]}
+{"text": "Mất răng hàm lâu rồi, nướu chỗ đó cũng hay sưng", "label": "phuc_hinh", "accept": ["phuc_hinh", "nha_chu"]}
+{"text": "Răng sâu vỡ lớn, không biết trám hay bọc sứ thì hơn", "label": "sau_rang", "accept": ["sau_rang", "phuc_hinh"]}
+{"text": "Niềng răng xong muốn tẩy trắng luôn cho đẹp", "label": "chinh_nha", "accept": ["chinh_nha", "tham_my"]}
+{"text": "Chảy máu chân răng nhiều, răng lung lay sợ phải nhổ", "label": "nha_chu", "accept": ["nha_chu", "nho_rang"]}
+{"text": "Đau răng dữ dội về đêm, có lỗ sâu to ở răng hàm", "label": "noi_nha", "accept": ["noi_nha", "sau_rang"]}
+{"text": "be bi sau rang sua nhieu, co can tram het khong", "label": "nha_nhi", "accept": ["nha_nhi", "sau_rang"]}
+{"text": "Muốn khám tổng quát rồi tư vấn niềng răng luôn", "label": "kham_tong_quat", "accept": ["kham_tong_quat", "chinh_nha"]}
+{"text": "Răng ố vàng lại còn nhiều cao răng bám", "label": "tham_my", "accept": ["tham_my", "kham_tong_quat"]}
+{"text": "rang da lay tuy roi, gio muon boc su cho chac", "label": "phuc_hinh", "accept": ["phuc_hinh", "noi_nha"]}
+{"text": "Viêm lợi trùm ở răng khôn, sưng đau há miệng khó", "label": "nho_rang", "accept": ["nho_rang", "nha_chu"]}

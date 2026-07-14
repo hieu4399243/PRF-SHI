@@ -27,6 +27,10 @@ _SEED_DEPARTMENTS = {
             "khám răng", "khám định kỳ", "kiểm tra răng", "cạo vôi", "lấy cao răng",
             "vôi răng", "cao răng", "vệ sinh răng", "khám tổng quát", "tư vấn răng",
             "mảng bám",
+            # bổ sung: từ vựng khám/vệ sinh định kỳ
+            "đánh bóng răng", "đánh bóng", "vệ sinh răng miệng", "khám răng miệng",
+            "kiểm tra răng tổng quát", "chải răng", "chăm sóc răng", "gói khám",
+            "khám tổng thể", "tư vấn răng miệng", "định kỳ",
         ],
     },
     "sau_rang": {
@@ -37,6 +41,9 @@ _SEED_DEPARTMENTS = {
             "răng mẻ", "bị mẻ", "răng vỡ", "ê buốt khi ăn", "ê buốt", "buốt răng",
             "đau khi nhai", "đau khi ăn", "cộm", "răng bị đen", "lỗ trên răng",
             "răng sâu", "đau răng", "răng đau",
+            # bổ sung: mẻ vỡ, giắt thức ăn, miếng trám bong
+            "trám", "hàn lại", "miếng trám", "bị vỡ", "vỡ một mảnh", "sứt mẻ",
+            "cộm khi nhai", "giắt", "thức ăn giắt", "răng có lỗ", "răng bị mẻ",
         ],
     },
     "noi_nha": {
@@ -46,6 +53,10 @@ _SEED_DEPARTMENTS = {
             "đau răng dữ dội", "nhức răng về đêm", "viêm tủy", "tủy răng", "áp xe răng",
             "áp xe", "đau nhức răng", "răng đau theo nhịp", "đau răng không ngủ được",
             "răng đổi màu", "lấy tủy", "nhức răng", "nhức cả đêm", "đau răng", "răng đau",
+            # bổ sung: chữa tủy, chết tủy, mưng mủ, đau tự phát
+            "chữa tủy", "điều trị tủy", "chết tủy", "răng chết tủy", "nội nha",
+            "mưng mủ", "có mủ", "sưng mủ", "đau nhói", "đau tự phát", "đau buốt",
+            "kháng sinh", "nhức về đêm",
         ],
     },
     "nha_chu": {
@@ -55,6 +66,10 @@ _SEED_DEPARTMENTS = {
             "chảy máu chân răng", "chảy máu nướu", "chảy máu lợi", "viêm lợi", "viêm nướu",
             "sưng nướu", "sưng lợi", "tụt lợi", "tụt nướu", "răng lung lay", "hôi miệng",
             "nướu", "lợi",
+            # bổ sung: nha chu, túi nha chu, chảy máu khi đánh răng
+            "nha chu", "viêm nha chu", "túi nha chu", "chảy máu khi đánh răng",
+            "lung lay", "kẽ lợi", "chân răng hở", "lẫn máu", "túi mủ",
+            "cạo vôi sâu", "dưới nướu", "chỉ nha khoa",
         ],
     },
     "nho_rang": {
@@ -63,6 +78,10 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "nhổ răng", "răng khôn", "răng số 8", "răng mọc lệch", "răng mọc ngầm",
             "sưng vùng răng khôn", "đau răng khôn", "nhổ răng khôn", "răng mọc đau",
+            # bổ sung: tiểu phẫu, răng thừa, lợi trùm, chân răng sót
+            "nhổ", "tiểu phẫu", "nhổ bớt răng", "răng thừa", "răng hỏng",
+            "lợi trùm", "viêm lợi trùm", "chân răng sót", "chân răng còn sót",
+            "mọc đâm ngang", "gây tê",
         ],
     },
     "chinh_nha": {
@@ -72,6 +91,11 @@ _SEED_DEPARTMENTS = {
             "niềng răng", "chỉnh nha", "răng hô", "răng vẩu", "răng móm", "răng khấp khểnh",
             "răng lệch", "răng thưa", "khớp cắn lệch", "mắc cài", "niềng trong suốt",
             "invisalign",
+            # bổ sung: khớp cắn, chen chúc, khay trong suốt, nắn chỉnh
+            "niềng", "khớp cắn", "khớp cắn ngược", "cắn ngược", "cắn không khớp",
+            "răng chen chúc", "chen chúc", "nắn chỉnh", "răng chìa", "chìa ra ngoài",
+            "khay trong suốt", "hàm hô", "hàm móm", "răng mọc chen",
+            "đưa ra trước", "mặt bị lệch", "lệch một bên",
         ],
     },
     "phuc_hinh": {
@@ -80,6 +104,9 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "mất răng", "trồng răng", "implant", "cấy ghép răng", "răng giả", "hàm giả",
             "bọc răng sứ", "bọc sứ", "mão răng", "phục hình", "làm răng sứ", "gãy răng",
+            # bổ sung: cầu răng, mão, tiêu xương, rụng răng
+            "cầu răng", "bọc mão", "mão", "cấy ghép", "tiêu xương", "rụng răng",
+            "rụng mất răng", "rụng mất", "răng đã mất", "mất răng lâu năm", "răng sứ",
         ],
     },
     "tham_my": {
@@ -88,6 +115,10 @@ _SEED_DEPARTMENTS = {
         "keywords": [
             "tẩy trắng răng", "tẩy trắng", "răng ố vàng", "răng vàng", "răng xỉn màu",
             "dán sứ", "veneer", "thẩm mỹ răng", "làm trắng răng", "nụ cười",
+            # bổ sung: ngả màu, đốm trắng, dán veneer, thẩm mỹ
+            "dán veneer", "thẩm mỹ", "răng ngả màu", "ngả màu", "xỉn màu",
+            "đốm trắng", "trắng sáng", "hình dáng răng", "làm đẹp nụ cười",
+            "nhiễm kháng sinh",
         ],
     },
     "nha_nhi": {
@@ -97,6 +128,10 @@ _SEED_DEPARTMENTS = {
             "răng sữa", "trẻ đau răng", "bé sâu răng", "răng trẻ em", "trám răng cho bé",
             "nhổ răng sữa", "trẻ bị sâu răng", "răng của con", "bé bị đau răng", "răng của bé",
             "con tôi", "bé", "trẻ", "em bé",
+            # bổ sung: từ vựng RIÊNG của nha khoa trẻ em (không trùng chuyên khoa khác)
+            "sún răng", "sún", "mút tay", "tráng fluor", "fluor", "hàm sữa",
+            "cho bé", "cho con", "cho trẻ", "răng vĩnh viễn", "nha khoa trẻ em",
+            "phòng khám thân thiện",
         ],
     },
 }
