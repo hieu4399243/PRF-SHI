@@ -104,6 +104,16 @@ CREATE TABLE IF NOT EXISTS doctors (
     name         TEXT,
     sort_order   INT DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS users (
+    id              TEXT PRIMARY KEY,
+    username        TEXT NOT NULL UNIQUE,
+    password_hash   TEXT NOT NULL,
+    role            TEXT NOT NULL CHECK (role IN ('admin', 'doctor', 'guest')),
+    email           TEXT,
+    doctor_id       TEXT REFERENCES doctors(id),
+    created_at      TEXT NOT NULL,
+    updated_at      TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS safety_patterns (
     kind    TEXT NOT NULL,   -- 'emergency' | 'diagnosis' | 'handoff'
     pattern TEXT NOT NULL,
@@ -519,3 +529,94 @@ def sync_catalog(departments, doctors):
                 )
         conn.commit()
     return (len(departments), sum(len(v) for v in doctors.values()))
+
+
+# ===========================================================================
+# API CÔNG KHAI — USERS (authentication)
+# ===========================================================================
+class UserNotFoundError(Exception):
+    """User không tồn tại."""
+    pass
+
+
+class DuplicateUsernameError(Exception):
+    """Username đã được sử dụng."""
+    pass
+
+
+def create_user(user_id, username, password_hash, role, email=None, doctor_id=None):
+    """Tạo user mới (idempotent nếu đã tồn tại).
+
+    Trả về True nếu tạo thành công, False nếu username đã tồn tại.
+    """
+    if not USE_DB:
+        return True  # JSON mode không implement, chỉ support DB
+    init_schema()
+    try:
+        with _connect() as conn, conn.cursor() as cur:
+            from datetime import datetime
+            now = datetime.utcnow().isoformat()
+            cur.execute(
+                "INSERT INTO users "
+                "(id, username, password_hash, role, email, doctor_id, created_at, updated_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                (user_id, username, password_hash, role, email, doctor_id, now, now),
+            )
+            conn.commit()
+        return True
+    except Exception as e:
+        if "duplicate key" in str(e).lower() or "unique" in str(e).lower():
+            raise DuplicateUsernameError(username)
+        raise
+
+
+def get_user_by_username(username):
+    """Lấy user theo username. Trả về dict hoặc None."""
+    if not USE_DB:
+        return None  # JSON mode không implement
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
+            "FROM users WHERE username = %s",
+            (username,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "username": row[1],
+                "password_hash": row[2],
+                "role": row[3],
+                "email": row[4],
+                "doctor_id": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
+            }
+    return None
+
+
+def get_user_by_id(user_id):
+    """Lấy user theo id. Trả về dict hoặc None."""
+    if not USE_DB:
+        return None  # JSON mode không implement
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
+            "FROM users WHERE id = %s",
+            (user_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "username": row[1],
+                "password_hash": row[2],
+                "role": row[3],
+                "email": row[4],
+                "doctor_id": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
+            }
+    return None
