@@ -22,7 +22,7 @@ Sơ đồ file & vai trò từng module: **[docs/codebase-summary.md](docs/codeb
 
 ```bash
 # Backend
-python3 -m venv .venv && .venv/bin/pip install -r requirements.txt
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 PORT=5001 .venv/bin/python -m app.main        # API tại http://0.0.0.0:5001
 
 # App native

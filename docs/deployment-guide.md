@@ -28,8 +28,8 @@ cd PRF-SHI
 python3 -m venv .venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
-# 3. Install dependencies
-pip install -r requirements.txt
+# 3. Install dependencies (includes pytest for local testing)
+pip install -r requirements-dev.txt
 
 # 4. Setup environment
 cp .env.example .env

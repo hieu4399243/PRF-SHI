@@ -10,7 +10,8 @@ PRF-SHI/
 ├── scripts/                Utility scripts
 ├── tests/                  Pytest test suite
 ├── README.md              Setup & quick-start (Vietnamese), links into docs/
-├── requirements.txt       Python dependencies
+├── requirements.txt       Python dependencies (prod, used by Docker)
+├── requirements-dev.txt   Python dependencies + pytest (local dev)
 ├── docker-compose.yml     Local Postgres + gunicorn orchestration
 └── Dockerfile             Container image
 ```
