@@ -544,13 +544,23 @@ class DuplicateUsernameError(Exception):
     pass
 
 
+class UserStoreUnavailableError(Exception):
+    """User store cần Postgres (DATABASE_URL) — không có JSON-mode fallback."""
+    pass
+
+
 def create_user(user_id, username, password_hash, role, email=None, doctor_id=None):
     """Tạo user mới (idempotent nếu đã tồn tại).
 
     Trả về True nếu tạo thành công, False nếu username đã tồn tại.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
     """
     if not USE_DB:
-        return True  # JSON mode không implement, chỉ support DB
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -571,9 +581,15 @@ def create_user(user_id, username, password_hash, role, email=None, doctor_id=No
 
 
 def get_user_by_username(username):
-    """Lấy user theo username. Trả về dict hoặc None."""
+    """Lấy user theo username. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
+    """
     if not USE_DB:
-        return None  # JSON mode không implement
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
@@ -597,15 +613,53 @@ def get_user_by_username(username):
 
 
 def get_user_by_id(user_id):
-    """Lấy user theo id. Trả về dict hoặc None."""
+    """Lấy user theo id. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
+    """
     if not USE_DB:
-        return None  # JSON mode không implement
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
             "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
             "FROM users WHERE id = %s",
             (user_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0],
+                "username": row[1],
+                "password_hash": row[2],
+                "role": row[3],
+                "email": row[4],
+                "doctor_id": row[5],
+                "created_at": row[6],
+                "updated_at": row[7],
+            }
+    return None
+
+
+def get_user_by_doctor_id(doctor_id):
+    """Lấy user (role=doctor) đã claim doctor_id này. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
+    """
+    if not USE_DB:
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
+            "FROM users WHERE doctor_id = %s AND role = 'doctor'",
+            (doctor_id,),
         )
         row = cur.fetchone()
         if row:

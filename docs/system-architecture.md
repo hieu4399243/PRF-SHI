@@ -308,7 +308,7 @@ Usage patterns and correct/incorrect access examples: **[code-standards.md § St
 | `/api/login` | POST | Authenticate, set JWT cookie | Rate-limit |
 | `/api/logout` | GET | Clear auth cookie | None |
 | `/api/me` | GET | Current user info (from JWT) | JWT cookie |
-| `/api/register` | POST | Self-service signup (open; can set role) | Rate-limit |
+| `/api/register` | POST | Self-service signup (open; role limited to `guest`/`doctor`, `doctor_id` validated against real catalog + uniqueness — `admin` cannot be self-registered) | Rate-limit |
 | `/api/start` | POST | New chat session | Rate-limit |
 | `/api/chat` | POST | Send message, get response | Rate-limit |
 | `/api/register-push` | POST | Register Expo token | Rate-limit |

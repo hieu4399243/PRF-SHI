@@ -77,25 +77,17 @@ def require_auth(allowed_roles=None):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            token = request.cookies.get("auth_token")
-            if not token:
+            user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+            if not user:
                 return jsonify({"error": "Chưa login"}), 401
 
-            try:
-                payload = auth.verify_jwt(token)
-                user = storage.get_user_by_id(payload["sub"])
-                if not user:
-                    return jsonify({"error": "User không tồn tại"}), 404
+            # Check role nếu cần
+            if allowed_roles and user["role"] not in allowed_roles:
+                return jsonify({"error": "Không có quyền truy cập"}), 403
 
-                # Check role nếu cần
-                if allowed_roles and user["role"] not in allowed_roles:
-                    return jsonify({"error": "Không có quyền truy cập"}), 403
-
-                # Lưu user info vào request context
-                request.current_user = user
-                return func(*args, **kwargs)
-            except auth.AuthError as e:
-                return jsonify({"error": str(e)}), 401
+            # Lưu user info vào request context
+            request.current_user = user
+            return func(*args, **kwargs)
 
         return wrapper
 
@@ -166,17 +158,11 @@ def index():
 @app.route("/login")
 def login_page():
     """Trang login — auto redirect nếu đã login."""
-    token = request.cookies.get("auth_token")
-    if token:
-        try:
-            payload = auth.verify_jwt(token)
-            user = storage.get_user_by_id(payload["sub"])
-            if user and user["role"] == "admin":
-                return redirect("/admin")
-            elif user and user["role"] == "doctor":
-                return redirect("/doctor-dashboard")
-        except auth.AuthError:
-            pass
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if user and user["role"] == "admin":
+        return redirect("/admin")
+    elif user and user["role"] == "doctor":
+        return redirect("/doctor-dashboard")
     return render_template("login.html")
 
 
@@ -241,15 +227,8 @@ def download_ics(code):
 
 @app.route("/admin")
 def admin_page():
-    token = request.cookies.get("auth_token")
-    if not token:
-        return redirect("/login")
-    try:
-        payload = auth.verify_jwt(token)
-        user = storage.get_user_by_id(payload["sub"])
-        if not user or user.get("role") != "admin":
-            return redirect("/login")
-    except auth.AuthError:
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if not user or user.get("role") != "admin":
         return redirect("/login")
     return render_template("admin.html")
 
@@ -286,6 +265,9 @@ def api_login():
         return resp
     except auth.InvalidCredentialsError:
         return jsonify({"error": "Username hoặc password sai"}), 401
+    except storage.UserStoreUnavailableError:
+        print("[auth] api_login lỗi: user store cần DATABASE_URL nhưng chưa cấu hình")
+        return jsonify({"error": "Lỗi hệ thống, vui lòng thử lại sau."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -324,8 +306,17 @@ def api_register():
         return jsonify({"error": "Username và password bắt buộc"}), 400
     if len(password) < 6:
         return jsonify({"error": "Password phải tối thiểu 6 ký tự"}), 400
-    if role not in ["admin", "doctor", "guest"]:
+    if role not in ["guest", "doctor"]:
         return jsonify({"error": "Role không hợp lệ"}), 400
+
+    if role == "doctor":
+        if not doctor_id or not any(d["id"] == doctor_id for d in booking.all_doctors()):
+            return jsonify({"error": "doctor_id không hợp lệ"}), 400
+        try:
+            if storage.get_user_by_doctor_id(doctor_id):
+                return jsonify({"error": "doctor_id đã được đăng ký"}), 409
+        except storage.UserStoreUnavailableError:
+            pass  # để create_user_account bên dưới raise lỗi rõ ràng (đã bắt riêng phía dưới)
 
     try:
         user = auth.create_user_account(
@@ -342,6 +333,9 @@ def api_register():
         }), 201
     except auth.UserAlreadyExistsError as e:
         return jsonify({"error": str(e)}), 409
+    except storage.UserStoreUnavailableError:
+        print("[auth] api_register lỗi: user store cần DATABASE_URL nhưng chưa cấu hình")
+        return jsonify({"error": "Lỗi hệ thống, vui lòng thử lại sau."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -349,26 +343,18 @@ def api_register():
 @app.route("/api/me", methods=["GET"])
 def api_me():
     """Lấy thông tin user hiện tại từ JWT token."""
-    token = request.cookies.get("auth_token")
-    if not token:
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if not user:
         return jsonify({"error": "Chưa login"}), 401
-
-    try:
-        payload = auth.verify_jwt(token)
-        user = storage.get_user_by_id(payload["sub"])
-        if not user:
-            return jsonify({"error": "User không tồn tại"}), 404
-        return jsonify({
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "role": user["role"],
-                "email": user.get("email"),
-                "doctor_id": user.get("doctor_id"),
-            }
-        })
-    except auth.AuthError as e:
-        return jsonify({"error": str(e)}), 401
+    return jsonify({
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "email": user.get("email"),
+            "doctor_id": user.get("doctor_id"),
+        }
+    })
 
 
 if __name__ == "__main__":

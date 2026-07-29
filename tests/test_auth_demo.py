@@ -167,6 +167,69 @@ def test_login():
         print(f"  ❌ Login test failed: {e}")
 
 
+def test_resolve_user_from_token_no_token():
+    assert auth.resolve_user_from_token(None) is None
+
+
+def test_resolve_user_from_token_invalid_token():
+    assert auth.resolve_user_from_token("not-a-jwt") is None
+
+
+def test_resolve_user_from_token_expired():
+    import jwt as pyjwt
+    from datetime import datetime, timedelta
+
+    expired_payload = {
+        "sub": "user123",
+        "username": "admin",
+        "role": "admin",
+        "iat": datetime.utcnow(),
+        "exp": datetime.utcnow() - timedelta(hours=1),
+    }
+    expired_token = pyjwt.encode(expired_payload, auth.SECRET_KEY, algorithm=auth.JWT_ALGORITHM)
+    assert auth.resolve_user_from_token(expired_token) is None
+
+
+def test_resolve_user_from_token_valid(monkeypatch):
+    fake_user = {"id": "user123", "username": "admin", "role": "admin"}
+    monkeypatch.setattr(auth.storage, "get_user_by_id", lambda user_id: fake_user)
+    token = auth.generate_jwt("user123", "admin", "admin")
+    assert auth.resolve_user_from_token(token) == fake_user
+
+
+def test_resolve_user_from_token_unexpected_storage_error(monkeypatch):
+    def _boom(user_id):
+        raise RuntimeError("boom")
+
+    monkeypatch.setattr(auth.storage, "get_user_by_id", _boom)
+    token = auth.generate_jwt("user123", "admin", "admin")
+    assert auth.resolve_user_from_token(token) is None
+
+
+def test_resolve_user_from_token_db_unavailable(monkeypatch):
+    def _boom(user_id):
+        raise auth.storage.UserStoreUnavailableError("no db")
+
+    monkeypatch.setattr(auth.storage, "get_user_by_id", _boom)
+    token = auth.generate_jwt("user123", "admin", "admin")
+    assert auth.resolve_user_from_token(token) is None
+
+
+def test_create_user_account_propagates_store_unavailable(monkeypatch):
+    monkeypatch.setattr(auth.storage, "get_user_by_username", lambda username: None)
+
+    def _boom(**kwargs):
+        raise auth.storage.UserStoreUnavailableError("no db")
+
+    monkeypatch.setattr(auth.storage, "create_user", _boom)
+
+    try:
+        auth.create_user_account(username="u1", password="123456", role="guest")
+        assert False, "expected UserStoreUnavailableError"
+    except auth.storage.UserStoreUnavailableError:
+        pass
+
+
 def main():
     print("=" * 60)
     print("🧪 SHI Authentication System Test")

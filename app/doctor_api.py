@@ -1,7 +1,7 @@
 from flask import Blueprint, abort, jsonify, request
 
 from .booking import service as booking
-from .core import auth, storage
+from .core import auth
 
 
 doctor_api = Blueprint("doctor_api", __name__, url_prefix="/api/doctor")
@@ -9,14 +9,7 @@ doctor_api = Blueprint("doctor_api", __name__, url_prefix="/api/doctor")
 
 def _get_current_doctor():
     """Xác thực doctor từ JWT cookie và trả về user object."""
-    token = request.cookies.get("auth_token")
-    if not token:
-        return None
-    try:
-        payload = auth.verify_jwt(token)
-        user = storage.get_user_by_id(payload["sub"])
-    except Exception:
-        return None
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
     if not user or user.get("role") != "doctor" or not user.get("doctor_id"):
         return None
     return user

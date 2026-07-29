@@ -200,3 +200,23 @@ def test_add_token_and_remove_token_thread_safe():
     tokens = storage.get_tokens("sess1")
     assert known_token not in tokens
     assert len(tokens) == n
+
+
+def test_create_user_raises_without_db():
+    with pytest.raises(storage.UserStoreUnavailableError):
+        storage.create_user("u1", "user1", "hash", "guest")
+
+
+def test_get_user_by_username_raises_without_db():
+    with pytest.raises(storage.UserStoreUnavailableError):
+        storage.get_user_by_username("user1")
+
+
+def test_get_user_by_id_raises_without_db():
+    with pytest.raises(storage.UserStoreUnavailableError):
+        storage.get_user_by_id("u1")
+
+
+def test_get_user_by_doctor_id_raises_without_db():
+    with pytest.raises(storage.UserStoreUnavailableError):
+        storage.get_user_by_doctor_id("bs_test_01")
