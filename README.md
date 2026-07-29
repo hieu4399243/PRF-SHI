@@ -5,130 +5,36 @@ miệng → bot phân loại **đúng nhóm dịch vụ** (triage) → đặt l�
 push/`.ics`. Đề tài demo (PRF/SHI), có **hệ thống đánh giá AI** (Precision/Recall/F1,
 so sánh v1 vs v2) ở `eval/`.
 
-## Kiến trúc
+Tài liệu chi tiết nằm ở [`docs/`](docs/) — README này chỉ là điểm khởi động nhanh.
 
-Hai phần, nối nhau qua REST JSON:
+## Kiến trúc (tóm tắt)
 
-- **Backend** — Flask (Python), package `app/`. Phục vụ web demo (`app/templates/index.html`),
-  trang quản trị (`/admin`), và các endpoint `/api/*` cho app native.
-- **Mobile** — React Native / Expo (SDK 54), thư mục `mobile/`. Mở bằng **Expo Go** + QR.
+Hai phần, nối nhau qua REST JSON: **Backend** Flask (`app/`) phục vụ web demo, trang
+quản trị (`/admin`) và các endpoint `/api/*`; **Mobile** React Native/Expo (`mobile/`),
+mở bằng Expo Go + QR, gọi backend qua IP LAN cấu hình ở `mobile/src/config.js`
+(`API_BASE`) — phải **cùng Wi-Fi**.
 
-```
-┌─────────────────────┐      HTTP /api/*      ┌──────────────────────────┐
-│  App native (Expo)  │  ───────────────────► │  Backend Flask (app/)   │
-│  mobile/  (RN UI)   │  ◄─── push token ──── │  triage · booking · safe │
-└─────────────────────┘                       └────────────┬─────────────┘
-        ▲   push notification (Expo Push)                   │
-        └───────────────────────────────────────────────────┘
-                       app/notify/worker.py (nhắc lịch)
-```
+Chi tiết đầy đủ (sơ đồ thành phần, máy trạng thái hội thoại, luồng an toàn, API,
+lớp lưu trữ): **[docs/system-architecture.md](docs/system-architecture.md)**.
+Sơ đồ file & vai trò từng module: **[docs/codebase-summary.md](docs/codebase-summary.md)**.
 
-Mobile gọi backend qua IP LAN cấu hình ở `mobile/src/config.js` (`API_BASE`).
-Phải **cùng Wi-Fi** vì đó là IP nội bộ.
-
-## Sơ đồ file (backend — `app/`)
-
-| File | Vai trò |
-|------|---------|
-| `app/main.py` | Flask app + routes (public + admin). Chạy `host=0.0.0.0 port=5001`. |
-| `app/chatbot/` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
-| `app/triage/engine.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. **3 engine** dùng chung một định dạng kết quả: `v1`/`v2` rule-based theo keyword (v2 không phân biệt dấu), và `llm` gọi mô hình ngôn ngữ (`classify_with_llm()`). Có `OPENROUTER_API_KEY` → chạy `llm`, không có → `v2`. |
-| `app/triage/llm.py` | Cổng ra LLM duy nhất — gọi **OpenRouter** (giao thức OpenAI `/chat/completions`) bằng `urllib` chuẩn. Lỗi/timeout/hết credit → trả `None` để triage tự quay về rule-based. Đổi model = sửa `LLM_MODEL` trong `.env`. |
-| `app/triage/safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→ 115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `app/data/audit_log.jsonl` (Nghị định 13/2023). |
-| `app/booking/service.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
-| `app/core/catalog.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
-| `app/core/storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON trong `app/data/`. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
-| `app/notify/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `app/data/outbox/push_outbox.jsonl`. |
-| `app/notify/worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
-| `app/booking/calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
-| `app/templates/index.html` | Web demo (bản thay thế nhanh cho app native). |
-| `app/templates/admin.html` | Trang quản trị (chỉ đọc lịch đã đặt/lịch làm việc), khóa bằng `ADMIN_KEY`. |
-| `eval/` | **Đánh giá AI**: `dataset.jsonl` / `dataset_complex.jsonl` (câu gán nhãn), `evaluate.py` (Accuracy/Precision/Recall/Macro-F1, v1 vs v2). |
-| `scripts/migrate_to_supabase.py` | Đưa dữ liệu từ file JSON lên Postgres/Supabase. |
-| `scripts/clean_stale_appointments.py` | Dọn lịch hẹn quá hạn/không hợp lệ. |
-| `tests/` | Bộ test pytest cho toàn bộ backend (booking, safety, chatbot, push, storage, ...). |
-| `Dockerfile` | Image gunicorn (python:3.11-slim, non-root) cho service `web`/`worker`. |
-| `docker-compose.yml` | Orchestrate `web` + `worker` + `db` (Postgres 16 local) — xem mục "Chạy bằng Docker". |
-
-## API endpoints (`app/main.py`)
-
-| Method | Path | Việc |
-|--------|------|------|
-| GET | `/` | Web demo (`app/templates/index.html`) |
-| POST | `/api/start` | Bắt đầu phiên, trả `session` |
-| POST | `/api/chat` | Gửi `message`, nhận phản hồi bot |
-| POST | `/api/register-push` | App native gửi Expo `token` |
-| GET | `/api/ics/<code>` | Tải file `.ics` của 1 lịch hẹn |
-| GET | `/admin` | Trang quản trị (đọc lịch/lịch làm việc) |
-| GET | `/api/admin/appointments` | Danh sách lịch hẹn (yêu cầu header `X-Admin-Key`) |
-| GET | `/api/admin/schedule` | Lịch làm việc nha sĩ (yêu cầu `X-Admin-Key`) |
-| GET | `/api/admin/meta` | Metadata phòng khám cho trang quản trị |
-| POST | `/api/admin/cancel` | Hủy lịch hẹn (yêu cầu `X-Admin-Key`) |
-
-Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem `resolve_sid()` trong `app/main.py`.
-
-## Cài đặt & chạy local
+## Cài đặt & chạy nhanh
 
 ```bash
-# 1. Backend
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+# Backend
+python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
 PORT=5001 .venv/bin/python -m app.main        # API tại http://0.0.0.0:5001
 
-# 2. Worker nhắc lịch (tùy chọn)
-.venv/bin/python -m app.notify.worker --watch   # quét mỗi 60s
-.venv/bin/python -m app.notify.worker --test    # gửi thử mọi loại nhắc ngay
-
-# 3. App native
-cd mobile
-npm install
-npx expo start -c              # quét QR bằng Expo Go trên điện thoại
+# App native
+cd mobile && npm install && npx expo start -c   # quét QR bằng Expo Go
 ```
 
-Hoặc dùng script cài đặt gộp:
+Hoặc dùng script gộp: `./setup.sh` (cài backend + mobile, tự dò IP LAN).
 
-```bash
-./setup.sh              # cài backend (Python) + app (npm) + tự dò IP LAN
-./setup.sh ip            # đổi Wi-Fi -> chỉ dò lại IP và cập nhật mobile/src/config.js
-./setup.sh backend       # chỉ cài backend Python
-./setup.sh mobile        # chỉ cài app native (npm)
-```
+> macOS chiếm cổng 5000 (AirPlay Receiver) → backend chạy ở cổng 5001.
 
-Nhớ sửa `mobile/src/config.js` → `API_BASE` thành IP LAN của máy chạy backend (hoặc
-chạy `./setup.sh ip` để tự cập nhật). Chi tiết cấu hình app native: `mobile/README.md`.
-
-> Lưu ý: macOS chiếm cổng 5000 (AirPlay Receiver) → backend chạy ở cổng 5001.
-
-## Biến môi trường
-
-Sao chép `.env.example` thành `.env` rồi điền giá trị thật (xem file để biết chi tiết
-từng biến):
-
-- `DATABASE_URL` — kết nối Postgres/Supabase; bỏ trống thì app dùng file JSON local.
-- `SECRET_KEY` — khóa Flask session; production **phải** đặt chuỗi ngẫu nhiên.
-- `ADMIN_KEY` — khóa truy cập `/api/admin/*`; production **phải** đổi khỏi giá trị demo.
-
-## Chạy bằng Docker
-
-Cách khác để chạy backend, không cần cài Python/venv trên máy. Gồm 3 service:
-`web` (gunicorn), `worker` (nhắc lịch, `--watch`), `db` (Postgres 16 local).
-
-```bash
-cp .env.docker.example .env    # điền POSTGRES_PASSWORD, SECRET_KEY, ADMIN_KEY riêng
-docker compose up --build -d
-docker compose logs -f web     # xem log; Ctrl+C để thoát (service vẫn chạy nền)
-docker compose down            # dừng (thêm -v để xóa luôn Postgres + app_data — audit log, outbox)
-```
-
-API chạy ở `http://localhost:5001` (map từ container ra máy host) — mobile app native
-qua Expo Go vẫn trỏ `API_BASE` vào IP LAN của máy này, không đổi hành vi so với chạy
-backend không-Docker (xem mục "Chạy app native").
-
-`.env` ở đây là biến riêng cho Docker Compose (`POSTGRES_DB/USER/PASSWORD` +
-`SECRET_KEY`/`ADMIN_KEY`) — khác với `.env` dùng khi chạy `python -m app.main` trực tiếp
-(mẫu ở `.env.example`, trỏ `DATABASE_URL` ra Supabase thay vì Postgres local). Muốn dùng
-Supabase thay vì Postgres local trong Docker: đổi `DATABASE_URL` của service `web`/`worker`
-trong `docker-compose.yml` trỏ ra Supabase, bỏ qua service `db`.
+Hướng dẫn đầy đủ (Docker Compose, biến môi trường, production, troubleshooting):
+**[docs/deployment-guide.md](docs/deployment-guide.md)**.
 
 ## Thử nhanh
 
@@ -146,73 +52,28 @@ trong `docker-compose.yml` trỏ ra Supabase, bỏ qua service `db`.
 .venv/bin/python eval/evaluate.py          # Accuracy/Precision/Recall/Macro-F1 cho v1 & v2
 ```
 
-`eval/evaluate.py` chạy triage engine trên `eval/dataset.jsonl` (và `dataset_complex.jsonl`),
-so với nhãn vàng, in kết quả ra màn hình và ghi bảng chi tiết vào `eval/results.md`.
-
-## File sinh ra khi chạy
-
-- `app/data/appointments.json` — lịch hẹn đã đặt.
-- `app/data/device_tokens.json` — token push đã đăng ký.
-- `app/data/audit_log.jsonl` — nhật ký hội thoại (đã ẩn PII).
-- `app/data/outbox/push_outbox.jsonl` — push chưa gửi được (thiếu token/lỗi mạng).
-
-Khi đặt `DATABASE_URL`, các dữ liệu trên chuyển sang lưu ở Postgres/Supabase thay vì file JSON
-(xem `app/core/storage.py`, `scripts/migrate_to_supabase.py`).
-
-## Thêm vào lịch + nhắc tự động
-
-Sau khi đặt lịch thành công, bệnh nhân có 2 lựa chọn:
-
-- **Thêm vào Lịch (.ics)** — tải file mà `app/booking/calendar_ics.py` sinh ra, thêm được vào
-  Lịch iPhone/Mac, Outlook, Google Calendar; kèm **2 lời nhắc** (trước 1 ngày &
-  trước 1 giờ) nên app lịch của họ tự **thông báo**. Route: `/api/ics/<mã>`.
-- **Thêm vào Google Calendar** — link mở sẵn form tạo sự kiện trên web.
-
-Không cần OAuth / API key, hoạt động trên mọi thiết bị.
-
-## Khoảng trống trước khi lên production
-
-1. **Dev server** — `app/main.py` chạy bằng Flask dev server; production nên dùng `gunicorn`
-   và tắt `debug`.
-2. **`SECRET_KEY` / `ADMIN_KEY`** — đọc từ env, có fallback demo; production **phải** đặt
-   giá trị ngẫu nhiên riêng (xem `.env.example`).
-3. **Lưu trữ** — có `DATABASE_URL` thì dùng Postgres/Supabase (bền vững), không thì fallback
-   file JSON (local). Session hội thoại vẫn **in-memory** (`app.chatbot.SESSIONS`) → cần
-   Redis/DB khi scale nhiều worker.
-4. **CORS** — chưa cấu hình; cần thêm khi backend khác origin với client web.
-5. **`API_BASE`** — đang là IP LAN; khi deploy phải đổi sang URL HTTPS công khai.
+Chi tiết dataset, cách chấm điểm LLM: **[docs/codebase-summary.md § Evaluation System](docs/codebase-summary.md#evaluation-system-eval)**.
 
 ## Bật LLM cho triage
 
-Mặc định dự án vẫn **chạy được không cần API key** (rule-based v2). Muốn bot hiểu
-câu diễn giải kiểu *"cắn miếng táo mà buốt tận óc"*, thêm vào `.env`:
-
-```env
-OPENROUTER_API_KEY=sk-or-v1-...          # lấy tại https://openrouter.ai/keys
-LLM_MODEL=google/gemini-2.5-flash-lite   # đổi model chỉ cần sửa dòng này
-```
-
-Có key → `triage.default_version()` trả `"llm"` và mọi lời gọi `classify_symptoms()`
-đi qua mô hình. **Không bao giờ phụ thuộc hoàn toàn vào API**: mất mạng, timeout,
-hết credit hay model trả JSON hỏng đều tự động rơi về rule-based v2. Kết quả được
-cache theo câu nên một lượt chat chỉ tốn 1 lượt gọi.
+Mặc định dự án chạy được **không cần API key** (rule-based v2). Muốn bot hiểu câu
+diễn giải tự do, thêm `OPENROUTER_API_KEY` + `LLM_MODEL` vào `.env` — xem
+**[docs/system-architecture.md § Triage Engine](docs/system-architecture.md#triage-engine-three-versions)**.
 
 Thử bằng tay — gõ câu, xem hai engine trả lời cạnh nhau:
 
 ```bash
-./.venv/bin/python scripts/try_llm.py --suite     # bộ câu mẫu không chứa từ khóa nào
+./.venv/bin/python scripts/try_llm.py --suite     # bộ câu mẫu
 ./.venv/bin/python scripts/try_llm.py             # gõ câu tương tác
 ```
 
-Đo xem LLM hơn rule-based bao nhiêu (chạy trên tập held-out + phủ định):
+## Tài liệu chi tiết (`docs/`)
 
-```bash
-./.venv/bin/python eval/evaluate.py --llm    # ~63 lượt gọi API, xem mục 7 của eval/results.md
-```
-
-Tắt tạm LLM (test/offline): đặt `LLM_ENABLED=0`.
-
-## Nâng cấp (ngoài phạm vi demo)
-
-- Đồng bộ 2 chiều Google Calendar bằng OAuth (`google-api-python-client`) — để chặn trùng
-  lịch phía bác sĩ.
+| File | Nội dung |
+|------|----------|
+| [project-overview-pdr.md](docs/project-overview-pdr.md) | Bài toán, yêu cầu, phạm vi, success metrics |
+| [system-architecture.md](docs/system-architecture.md) | Sơ đồ kiến trúc, máy trạng thái, triage engine, an toàn, storage, API |
+| [codebase-summary.md](docs/codebase-summary.md) | Vai trò từng module/file trong `app/`, `mobile/`, `eval/`, `tests/` |
+| [code-standards.md](docs/code-standards.md) | Quy ước đặt tên, quy tắc phụ thuộc, pattern xử lý lỗi |
+| [deployment-guide.md](docs/deployment-guide.md) | Cài đặt local/Docker/production, biến môi trường, troubleshooting |
+| [project-roadmap.md](docs/project-roadmap.md) | Khoảng trống trước production, hướng nâng cấp |
