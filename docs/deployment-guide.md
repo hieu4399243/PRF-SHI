@@ -33,7 +33,7 @@ pip install -r requirements-dev.txt
 
 # 4. Setup environment
 cp .env.example .env
-# Edit .env: set SECRET_KEY, ADMIN_KEY, OPENROUTER_API_KEY (optional)
+# Edit .env: set SECRET_KEY, OPENROUTER_API_KEY (optional)
 # Leave DATABASE_URL empty for file JSON mode
 ```
 
@@ -258,7 +258,6 @@ One-liner if already setup:
 |----------|---------|-----------|---------|
 | `SECRET_KEY` | `abc123...` (random hex) | YES (prod) | Flask session encryption + JWT signing key |
 | `DATABASE_URL` | `postgresql://...` | NO (Postgres) | Postgres/Supabase; omit for JSON mode. **REQUIRED for auth** (user accounts need DB) |
-| `ADMIN_KEY` | `secret-admin-key` | LEGACY (unused) | Deprecated; old X-Admin-Key header auth removed. Can be omitted. |
 
 ### Authentication (New)
 
@@ -301,7 +300,6 @@ One-liner if already setup:
 - [ ] SSL certificate configured (HTTPS required for production)
 - [ ] Backups enabled for database
 - [ ] Monitoring & alerting setup (optional but recommended)
-- [ ] `ADMIN_KEY` can be omitted (legacy, unused in JWT auth flow)
 
 ### Deploy on Cloud VPS (Example: DigitalOcean, AWS EC2)
 

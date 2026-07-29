@@ -290,10 +290,7 @@ SECRET_KEY=<random-hex>  # Also used as JWT signing key
 JWT_EXPIRATION_HOURS=24
 SECURE_COOKIE=false  # Set true behind HTTPS
 OPENROUTER_API_KEY=sk-or-v1-...
-ADMIN_KEY=<legacy-unused>  # DEPRECATED: auth now uses JWT + password hashing
 ```
-
-**Note:** `ADMIN_KEY` environment variable is legacy/unused (removed from active auth flow). Docs will migrate references away; variable can be removed in future cleanup.
 
 ### Environment-Based Selection
 
@@ -321,13 +318,11 @@ JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
 SECURE_COOKIE = os.getenv("SECURE_COOKIE", "false").lower() == "true"
 LLM_ENABLED = os.getenv("LLM_ENABLED", "1") == "1"
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "8"))
-ADMIN_KEY = os.getenv("ADMIN_KEY", "admin")  # Legacy; unused in JWT auth flow
 ```
 
 **Production rule:** 
 - Always set random `SECRET_KEY` (used for JWT signing + Flask session encryption)
 - Set `SECURE_COOKIE=true` when deploying behind HTTPS
-- `ADMIN_KEY` can be omitted; it no longer controls admin access (JWT does)
 
 ---
 
