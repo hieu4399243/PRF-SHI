@@ -10,13 +10,13 @@ import json
 import threading
 from datetime import datetime, timezone
 
-from app import safety
-from app.triage import _normalize, _strip_accents
+from app.triage import safety
+from app.core.text import normalize, strip_accents
 
 
 def _to_no_accent(pattern: str) -> str:
     """Chuyển 1 pattern có dấu thành bản không dấu, dùng làm input test."""
-    return _strip_accents(_normalize(pattern))
+    return strip_accents(normalize(pattern))
 
 
 def test_check_emergency_no_accents():

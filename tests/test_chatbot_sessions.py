@@ -6,6 +6,7 @@ import time
 import pytest
 
 from app import chatbot
+from app.chatbot import session as session_mod
 
 
 @pytest.fixture(autouse=True)
@@ -17,27 +18,27 @@ def _clean_sessions():
 
 
 def test_session_cap_evicts_oldest(monkeypatch):
-    monkeypatch.setattr(chatbot, "_MAX_SESSIONS", 5)
+    monkeypatch.setattr(session_mod, "MAX_SESSIONS", 5)
 
     ids = [f"s{i}" for i in range(6)]  # _MAX_SESSIONS + 1
     for sid in ids:
         chatbot.get_session(sid)
 
-    assert len(chatbot.SESSIONS) <= chatbot._MAX_SESSIONS
+    assert len(chatbot.SESSIONS) <= session_mod.MAX_SESSIONS
     assert ids[0] not in chatbot.SESSIONS
 
 
 def test_session_ttl_expires():
     """Hết hạn TTL -> nội dung reset về mặc định, NHƯNG dict object được TÁI SỬ
     DỤNG (reset tại chỗ) thay vì thay bằng object mới — xem
-    chatbot._reset_in_place() và test_chatbot_session_lock.py."""
+    chatbot.reset_in_place() và test_chatbot_session_lock.py."""
     sid = "ttl-user"
     sess = chatbot.get_session(sid)
     old_state_obj = sess
     sess["state"] = "PICK_DATE"  # marca trạng thái không phải mặc định
 
     # Đẩy _last_seen về quá khứ xa hơn TTL.
-    sess["_last_seen"] = time.time() - chatbot._SESSION_TTL_SECONDS - 1
+    sess["_last_seen"] = time.time() - chatbot.SESSION_TTL_SECONDS - 1
 
     refreshed = chatbot.get_session(sid)
     assert refreshed is old_state_obj
@@ -45,7 +46,7 @@ def test_session_ttl_expires():
 
 
 def test_get_session_refreshes_recency(monkeypatch):
-    monkeypatch.setattr(chatbot, "_MAX_SESSIONS", 3)
+    monkeypatch.setattr(session_mod, "MAX_SESSIONS", 3)
 
     a_id, b_id = "a", "b"
     chatbot.get_session(a_id)
@@ -64,7 +65,7 @@ def test_get_session_refreshes_recency(monkeypatch):
 
 
 def test_reset_session_refreshes_recency(monkeypatch):
-    monkeypatch.setattr(chatbot, "_MAX_SESSIONS", 3)
+    monkeypatch.setattr(session_mod, "MAX_SESSIONS", 3)
 
     a_id, b_id = "a", "b"
     chatbot.get_session(a_id)

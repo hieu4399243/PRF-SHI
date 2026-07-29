@@ -25,8 +25,8 @@ from itertools import combinations
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from app.data import DEPARTMENTS  # noqa: E402
-from app.triage import _normalize, _strip_accents  # noqa: E402
+from app.core.catalog import DEPARTMENTS  # noqa: E402
+from app.core.text import normalize, strip_accents  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 FILES = ["dataset.jsonl", "dataset_complex.jsonl", "dataset_negation.jsonl"]
@@ -56,7 +56,7 @@ def load(path):
 
 def content_key(text):
     """Tập token mang NGHĨA của câu (bỏ dấu, bỏ từ đệm) — dùng so trùng nội dung."""
-    toks = _strip_accents(_normalize(text)).split()
+    toks = strip_accents(normalize(text)).split()
     return {t for t in toks if t not in _FILLER}
 
 
@@ -75,7 +75,7 @@ def check_file(path, problems):
     # 1. Trùng y hệt (so trên câu đã chuẩn hoá nhưng GIỮ dấu).
     seen = {}
     for ln, r in rows:
-        key = _normalize(r["text"])
+        key = normalize(r["text"])
         if key in seen:
             problems.append(f"[{name}] TRÙNG Y HỆT: dòng {ln} lặp lại dòng {seen[key]}"
                             f" — {r['text']!r}")

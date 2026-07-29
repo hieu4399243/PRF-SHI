@@ -14,9 +14,9 @@ import os
 import threading
 from datetime import datetime, timezone
 
-from .triage import _normalize, _strip_accents, _contains_word
+from ..core.text import contains_word, normalize, strip_accents
 
-AUDIT_LOG_PATH = os.path.join(os.path.dirname(__file__), "data", "audit_log.jsonl")
+from ..core.paths import AUDIT_LOG_PATH
 AUDIT_LOG_MAX_BYTES = 5 * 1024 * 1024  # 5MB, 1 thế hệ xoay vòng (đủ cho demo/đồ án)
 
 _AUDIT_LOCK = threading.Lock()
@@ -93,7 +93,7 @@ def _load_patterns():
     }
     db = {}
     try:
-        from . import storage
+        from ..core import storage
         if storage.USE_DB:
             db = storage.list_safety_patterns() or {}
     except Exception as exc:
@@ -118,27 +118,27 @@ DISCLAIMER = (
 
 def check_emergency(text: str) -> bool:
     """Trả về True nếu phát hiện dấu hiệu cấp cứu (bắt cả câu không dấu)."""
-    norm_na = _strip_accents(_normalize(text))
+    norm_na = strip_accents(normalize(text))
     return any(
-        _contains_word(norm_na, _strip_accents(_normalize(p)))
+        contains_word(norm_na, strip_accents(normalize(p)))
         for p in EMERGENCY_PATTERNS
     )
 
 
 def is_diagnosis_request(text: str) -> bool:
     """Người dùng đang yêu cầu chẩn đoán / kê đơn? (bắt cả câu không dấu)"""
-    norm_na = _strip_accents(_normalize(text))
+    norm_na = strip_accents(normalize(text))
     return any(
-        _contains_word(norm_na, _strip_accents(_normalize(p)))
+        contains_word(norm_na, strip_accents(normalize(p)))
         for p in DIAGNOSIS_REQUEST_PATTERNS
     )
 
 
 def needs_human_handoff(text: str) -> bool:
     """Phát hiện yêu cầu gặp người thật / tình huống nhạy cảm (bắt cả câu không dấu)."""
-    norm_na = _strip_accents(_normalize(text))
+    norm_na = strip_accents(normalize(text))
     return any(
-        _contains_word(norm_na, _strip_accents(_normalize(t)))
+        contains_word(norm_na, strip_accents(normalize(t)))
         for t in HANDOFF_PATTERNS
     )
 

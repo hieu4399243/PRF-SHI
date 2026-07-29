@@ -6,7 +6,9 @@ Bug gốc: đang ở bước chọn bác sĩ, gõ bất cứ thứ gì khác id 
 
 import pytest
 
-from app import chatbot, booking, nlu, triage
+from app import chatbot, triage
+from app.booking import service as booking
+from app.triage import nlu
 
 
 @pytest.fixture
@@ -272,7 +274,7 @@ def test_mat_phien_va_cau_khong_hieu_thi_van_chao_lai():
 ])
 def test_hoi_danh_muc_dich_vu_thi_phai_liet_ke(msg):
     """Bug gốc: hỏi "còn dịch vụ nào khác không" chỉ nhận lại "vui lòng chọn một dịch vụ"."""
-    from app.data import DEPARTMENTS
+    from app.core.catalog import DEPARTMENTS
     s = _den_confirm_dept(f"cat-{msg}")
     resp = chatbot.handle_message(s, msg)
     assert resp["state"] == "CONFIRM_DEPT"

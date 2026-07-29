@@ -2,7 +2,7 @@
 
 import pytest
 
-from app import triage, chatbot
+from app import chatbot, triage
 
 
 @pytest.mark.parametrize("text", [

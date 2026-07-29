@@ -6,7 +6,7 @@ import os
 os.environ["LLM_ENABLED"] = "0"
 
 import pytest  # noqa: E402
-from app import app as app_module  # noqa: E402
+from app import main as app_module  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

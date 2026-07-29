@@ -20,7 +20,7 @@ Hai phần, nối nhau qua REST JSON:
 └─────────────────────┘                       └────────────┬─────────────┘
         ▲   push notification (Expo Push)                   │
         └───────────────────────────────────────────────────┘
-                       app/reminder_worker.py (nhắc lịch)
+                       app/notify/worker.py (nhắc lịch)
 ```
 
 Mobile gọi backend qua IP LAN cấu hình ở `mobile/src/config.js` (`API_BASE`).
@@ -30,17 +30,17 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 
 | File | Vai trò |
 |------|---------|
-| `app/app.py` | Flask app + routes (public + admin). Chạy `host=0.0.0.0 port=5001`. |
-| `app/chatbot.py` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
-| `app/triage.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. **3 engine** dùng chung một định dạng kết quả: `v1`/`v2` rule-based theo keyword (v2 không phân biệt dấu), và `llm` gọi mô hình ngôn ngữ (`classify_with_llm()`). Có `OPENROUTER_API_KEY` → chạy `llm`, không có → `v2`. |
-| `app/llm.py` | Cổng ra LLM duy nhất — gọi **OpenRouter** (giao thức OpenAI `/chat/completions`) bằng `urllib` chuẩn. Lỗi/timeout/hết credit → trả `None` để triage tự quay về rule-based. Đổi model = sửa `LLM_MODEL` trong `.env`. |
-| `app/safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→ 115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `app/data/audit_log.jsonl` (Nghị định 13/2023). |
-| `app/booking.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
-| `app/data.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
-| `app/storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON trong `app/data/`. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
-| `app/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `app/data/outbox/push_outbox.jsonl`. |
-| `app/reminder_worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
-| `app/calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
+| `app/main.py` | Flask app + routes (public + admin). Chạy `host=0.0.0.0 port=5001`. |
+| `app/chatbot/` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
+| `app/triage/engine.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. **3 engine** dùng chung một định dạng kết quả: `v1`/`v2` rule-based theo keyword (v2 không phân biệt dấu), và `llm` gọi mô hình ngôn ngữ (`classify_with_llm()`). Có `OPENROUTER_API_KEY` → chạy `llm`, không có → `v2`. |
+| `app/triage/llm.py` | Cổng ra LLM duy nhất — gọi **OpenRouter** (giao thức OpenAI `/chat/completions`) bằng `urllib` chuẩn. Lỗi/timeout/hết credit → trả `None` để triage tự quay về rule-based. Đổi model = sửa `LLM_MODEL` trong `.env`. |
+| `app/triage/safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→ 115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `app/data/audit_log.jsonl` (Nghị định 13/2023). |
+| `app/booking/service.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
+| `app/core/catalog.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
+| `app/core/storage.py` | Lớp lưu trữ: `DATABASE_URL` → Postgres/Supabase, không có → file JSON trong `app/data/`. Bảng `appointments`, `device_tokens`, `services`, `doctors`. |
+| `app/notify/push.py` | Gửi push qua **Expo Push Service** (miễn phí, không cần key). Token lưu `app/data/device_tokens.json`. Không có token → ghi `app/data/outbox/push_outbox.jsonl`. |
+| `app/notify/worker.py` | Quét lịch → bắn nhắc. `--once` (cron), `--watch` (nền 60s), `--test`. Mỗi loại nhắc gửi 1 lần (`reminders_sent`). |
+| `app/booking/calendar_ics.py` | Sinh file `.ics` (có VALARM) — thêm vào Google/Apple/Outlook Calendar, không cần OAuth. |
 | `app/templates/index.html` | Web demo (bản thay thế nhanh cho app native). |
 | `app/templates/admin.html` | Trang quản trị (chỉ đọc lịch đã đặt/lịch làm việc), khóa bằng `ADMIN_KEY`. |
 | `eval/` | **Đánh giá AI**: `dataset.jsonl` / `dataset_complex.jsonl` (câu gán nhãn), `evaluate.py` (Accuracy/Precision/Recall/Macro-F1, v1 vs v2). |
@@ -50,7 +50,7 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 | `Dockerfile` | Image gunicorn (python:3.11-slim, non-root) cho service `web`/`worker`. |
 | `docker-compose.yml` | Orchestrate `web` + `worker` + `db` (Postgres 16 local) — xem mục "Chạy bằng Docker". |
 
-## API endpoints (`app/app.py`)
+## API endpoints (`app/main.py`)
 
 | Method | Path | Việc |
 |--------|------|------|
@@ -65,7 +65,7 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 | GET | `/api/admin/meta` | Metadata phòng khám cho trang quản trị |
 | POST | `/api/admin/cancel` | Hủy lịch hẹn (yêu cầu `X-Admin-Key`) |
 
-Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem `resolve_sid()` trong `app/app.py`.
+Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem `resolve_sid()` trong `app/main.py`.
 
 ## Cài đặt & chạy local
 
@@ -73,11 +73,11 @@ Session id: app native truyền `session` trong body JSON; web dùng cookie. Xem
 # 1. Backend
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
-PORT=5001 .venv/bin/python -m app.app        # API tại http://0.0.0.0:5001
+PORT=5001 .venv/bin/python -m app.main        # API tại http://0.0.0.0:5001
 
 # 2. Worker nhắc lịch (tùy chọn)
-.venv/bin/python -m app.reminder_worker --watch   # quét mỗi 60s
-.venv/bin/python -m app.reminder_worker --test    # gửi thử mọi loại nhắc ngay
+.venv/bin/python -m app.notify.worker --watch   # quét mỗi 60s
+.venv/bin/python -m app.notify.worker --test    # gửi thử mọi loại nhắc ngay
 
 # 3. App native
 cd mobile
@@ -125,7 +125,7 @@ qua Expo Go vẫn trỏ `API_BASE` vào IP LAN của máy này, không đổi h�
 backend không-Docker (xem mục "Chạy app native").
 
 `.env` ở đây là biến riêng cho Docker Compose (`POSTGRES_DB/USER/PASSWORD` +
-`SECRET_KEY`/`ADMIN_KEY`) — khác với `.env` dùng khi chạy `python -m app.app` trực tiếp
+`SECRET_KEY`/`ADMIN_KEY`) — khác với `.env` dùng khi chạy `python -m app.main` trực tiếp
 (mẫu ở `.env.example`, trỏ `DATABASE_URL` ra Supabase thay vì Postgres local). Muốn dùng
 Supabase thay vì Postgres local trong Docker: đổi `DATABASE_URL` của service `web`/`worker`
 trong `docker-compose.yml` trỏ ra Supabase, bỏ qua service `db`.
@@ -157,13 +157,13 @@ so với nhãn vàng, in kết quả ra màn hình và ghi bảng chi tiết và
 - `app/data/outbox/push_outbox.jsonl` — push chưa gửi được (thiếu token/lỗi mạng).
 
 Khi đặt `DATABASE_URL`, các dữ liệu trên chuyển sang lưu ở Postgres/Supabase thay vì file JSON
-(xem `app/storage.py`, `scripts/migrate_to_supabase.py`).
+(xem `app/core/storage.py`, `scripts/migrate_to_supabase.py`).
 
 ## Thêm vào lịch + nhắc tự động
 
 Sau khi đặt lịch thành công, bệnh nhân có 2 lựa chọn:
 
-- **Thêm vào Lịch (.ics)** — tải file mà `app/calendar_ics.py` sinh ra, thêm được vào
+- **Thêm vào Lịch (.ics)** — tải file mà `app/booking/calendar_ics.py` sinh ra, thêm được vào
   Lịch iPhone/Mac, Outlook, Google Calendar; kèm **2 lời nhắc** (trước 1 ngày &
   trước 1 giờ) nên app lịch của họ tự **thông báo**. Route: `/api/ics/<mã>`.
 - **Thêm vào Google Calendar** — link mở sẵn form tạo sự kiện trên web.
@@ -172,7 +172,7 @@ Không cần OAuth / API key, hoạt động trên mọi thiết bị.
 
 ## Khoảng trống trước khi lên production
 
-1. **Dev server** — `app/app.py` chạy bằng Flask dev server; production nên dùng `gunicorn`
+1. **Dev server** — `app/main.py` chạy bằng Flask dev server; production nên dùng `gunicorn`
    và tắt `debug`.
 2. **`SECRET_KEY` / `ADMIN_KEY`** — đọc từ env, có fallback demo; production **phải** đặt
    giá trị ngẫu nhiên riêng (xem `.env.example`).

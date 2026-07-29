@@ -6,6 +6,7 @@ import time
 import pytest
 
 from app import chatbot
+from app.chatbot import router
 
 
 @pytest.fixture(autouse=True)
@@ -16,7 +17,7 @@ def _clean_sessions():
 
 
 def test_new_session_has_lock():
-    sess = chatbot._new_session()
+    sess = chatbot.new_session()
     assert isinstance(sess["_lock"], type(threading.Lock()))
 
 
@@ -37,11 +38,11 @@ def test_ttl_expired_session_reuses_same_lock_object(monkeypatch):
     Giữ cùng dict object (không thay bằng object mới) tránh bug: 1 request
     khác đang giữ tham chiếu dict cũ (lấy ra TRƯỚC khi hết hạn) và đang ghi
     vào nó trong lúc giữ sess["_lock"] sẽ không bị "mất ghi" vào 1 object đã
-    bị bỏ rơi. Xem chatbot._reset_in_place()."""
+    bị bỏ rơi. Xem chatbot.reset_in_place()."""
     sid = "lock-ttl"
     sess = chatbot.get_session(sid)
     lock_before = sess["_lock"]
-    sess["_last_seen"] = time.time() - chatbot._SESSION_TTL_SECONDS - 1
+    sess["_last_seen"] = time.time() - chatbot.SESSION_TTL_SECONDS - 1
 
     sess2 = chatbot.get_session(sid)
 
@@ -53,13 +54,13 @@ def test_concurrent_handle_message_same_session_serialized(monkeypatch):
     sid = "lock-concurrent"
     chatbot.get_session(sid)
 
-    original_reply = chatbot._reply
+    original_reply = router.reply
 
     def slow_reply(*args, **kwargs):
         time.sleep(0.01)
         return original_reply(*args, **kwargs)
 
-    monkeypatch.setattr(chatbot, "_reply", slow_reply)
+    monkeypatch.setattr(router, "reply", slow_reply)
 
     errors = []
 

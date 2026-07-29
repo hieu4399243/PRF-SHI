@@ -24,9 +24,9 @@ import inspect
 import psycopg
 import pytest
 
-from app import booking
-from app import storage
-from app.data import DOCTORS, DEPARTMENTS, generate_available_slots
+from app.booking import service as booking
+from app.core import storage
+from app.core.catalog import DOCTORS, DEPARTMENTS, generate_available_slots
 
 
 def _pick_slot():

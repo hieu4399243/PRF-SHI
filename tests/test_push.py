@@ -21,8 +21,8 @@ from urllib.error import URLError
 
 import pytest
 
-from app import push
-from app import storage
+from app.notify import push
+from app.core import storage
 
 
 class _FakeResponse:

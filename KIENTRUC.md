@@ -22,8 +22,8 @@ Recall / F1, so sánh 2 phiên bản triage) trong thư mục [eval/](eval/).
 | Nguyên tắc | Thể hiện trong code |
 |-----------|---------------------|
 | Chạy được ngay, không cần API key | Triage rule-based làm nền; push qua Expo (miễn phí); `.ics` không cần OAuth |
-| Tách nghiệp vụ khỏi hạ tầng | `storage.py` là lớp trừu tượng; đổi JSON ↔ Postgres không sửa `booking.py`/`push.py` |
-| An toàn y tế lên trước | `safety.py` chặn cấp cứu/chẩn đoán/PII với ưu tiên cao nhất trong máy trạng thái |
+| Tách nghiệp vụ khỏi hạ tầng | `core/storage.py` là lớp trừu tượng; đổi JSON ↔ Postgres không sửa `booking/`/`notify/` |
+| An toàn y tế lên trước | `triage/safety.py` chặn cấp cứu/chẩn đoán/PII với ưu tiên cao nhất trong máy trạng thái |
 | LLM là nâng cấp, không phải phụ thuộc | `triage.classify_with_llm()` chạy khi có API key; lỗi/timeout tự rơi về rule-based v2 |
 | DB là nguồn chân lý duy nhất | Không cache slot in-memory; kiểm tra khung giờ trống trực tiếp tại bước xác nhận |
 
@@ -40,20 +40,21 @@ graph TB
     end
 
     subgraph Backend["Backend Flask — package app/"]
-        API["app.py<br/>REST /api/* + routes + rate-limit"]
-        CHAT["chatbot.py<br/>Máy trạng thái hội thoại"]
-        TRIAGE["triage.py<br/>Phân loại triệu chứng (AI)"]
-        NLU["nlu.py<br/>Hiểu câu trả lời tự do"]
-        SAFETY["safety.py<br/>Guardrails + audit log"]
-        BOOK["booking.py<br/>Đặt / hủy / tra cứu lịch"]
-        DATA["data.py<br/>Danh mục dịch vụ + bác sĩ + slot"]
-        PUSH["push.py<br/>Gửi Expo Push"]
-        ICS["calendar_ics.py<br/>Sinh file .ics"]
-        STORE["storage.py<br/>Lớp lưu trữ trừu tượng"]
+        API["main.py<br/>REST /api/* + routes + rate-limit"]
+        CHAT["chatbot/<br/>Máy trạng thái hội thoại"]
+        TRIAGE["triage/engine.py<br/>Phân loại triệu chứng (AI)"]
+        LLM["triage/llm.py<br/>Cổng ra OpenRouter"]
+        NLU["triage/nlu.py<br/>Hiểu câu trả lời tự do"]
+        SAFETY["triage/safety.py<br/>Guardrails + audit log"]
+        BOOK["booking/service.py<br/>Đặt / hủy / tra cứu lịch"]
+        DATA["core/catalog.py<br/>Danh mục dịch vụ + bác sĩ + slot"]
+        PUSH["notify/push.py<br/>Gửi Expo Push"]
+        ICS["booking/calendar_ics.py<br/>Sinh file .ics"]
+        STORE["core/storage.py<br/>Lớp lưu trữ trừu tượng"]
     end
 
     subgraph Worker["Tiến trình nền"]
-        REM["reminder_worker.py<br/>Quét lịch → bắn nhắc"]
+        REM["notify/worker.py<br/>Quét lịch → bắn nhắc"]
     end
 
     subgraph Persist["Lưu trữ"]
@@ -76,6 +77,7 @@ graph TB
     CHAT --> NLU
     CHAT --> SAFETY
     CHAT --> BOOK
+    TRIAGE --> LLM
     TRIAGE --> DATA
     BOOK --> DATA
     CHAT --> PUSH
@@ -106,12 +108,12 @@ Hệ thống gồm **backend Flask** và **app native**, nối nhau qua **REST J
 └─────────────────────┘                       └────────────┬─────────────┘
         ▲   push notification (Expo Push)                   │
         └───────────────────────────────────────────────────┘
-                       app/reminder_worker.py (nhắc lịch)
+                       app/notify/worker.py (nhắc lịch)
 ```
 
 - **Web** dùng **cookie session** (Flask `session["sid"]`).
 - **App native** không có cookie → gửi `session` (uuid4-hex 32 ký tự) trong body
-  JSON mỗi request. Xem `resolve_sid()` trong [app/app.py](app/app.py).
+  JSON mỗi request. Xem `resolve_sid()` trong [app/main.py](app/main.py).
 - App native phải **cùng mạng Wi-Fi** với backend vì `mobile/src/config.js`
   (`API_BASE`) trỏ vào **IP LAN**. Khi deploy thật phải đổi sang URL HTTPS công khai.
 
@@ -119,21 +121,61 @@ Hệ thống gồm **backend Flask** và **app native**, nối nhau qua **REST J
 
 ## 4. Thành phần backend (`app/`)
 
-| Module | Trách nhiệm | Ghi chú kiến trúc |
-|--------|-------------|-------------------|
-| `app.py` | Flask app, routes public + admin, rate-limit, phân giải session | Rate-limit 30 req/60s theo IP (chỉ `/api/*`); giới hạn body 64KB |
-| `chatbot.py` | **Máy trạng thái** hội thoại; session in-memory (`SESSIONS`) | Nguồn điều phối trung tâm; gọi mọi module khác |
-| `triage.py` | Phân loại triệu chứng → nhóm dịch vụ (**hàm lượng AI**) | 3 engine v1/v2/llm cùng định dạng kết quả; llm lỗi → fallback v2 |
-| `llm.py` | Cổng ra LLM duy nhất (OpenRouter, giao thức OpenAI) | Chỉ dùng `urllib` chuẩn; không bao giờ ném exception ra ngoài |
-| `nlu.py` | Hiểu câu trả lời tự do ở bước đặt lịch (ngày/giờ/tên bác sĩ/ý định) | So khớp không phân biệt dấu |
-| `safety.py` | Guardrails (cấp cứu, chẩn đoán, PII, handoff) + audit log | Ưu tiên cao nhất trong luồng xử lý |
-| `booking.py` | Đặt / hủy / tra cứu lịch, tính khung giờ trống | Gọi qua `storage.py`; DB là nguồn chân lý |
-| `data.py` | Danh mục dịch vụ (`DEPARTMENTS`), bác sĩ (`DOCTORS`), khung giờ | Seed tĩnh; nạp từ DB nếu có `DATABASE_URL` |
-| `storage.py` | **Lớp lưu trữ trừu tượng** JSON ↔ Postgres | Chọn backend theo `DATABASE_URL` |
-| `push.py` | Gửi push qua Expo Push Service | Không token → ghi outbox JSONL |
-| `reminder_worker.py` | Quét lịch → bắn nhắc (nền/cron) | Tiến trình riêng, dùng chung `booking`+`push` |
-| `calendar_ics.py` | Sinh file `.ics` (có VALARM 2 lời nhắc) | Không cần OAuth |
-| `templates/` | Web demo (`index.html`) + trang quản trị (`admin.html`) | |
+Từ bản refactor, `app/` được chia theo **tính năng** — mỗi thư mục là một mảng
+nghiệp vụ trọn vẹn, thay vì 12 file phẳng cạnh nhau:
+
+```
+app/
+├── main.py            Flask app: routes public + admin, rate-limit, phân giải session
+├── chatbot/           máy trạng thái hội thoại  (xem mục 5)
+│   ├── router.py        cửa vào duy nhất: guardrail + định tuyến theo state
+│   ├── session.py       phiên in-memory (SESSIONS) + TTL + khoá per-session
+│   ├── reply.py         định dạng response, format ngày, chuẩn hoá SĐT
+│   ├── flex.py          "trả lời linh hoạt": quay lại / đổi bước / kể thêm triệu chứng
+│   └── steps/           mỗi file là MỘT bước hội thoại
+│       ├── triage_step.py     TRIAGE + CONFIRM_DEPT
+│       ├── doctor_step.py     PICK_DOCTOR
+│       ├── schedule_step.py   PICK_DATE + PICK_TIME
+│       ├── confirm_step.py    ASK_NAME → ASK_PHONE → CONFIRM_BOOKING
+│       └── cancel_step.py     luồng hủy lịch đã đặt
+├── triage/            "hàm lượng AI" — hiểu bệnh nhân nói gì  (xem mục 6)
+│   ├── engine.py        phân loại triệu chứng → nhóm dịch vụ (v1 / v2 / llm)
+│   ├── llm.py           cổng ra mô hình ngôn ngữ (OpenRouter)
+│   ├── nlu.py           hiểu ngày / giờ / tên bác sĩ / ý định
+│   └── safety.py        guardrails y tế + audit log  (xem mục 7)
+├── booking/
+│   ├── service.py       đặt / hủy / tra cứu lịch, tính khung giờ trống
+│   └── calendar_ics.py  sinh file .ics (có VALARM 2 lời nhắc), không cần OAuth
+├── notify/
+│   ├── push.py          gửi push qua Expo Push Service
+│   └── worker.py        quét lịch → bắn nhắc (tiến trình nền / cron)
+├── core/              hạ tầng dùng chung, không biết gì về hội thoại
+│   ├── catalog.py       DEPARTMENTS + DOCTORS + khung giờ
+│   ├── storage.py       lớp lưu trữ trừu tượng JSON ↔ Postgres
+│   ├── text.py          chuẩn hoá / bỏ dấu tiếng Việt
+│   └── paths.py         đường dẫn thư mục dữ liệu, khai báo một chỗ
+├── templates/         web demo (index.html) + trang quản trị (admin.html)
+└── data/              dữ liệu chạy thật (JSON, audit log, outbox)
+```
+
+**Quy tắc phụ thuộc:** `core/` không import ngược lên ai; `triage/`, `booking/`,
+`notify/` chỉ dựa vào `core/`; `chatbot/` điều phối tất cả; `main.py` ngồi trên cùng.
+Nhờ vậy đọc từ dưới lên không bao giờ gặp vòng tròn.
+
+Vài chi tiết kiến trúc đáng nhớ:
+
+| Điểm | Ghi chú |
+|------|---------|
+| `main.py` | Rate-limit 30 req/60s theo IP (chỉ `/api/*`); giới hạn body 64KB |
+| `chatbot/router.py` | Guardrail chạy TRƯỚC định tuyến; bảng `_HANDLERS` map state → hàm bước |
+| `triage/engine.py` | 3 engine v1/v2/llm cùng định dạng kết quả; llm lỗi → fallback v2 |
+| `triage/llm.py` | Chỉ dùng `urllib` chuẩn; không bao giờ ném exception ra ngoài |
+| `triage/safety.py` | Ưu tiên cao nhất trong luồng xử lý |
+| `booking/service.py` | Gọi qua `core/storage.py`; DB là nguồn chân lý |
+| `core/catalog.py` | Seed tĩnh; nạp từ DB nếu có `DATABASE_URL` |
+| `core/storage.py` | Chọn backend theo `DATABASE_URL` |
+| `notify/push.py` | Không token → ghi outbox JSONL |
+| `notify/worker.py` | Tiến trình riêng, dùng chung `booking` + `push` |
 
 ### Quy ước "khoa" = "nhóm dịch vụ"
 
@@ -146,7 +188,7 @@ không phải 8 chuyên khoa đa khoa như phiên bản trước.
 
 ## 5. Luồng hội thoại — máy trạng thái
 
-`chatbot.py` là **máy trạng thái hữu hạn**. Mỗi session giữ một `state`; mỗi tin
+`chatbot/router.py` là **máy trạng thái hữu hạn**. Mỗi session giữ một `state`; mỗi tin
 nhắn được định tuyến theo `state` hiện tại. Trước khi định tuyến, **guardrail an
 toàn được kiểm tra trước** (thứ tự ưu tiên giảm dần).
 
@@ -185,7 +227,7 @@ stateDiagram-v2
 
 **Đặc điểm quan trọng:**
 
-- **Trả lời linh hoạt** (`_flex_intent`): ở các bước `PICK_*`, người dùng có thể
+- **Trả lời linh hoạt** (`chatbot/flex.py`): ở các bước `PICK_*`, người dùng có thể
   "quay lại", "đổi bước", hỏi thông tin dịch vụ, hoặc mô tả triệu chứng mới —
   không bị bắt buộc bấm đúng nút.
 - **Đổi dịch vụ giữa chừng** (`_maybe_new_symptom`): mô tả triệu chứng mới trong
@@ -209,7 +251,7 @@ Có **ba engine**, dùng chung một định dạng kết quả nên thay nhau �
 |--------|----------------|---------|
 | **v1** | Khớp từ khóa trên văn bản viết thường (có dấu) | Bản gốc, để so sánh |
 | **v2** | Khớp không phân biệt dấu (accent-insensitive) | **Nền + fallback** — bắt được cả khi gõ thiếu dấu |
-| **llm** | Gọi mô hình ngôn ngữ qua OpenRouter (`app/llm.py`) | **Mặc định khi có `OPENROUTER_API_KEY`** — hiểu ngữ nghĩa, không cần trúng từ khóa |
+| **llm** | Gọi mô hình ngôn ngữ qua OpenRouter (`app/triage/llm.py`) | **Mặc định khi có `OPENROUTER_API_KEY`** — hiểu ngữ nghĩa, không cần trúng từ khóa |
 
 `default_version()` chọn engine theo môi trường: có API key → `llm`, không → `v2`.
 

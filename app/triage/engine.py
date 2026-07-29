@@ -10,7 +10,7 @@ so sánh được khi ĐÁNH GIÁ:
   - v1  : rule-based, so khớp từ khóa trên văn bản đã viết thường (bản gốc).
   - v2  : như v1 nhưng so khớp KHÔNG phân biệt dấu (accent-insensitive),
           bắt được cả khi người dùng gõ thiếu dấu — rất phổ biến ở tiếng Việt.
-  - llm : gọi mô hình ngôn ngữ qua OpenRouter (xem app/llm.py) để hiểu NGỮ NGHĨA
+  - llm : gọi mô hình ngôn ngữ qua OpenRouter (xem app/triage/llm.py) để hiểu NGỮ NGHĨA
           câu tiếng Việt, không phụ thuộc việc câu có chứa đúng từ khóa hay không.
 
 Phiên bản dùng trong sản phẩm do môi trường quyết định (`default_version()`):
@@ -18,11 +18,10 @@ có `OPENROUTER_API_KEY` -> chạy `llm`, không có -> `v2`. LLM lỗi/timeout/
 credit thì TỰ ĐỘNG quay về v2 — chatbot không bao giờ chết vì API bên ngoài.
 """
 
-import re
 import threading
-import unicodedata
 from . import llm
-from .data import DEPARTMENTS
+from ..core.catalog import DEPARTMENTS
+from ..core.text import CLAUSE_BREAK, contains_word, normalize, normalize_clausal, strip_accents
 
 DEFAULT_VERSION = "v2"   # engine rule-based dùng làm nền/fallback
 LLM_VERSION = "llm"      # engine gọi mô hình ngôn ngữ
@@ -31,29 +30,6 @@ LLM_VERSION = "llm"      # engine gọi mô hình ngôn ngữ
 def default_version() -> str:
     """Engine dùng trong sản phẩm: 'llm' nếu đã cấu hình API key, else 'v2'."""
     return LLM_VERSION if llm.is_enabled() else DEFAULT_VERSION
-
-# Ký tự KHÔNG phải chữ/số -> coi như khoảng trắng (tách từ, bỏ dấu câu).
-_NON_WORD = re.compile(r"[^0-9a-zA-ZÀ-ỹà-ỹ]+", re.UNICODE)
-
-
-def _normalize(text: str) -> str:
-    """Chuẩn hóa: viết thường, đổi dấu câu thành khoảng trắng, gộp khoảng trắng."""
-    return " ".join(_NON_WORD.sub(" ", text.lower()).split())
-
-
-def _strip_accents(text: str) -> str:
-    """Bỏ dấu tiếng Việt: 'răng sâu' -> 'rang sau' (giữ chữ 'đ' -> 'd')."""
-    text = text.replace("đ", "d").replace("Đ", "D")
-    decomposed = unicodedata.normalize("NFD", text)
-    return "".join(c for c in decomposed if unicodedata.category(c) != "Mn")
-
-
-def _contains_word(haystack: str, needle: str) -> bool:
-    """Khớp theo RANH GIỚI TỪ (whole-word), tránh 'chân răng' chứa 'hàn răng'.
-
-    Cả hai chuỗi đã được chuẩn hóa (token cách nhau bởi 1 khoảng trắng).
-    """
-    return f" {needle} " in f" {haystack} "
 
 
 # ---------------------------------------------------------------------------
@@ -75,29 +51,19 @@ _NEG_CUES_NA = {"khong", "ko", "k", "chua", "chang", "cha", "het"}
 _CONTRAST = {"nhưng", "nhung", "mà", "ma", "còn", "con", "song"}
 _NEG_WINDOW = 3  # số token nhìn ngược về trước
 
-# Phủ định KHÔNG được vượt qua ranh giới mệnh đề. _normalize() xoá hết dấu câu,
+# Phủ định KHÔNG được vượt qua ranh giới mệnh đề. normalize() xoá hết dấu câu,
 # nên "có gì bất thường KHÔNG, khám tổng quát" sẽ thành "... khong kham tong quat"
 # -> "không" (từ để HỎI, kết thúc mệnh đề trước) đứng sát "khám tổng quát" và bị
 # hiểu nhầm thành phủ định nó. Vì vậy khi chấm điểm ta chuẩn hoá bằng
-# _normalize_clausal(): dấu câu được thay bằng token mốc _CLAUSE_BREAK, và
+# normalize_clausal(): dấu câu được thay bằng token mốc CLAUSE_BREAK, và
 # _is_negated() dừng lại ở mốc đó.
-_CLAUSE_BREAK = "brk"
-_CLAUSE_SEP = re.compile(r"[,.;:!?…\n]+")
-
-
-def _normalize_clausal(text: str) -> str:
-    """Như _normalize() nhưng GIỮ ranh giới mệnh đề dưới dạng token `brk`."""
-    parts = (_normalize(p) for p in _CLAUSE_SEP.split(text or ""))
-    return f" {_CLAUSE_BREAK} ".join(p for p in parts if p)
-
-
 def _is_negated(tokens, start: int, accent_free: bool) -> bool:
     """Từ khóa bắt đầu ở tokens[start] có nằm trong tầm phủ định không?"""
     cues = _NEG_CUES_NA if accent_free else _NEG_CUES
     for i in range(start - 1, max(-1, start - 1 - _NEG_WINDOW), -1):
         tok = tokens[i]
         # Hết mệnh đề (dấu phẩy/chấm) hoặc gặp liên từ đối lập -> ngoài tầm phủ định.
-        if tok == _CLAUSE_BREAK or tok in _CONTRAST:
+        if tok == CLAUSE_BREAK or tok in _CONTRAST:
             return False
         if tok in cues:
             return True
@@ -150,8 +116,8 @@ def classify_symptoms(text: str, version: str = None):
 def _score(text: str, version: str = DEFAULT_VERSION):
     """Chấm điểm thô. Trả (results, negated) — `negated` là các dịch vụ CHỈ khớp
     trong ngữ cảnh phủ định ("tôi không bị đau răng") nên không được tính điểm."""
-    norm = _normalize_clausal(text)  # giữ mốc ranh giới mệnh đề cho negation
-    norm_na = _strip_accents(norm)  # bản không dấu, dùng cho v2
+    norm = normalize_clausal(text)  # giữ mốc ranh giới mệnh đề cho negation
+    norm_na = strip_accents(norm)  # bản không dấu, dùng cho v2
     results, negated = [], []
 
     for code, dept in DEPARTMENTS.items():
@@ -160,7 +126,7 @@ def _score(text: str, version: str = DEFAULT_VERSION):
         for kw in dept["keywords"]:
             kind = _match_kind(norm, kw, accent_free=False)
             if kind == "none" and version == "v2":
-                kind = _match_kind(norm_na, _strip_accents(kw), accent_free=True)
+                kind = _match_kind(norm_na, strip_accents(kw), accent_free=True)
             if kind == "hit":
                 # Cụm càng DÀI càng đặc trưng -> trọng số = số từ trong cụm.
                 # ("tẩy trắng răng" = 3 điểm phải thắng "ê buốt" = 2 điểm khi người
@@ -215,11 +181,11 @@ def mentions_dental_discomfort(text: str) -> bool:
     Dùng cho fallback khi classify_symptoms không đủ điểm: vẫn nhận ra đây là vấn
     đề răng miệng để hỏi có cấu trúc. Khớp KHÔNG phân biệt dấu (bắt cả gõ thiếu dấu).
     """
-    norm_na = _strip_accents(_normalize_clausal(text))
-    has_part = any(_match_kind(norm_na, _strip_accents(p), accent_free=True) == "hit"
+    norm_na = strip_accents(normalize_clausal(text))
+    has_part = any(_match_kind(norm_na, strip_accents(p), accent_free=True) == "hit"
                    for p in _DENTAL_PARTS)
     # Cảm giác khó chịu phải KHÔNG bị phủ định: "răng tôi không đau" -> False.
-    has_feel = any(_match_kind(norm_na, _strip_accents(f), accent_free=True) == "hit"
+    has_feel = any(_match_kind(norm_na, strip_accents(f), accent_free=True) == "hit"
                    for f in _DISCOMFORT)
     return has_part and has_feel
 
@@ -246,7 +212,7 @@ _CHAT_SHORTHAND = {"g": "gi", "j": "gi", "ji": "gi", "z": "gi", "wa": "qua"}
 
 def _normalize_chat(text: str) -> str:
     """Chuẩn hóa + bỏ dấu + giãn viết tắt (chỉ dùng cho nhận diện câu hỏi thông tin)."""
-    toks = _strip_accents(_normalize(text)).split()
+    toks = strip_accents(normalize(text)).split()
     return " ".join(_CHAT_SHORTHAND.get(t, t) for t in toks)
 
 # Token quá chung -> bỏ khi so khớp tên/từ khóa dịch vụ (tránh nhiễu).
@@ -270,8 +236,8 @@ def _mention_tokens(phrases, strip: bool) -> set:
     """
     toks = set()
     for phrase in phrases:
-        for t in _normalize(phrase).split():
-            base = _strip_accents(t)
+        for t in normalize(phrase).split():
+            base = strip_accents(t)
             if not base or base in _MENTION_STOP:
                 continue
             toks.add(base if strip else t)
@@ -340,7 +306,7 @@ FOLLOWUP_QUESTIONS = [
 # Rule-based chỉ đúng khi câu chứa đúng cụm từ đã liệt kê; câu nói vòng
 # ("cắn miếng táo mà buốt tận óc") thì trượt. LLM đọc hiểu cả câu rồi CHỌN
 # trong đúng danh mục dịch vụ của phòng khám — nó KHÔNG được tự bịa nhãn mới,
-# KHÔNG chẩn đoán, KHÔNG kê đơn (phần chặn nội dung vẫn do app/safety.py giữ).
+# KHÔNG chẩn đoán, KHÔNG kê đơn (phần chặn nội dung vẫn do app/triage/safety.py giữ).
 # ---------------------------------------------------------------------------
 
 # Điểm quy ước gán cho các nhãn LLM trả về, theo thứ hạng. Chỉ để xếp hạng và
@@ -444,7 +410,7 @@ def classify_with_llm(text: str):
     """
     if not llm.is_enabled():
         return None
-    key = _normalize(text or "")
+    key = normalize(text or "")
     if not key:
         return None
 

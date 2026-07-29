@@ -3,7 +3,7 @@
 import uuid
 
 from app import chatbot
-from app import safety
+from app.triage import safety
 
 
 def _new_session_id():

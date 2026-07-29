@@ -15,7 +15,7 @@ import time
 from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
-from . import booking
+from ..booking import service as booking
 from . import push
 
 VN_TZ = ZoneInfo("Asia/Ho_Chi_Minh")

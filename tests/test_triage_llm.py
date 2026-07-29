@@ -3,7 +3,8 @@
 import json
 import pytest
 
-from app import llm, triage
+from app import triage
+from app.triage import engine, llm
 
 
 @pytest.fixture(autouse=True)
@@ -111,8 +112,8 @@ def test_ep_version_v2_bo_qua_llm(monkeypatch):
 
 
 def test_prompt_chua_du_danh_muc_dich_vu():
-    prompt = triage._llm_system_prompt()
-    from app.data import DEPARTMENTS
+    prompt = engine._llm_system_prompt()
+    from app.core.catalog import DEPARTMENTS
     for code in DEPARTMENTS:
         assert code in prompt
     assert "không kê đơn" in prompt.lower() or "không kê đơn" in prompt

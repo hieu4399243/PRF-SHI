@@ -12,7 +12,7 @@ Tất cả so khớp đều KHÔNG PHÂN BIỆT DẤU (người Việt hay gõ t
 import re
 from datetime import date, timedelta
 
-from .triage import _normalize, _strip_accents
+from ..core.text import normalize, strip_accents
 
 
 def _na(text: str) -> str:
@@ -20,17 +20,17 @@ def _na(text: str) -> str:
 
     Dùng cho so khớp cụm từ/ý định ("nào cũng được", tên bác sĩ).
     """
-    return _strip_accents(_normalize(text or ""))
+    return strip_accents(normalize(text or ""))
 
 
 def _na_punct(text: str) -> str:
     """Bỏ dấu nhưng GIỮ dấu câu: '20/7' -> '20/7', '9:30' -> '9:30'.
 
-    Bắt buộc cho parse ngày/giờ: _normalize() đổi mọi ký tự không phải chữ-số
+    Bắt buộc cho parse ngày/giờ: normalize() đổi mọi ký tự không phải chữ-số
     thành khoảng trắng, nên '20/7' sẽ thành '20 7' và regex ngày không còn thấy
     dấu '/' để bám vào.
     """
-    return " ".join(_strip_accents((text or "").lower()).split())
+    return " ".join(strip_accents((text or "").lower()).split())
 
 
 def _has_any(text_na: str, phrases) -> bool:

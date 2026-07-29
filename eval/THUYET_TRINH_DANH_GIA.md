@@ -387,7 +387,7 @@ Latency   = tổng thời gian ÷ số câu
 - Tập phủ định (`evaluate_negation`): dùng **phép giao** — (tập bot gợi ý) ∩ (tập bị
   phủ định) ≠ rỗng → SAI.
 
-**Phân biệt quan trọng:** `evaluate.py` là **giám khảo**; engine `app/triage.py` là
+**Phân biệt quan trọng:** `evaluate.py` là **giám khảo**; engine `app/triage/engine.py` là
 **thí sinh**. Thuật toán của thí sinh: mỗi lớp có danh sách từ khóa kèm trọng số → bỏ
 dấu câu nhập → từ khóa nào xuất hiện (khớp ranh giới từ, bỏ qua nếu đứng sau từ phủ
 định) thì cộng điểm cho lớp → xếp hạng theo tổng điểm.

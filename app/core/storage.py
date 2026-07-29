@@ -27,9 +27,7 @@ except ImportError:
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_DB = bool(DATABASE_URL)
 
-_BASE = os.path.join(os.path.dirname(__file__), "data")
-APPOINTMENTS_PATH = os.path.join(_BASE, "appointments.json")
-TOKENS_PATH = os.path.join(_BASE, "device_tokens.json")
+from .paths import APPOINTMENTS_PATH, TOKENS_PATH  # noqa: F401  (re-export cho code cũ)
 
 _schema_ready = False
 _SCHEMA_LOCK = threading.Lock()

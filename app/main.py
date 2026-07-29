@@ -18,10 +18,10 @@ from collections import OrderedDict
 from flask import Flask, render_template, request, jsonify, session, Response, abort
 
 from . import chatbot
-from . import booking
-from . import calendar_ics
-from . import push
-from . import storage
+from .booking import calendar_ics
+from .booking import service as booking
+from .core import storage
+from .notify import push
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB — đủ rộng cho tin nhắn text, chặn DoS

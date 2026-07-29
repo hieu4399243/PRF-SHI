@@ -4,7 +4,7 @@ Thử engine LLM của triage — gõ câu tiếng Việt, xem NGAY hai engine t
 Mục đích: kiểm chứng bằng tay rằng bot đã hiểu NGỮ NGHĨA chứ không còn dò từ
 khóa. Mỗi câu chạy song song hai engine rồi in cạnh nhau:
 
-    llm  — gọi mô hình qua OpenRouter (app/llm.py)
+    llm  — gọi mô hình qua OpenRouter (app/triage/llm.py)
     v2   — rule-based, chấm điểm theo từ khóa (bản cũ)
 
 Chỗ đáng nhìn nhất là những câu **v2 trả rỗng mà llm vẫn ra đúng dịch vụ**:
@@ -23,8 +23,9 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import llm, triage
-from app.data import DEPARTMENTS
+from app.triage import llm
+from app import triage
+from app.core.catalog import DEPARTMENTS
 
 # Câu mẫu CỐ Ý viết vòng vo, không dùng thuật ngữ nha khoa nào có trong bộ từ
 # khóa của triage.py — để thấy rõ trần của rule-based.
