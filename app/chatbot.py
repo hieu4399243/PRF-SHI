@@ -555,6 +555,35 @@ def _maybe_new_symptom(sess, message):
     )
 
 
+def _symptom_ack(sess, message):
+    """Câu ghi nhận khi người dùng KỂ THÊM TRIỆU CHỨNG giữa lúc đang đặt lịch.
+
+    `_maybe_new_symptom()` chỉ trả lời khi cần ĐỔI dịch vụ. Còn hai ca dưới đây nó
+    cố ý trả None, và nếu cứ thế rơi xuống câu "Mình chưa rõ..." thì bot hoá ra
+    không hiểu gì trong khi người dùng vừa nói đúng chủ đề:
+
+      - triệu chứng mới vẫn thuộc ĐÚNG dịch vụ đang chọn;
+      - triage nhận ra vấn đề răng miệng nhưng chưa đủ tự tin để đề nghị đổi.
+
+    Trả về "" nếu câu không dính dáng gì tới triệu chứng (lúc đó câu "chưa rõ" mới
+    đúng). Lời gọi triage ở đây dùng chung cache LLM với `_maybe_new_symptom()`
+    cùng lượt nên không tốn thêm một lượt API.
+    """
+    from .data import DEPARTMENTS
+    dept = DEPARTMENTS.get(sess.get("dept_code"), {}).get("name")
+    if not dept:
+        return ""
+
+    results = triage.classify_symptoms(message)
+    if (results and triage.confidence_level(results) == "high"
+            and results[0]["code"] == sess.get("dept_code")):
+        return f"Mình ghi nhận thêm mô tả của bạn — vẫn thuộc dịch vụ <b>{dept}</b> nhé. "
+    if results or triage.mentions_dental_discomfort(message):
+        return (f"Mình ghi nhận mô tả của bạn và vẫn đang giữ dịch vụ <b>{dept}</b> "
+                f"— gõ <b>“đổi dịch vụ”</b> nếu bạn muốn chọn dịch vụ khác. ")
+    return ""
+
+
 def _pick_doctor(sess, message):
     doctors = booking.get_doctors(sess["dept_code"])
 
@@ -595,7 +624,11 @@ def _pick_doctor(sess, message):
             sess, doctors,
             prefix="Mình <b>không tìm thấy bác sĩ nào có tên như vậy</b> ở phòng khám. ")
 
+    # Người dùng đang KỂ THÊM TRIỆU CHỨNG chứ không phải chọn bác sĩ -> ghi nhận
+    # rồi mời chọn tiếp, đừng nói "chưa rõ bạn muốn khám với bác sĩ nào".
+    ack = _symptom_ack(sess, message)
     return _reply(
+        (ack + "Giờ bạn muốn khám với <b>bác sĩ nào</b>?") if ack else
         "Mình chưa rõ bạn muốn khám với bác sĩ nào. Bạn có thể <b>bấm nút</b>, gõ "
         "<b>tên bác sĩ</b> (vd. <i>“bác sĩ Châu”</i>), gõ <b>“ai cũng được”</b> để mình "
         "xếp giúp, hoặc <b>“đổi dịch vụ”</b> nếu muốn chọn dịch vụ khác.",
@@ -676,7 +709,9 @@ def _pick_date(sess, message):
     if switched:
         return switched
 
+    ack = _symptom_ack(sess, message)
     return _reply(
+        (ack + "Bạn muốn khám vào <b>ngày nào</b>?") if ack else
         "Mình chưa nhận ra ngày bạn muốn. Bạn có thể <b>bấm nút</b>, hoặc gõ kiểu "
         "<i>“mai”</i>, <i>“thứ 5”</i>, <i>“20/7”</i>, <i>“sớm nhất”</i> nhé.<br>"
         "<i>Phòng khám chỉ nhận lịch trong các ngày dưới đây.</i>",
@@ -736,7 +771,9 @@ def _pick_time(sess, message):
     if switched:
         return switched
 
+    ack = _symptom_ack(sess, message)
     return _reply(
+        (ack + "Bạn chọn <b>khung giờ nào</b>?") if ack else
         "Mình chưa nhận ra khung giờ bạn muốn. Bạn có thể <b>bấm nút</b>, hoặc gõ kiểu "
         "<i>“9h”</i>, <i>“14h30”</i>, <i>“buổi sáng”</i>, <i>“sớm nhất”</i> nhé.",
         options=[{"label": t, "value": t} for t in times],

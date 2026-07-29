@@ -10,6 +10,13 @@ So sánh HAI phiên bản engine: v1 (so khớp có dấu) và v2 (không phân 
 
 Chạy:
     ./.venv/bin/python eval/evaluate.py
+    ./.venv/bin/python eval/evaluate.py --llm     # chấm thêm engine LLM
+
+Cờ `--llm` chạy engine LLM (OpenRouter, xem app/llm.py) trên tập HELD-OUT và tập
+PHỦ ĐỊNH rồi thêm mục so sánh vào báo cáo — đây là phép đo trả lời câu hỏi
+"rule-based đụng trần, LLM có vượt được không?". Cần OPENROUTER_API_KEY trong
+.env; mỗi câu là một lượt gọi API (tốn tiền và chậm hơn rule-based ~4-5 bậc).
+
 Kết quả in ra màn hình và ghi vào eval/results.md (bảng Markdown).
 
 Chỉ dùng thư viện chuẩn -> không cần cài thêm gì.
@@ -219,13 +226,65 @@ def render_heldout_section(ho_v2, in_v2):
     lines.append("**Kết luận.** Rule-based chỉ đúng khi người dùng gõ *trúng* từ khóa đã liệt kê. "
                  "Với câu diễn giải (“buốt tận óc”, “bàn chải dính máu”, “răng chồng lên nhau”) nó "
                  "mù hoàn toàn. Thêm từ khóa chỉ chữa được phần ngọn — muốn vượt trần này phải dùng "
-                 "NLU theo ngữ nghĩa, tức là điểm cắm LLM `triage.classify_with_llm()`.\n")
+                 "NLU theo ngữ nghĩa. Đó là lý do dự án bổ sung engine `llm` "
+                 "(`triage.classify_with_llm()`); chạy `python eval/evaluate.py --llm` để xem "
+                 "nó vượt được trần này bao nhiêu (mục 7).\n")
     lines.append("| Câu held-out engine bỏ sót / đoán sai | Nhãn đúng | Dự đoán |")
     lines.append("|---|---|---|")
     for e in ho_v2["errors"]:
         pred = LABEL_NAME.get(e["pred"], "_(không nhận ra)_")
         lines.append(f"| {e['text']} | {LABEL_NAME[e['gold']]} | {pred} |")
     lines.append("")
+    return "\n".join(lines)
+
+
+def render_llm_section(ho_v2, ho_llm, ng_v2, ng_llm, model_name):
+    """So sánh engine LLM với rule-based v2 trên đúng những chỗ v2 đuối nhất."""
+
+    def row(label, a, b, fmt=_pct):
+        """Một dòng bảng: in đậm bên THẮNG (hòa thì không in đậm bên nào)."""
+        sa, sb = fmt(a), fmt(b)
+        if a > b:
+            sa = f"**{sa}**"
+        elif b > a:
+            sb = f"**{sb}**"
+        return f"| {label} | {sa} | {sb} |"
+
+    lines = []
+    lines.append("## 7. Engine LLM vs rule-based — có vượt được trần không?\n")
+    lines.append(f"Engine `llm` gọi model **`{model_name}`** qua OpenRouter "
+                 "(`app/llm.py`), yêu cầu model chọn 1 mã trong đúng danh mục dịch vụ "
+                 "của phòng khám, nhiệt độ 0 để kết quả tái lập. Model lỗi/timeout thì "
+                 "hệ thống tự quay về v2, nên đây là *nâng cấp*, không phải *thay thế*.\n")
+    lines.append("Chấm trên tập **held-out** (câu diễn giải, chưa từng dùng để chỉnh "
+                 "từ khóa) — chỗ rule-based yếu nhất:\n")
+    lines.append("| Chỉ số (tập held-out) | v2 (rule-based) | llm |")
+    lines.append("|---|---|---|")
+    lines.append(row("Accuracy (top-1)", ho_v2["accuracy"], ho_llm["accuracy"]))
+    lines.append(row("Accuracy (top-2)", ho_v2["accuracy_top2"], ho_llm["accuracy_top2"]))
+    lines.append(row("Macro F1", ho_v2["macro_f1"], ho_llm["macro_f1"]))
+    lines.append(f"| Câu KHÔNG nhận ra gì | {sum(1 for e in ho_v2['errors'] if e['pred'] is None)} "
+                 f"| {sum(1 for e in ho_llm['errors'] if e['pred'] is None)} |")
+    lines.append(f"| Thời gian TB (ms/câu) | {ho_v2['avg_latency_ms']:.3f} | "
+                 f"{ho_llm['avg_latency_ms']:.0f} |")
+    lines.append("")
+    lines.append("| Chỉ số (tập phủ định) | v2 | llm |")
+    lines.append("|---|---|---|")
+    lines.append(row("Không gợi ý nhầm dịch vụ bị phủ định",
+                     ng_v2["no_false_positive"], ng_llm["no_false_positive"]))
+    lines.append(row("Đúng hoàn toàn", ng_v2["correct"], ng_llm["correct"]))
+    lines.append("")
+    lines.append("**Đánh đổi.** LLM hiểu câu diễn giải nhưng chậm hơn rule-based khoảng "
+                 f"{ho_llm['avg_latency_ms'] / max(ho_v2['avg_latency_ms'], 1e-6):,.0f} lần "
+                 "và tốn phí theo lượt gọi. Vì vậy hệ thống **cache theo câu** và luôn giữ "
+                 "rule-based làm lưới an toàn khi mất mạng/hết credit.\n")
+    if ho_llm["errors"]:
+        lines.append("| Câu held-out engine LLM còn sai | Nhãn đúng | LLM dự đoán |")
+        lines.append("|---|---|---|")
+        for e in ho_llm["errors"]:
+            pred = LABEL_NAME.get(e["pred"], "_(không nhận ra)_")
+            lines.append(f"| {e['text']} | {LABEL_NAME[e['gold']]} | {pred} |")
+        lines.append("")
     return "\n".join(lines)
 
 
@@ -314,7 +373,25 @@ def render_markdown(rows, res_v1, res_v2, cx_rows, cx_v2):
     return "\n".join(lines)
 
 
+def run_llm_eval(ho_rows, ng_rows):
+    """Chấm engine LLM. Trả (ho_llm, ng_llm, model_name) hoặc None nếu chưa cấu hình."""
+    from app import llm
+    if not llm.is_enabled():
+        print("[--llm] Bỏ qua: chưa có OPENROUTER_API_KEY trong .env "
+              "(hoặc LLM_ENABLED=0).")
+        return None
+    n = len(ho_rows) + len(ng_rows)
+    print(f"[--llm] Đang gọi model {llm.model()} cho {n} câu (mỗi câu 1 lượt API)...")
+    ho_llm = evaluate(ho_rows, "llm")
+    ng_llm = evaluate_negation(ng_rows, "llm")
+    if llm.LAST_ERROR:
+        print(f"[--llm] CẢNH BÁO: lượt gọi gần nhất lỗi -> {llm.LAST_ERROR}\n"
+              f"        (những câu lỗi đã tự fallback sang rule-based, số liệu sẽ bị pha trộn)")
+    return ho_llm, ng_llm, llm.model()
+
+
 def main():
+    use_llm = "--llm" in sys.argv
     rows = load_dataset(DATASET_PATH)
     res_v1 = evaluate(rows, "v1")
     res_v2 = evaluate(rows, "v2")
@@ -326,11 +403,17 @@ def main():
     ng_v1 = evaluate_negation(ng_rows, "v1")
     ng_v2 = evaluate_negation(ng_rows, "v2")
 
-    ho_v2 = evaluate(load_dataset(HELDOUT_PATH), "v2")
+    ho_rows = load_dataset(HELDOUT_PATH)
+    ho_v2 = evaluate(ho_rows, "v2")
+
+    llm_res = run_llm_eval(ho_rows, ng_rows) if use_llm else None
 
     md = render_markdown(rows, res_v1, res_v2, cx_rows, cx_v2)
     md += "\n" + render_negation_section(ng_v1, ng_v2)
     md += "\n" + render_heldout_section(ho_v2, res_v2)
+    if llm_res:
+        ho_llm, ng_llm, model_name = llm_res
+        md += "\n" + render_llm_section(ho_v2, ho_llm, ng_v2, ng_llm, model_name)
     with open(RESULTS_PATH, "w", encoding="utf-8") as f:
         f.write(md + "\n")
 
@@ -349,6 +432,12 @@ def main():
     print(f"\n>> HELD-OUT (chưa từng dùng để chỉnh từ khóa): Acc {_pct(ho_v2['accuracy'])}, "
           f"Macro-F1 {_pct(ho_v2['macro_f1'])}")
     print("   (Điểm ở tập đơn-ý phía trên là điểm TRÊN CHÍNH dữ liệu đã tinh chỉnh -> lạc quan.)")
+    if llm_res:
+        ho_llm, ng_llm, model_name = llm_res
+        print(f">> HELD-OUT bằng LLM ({model_name}): Acc {_pct(ho_llm['accuracy'])}, "
+              f"Macro-F1 {_pct(ho_llm['macro_f1'])}, {ho_llm['avg_latency_ms']:.0f} ms/câu")
+        print(f"   Phủ định (LLM): không-gợi-ý-nhầm {_pct(ng_llm['no_false_positive'])}, "
+              f"đúng hoàn toàn {_pct(ng_llm['correct'])}")
     print(f"\nĐã ghi bảng chi tiết -> {os.path.relpath(RESULTS_PATH, ROOT)}")
 
 

@@ -32,7 +32,8 @@ Phải **cùng Wi-Fi** vì đó là IP nội bộ.
 |------|---------|
 | `app/app.py` | Flask app + routes (public + admin). Chạy `host=0.0.0.0 port=5001`. |
 | `app/chatbot.py` | Máy trạng thái hội thoại. Session **in-memory** (dict `SESSIONS`). State: GREET→TRIAGE→CONFIRM_DEPT→PICK_DOCTOR→PICK_DATE→PICK_TIME→ASK_NAME→CONFIRM_BOOKING→DONE. |
-| `app/triage.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. Rule-based scoring theo keyword, có **2 phiên bản** (`v1` có dấu, `v2` không phân biệt dấu — mặc định); khớp theo ranh giới từ. `classify_with_llm()` là điểm cắm LLM (Claude). |
+| `app/triage.py` | "Hàm lượng AI": phân loại triệu chứng → **nhóm dịch vụ nha khoa**. **3 engine** dùng chung một định dạng kết quả: `v1`/`v2` rule-based theo keyword (v2 không phân biệt dấu), và `llm` gọi mô hình ngôn ngữ (`classify_with_llm()`). Có `OPENROUTER_API_KEY` → chạy `llm`, không có → `v2`. |
+| `app/llm.py` | Cổng ra LLM duy nhất — gọi **OpenRouter** (giao thức OpenAI `/chat/completions`) bằng `urllib` chuẩn. Lỗi/timeout/hết credit → trả `None` để triage tự quay về rule-based. Đổi model = sửa `LLM_MODEL` trong `.env`. |
 | `app/safety.py` | Guardrails: lọc PII, phát hiện cấp cứu (→ 115), chặn chẩn đoán/kê đơn, human handoff, **audit log** `app/data/audit_log.jsonl` (Nghị định 13/2023). |
 | `app/booking.py` | Đặt lịch, lưu `app/data/appointments.json`, loại khung giờ đã đặt. |
 | `app/data.py` | `DEPARTMENTS` (nhóm dịch vụ nha khoa) + `DOCTORS` (nha sĩ) + khung giờ. Có `DATABASE_URL` thì **nạp danh mục từ Supabase**, không thì dùng dict seed tĩnh. |
@@ -181,8 +182,37 @@ Không cần OAuth / API key, hoạt động trên mọi thiết bị.
 4. **CORS** — chưa cấu hình; cần thêm khi backend khác origin với client web.
 5. **`API_BASE`** — đang là IP LAN; khi deploy phải đổi sang URL HTTPS công khai.
 
+## Bật LLM cho triage
+
+Mặc định dự án vẫn **chạy được không cần API key** (rule-based v2). Muốn bot hiểu
+câu diễn giải kiểu *"cắn miếng táo mà buốt tận óc"*, thêm vào `.env`:
+
+```env
+OPENROUTER_API_KEY=sk-or-v1-...          # lấy tại https://openrouter.ai/keys
+LLM_MODEL=google/gemini-2.5-flash-lite   # đổi model chỉ cần sửa dòng này
+```
+
+Có key → `triage.default_version()` trả `"llm"` và mọi lời gọi `classify_symptoms()`
+đi qua mô hình. **Không bao giờ phụ thuộc hoàn toàn vào API**: mất mạng, timeout,
+hết credit hay model trả JSON hỏng đều tự động rơi về rule-based v2. Kết quả được
+cache theo câu nên một lượt chat chỉ tốn 1 lượt gọi.
+
+Thử bằng tay — gõ câu, xem hai engine trả lời cạnh nhau:
+
+```bash
+./.venv/bin/python scripts/try_llm.py --suite     # bộ câu mẫu không chứa từ khóa nào
+./.venv/bin/python scripts/try_llm.py             # gõ câu tương tác
+```
+
+Đo xem LLM hơn rule-based bao nhiêu (chạy trên tập held-out + phủ định):
+
+```bash
+./.venv/bin/python eval/evaluate.py --llm    # ~63 lượt gọi API, xem mục 7 của eval/results.md
+```
+
+Tắt tạm LLM (test/offline): đặt `LLM_ENABLED=0`.
+
 ## Nâng cấp (ngoài phạm vi demo)
 
-- `triage.classify_with_llm()` — cắm Claude để NLU tiếng Việt mạnh hơn.
 - Đồng bộ 2 chiều Google Calendar bằng OAuth (`google-api-python-client`) — để chặn trùng
   lịch phía bác sĩ.

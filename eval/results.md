@@ -13,7 +13,7 @@
 | Macro Precision | 100.0% | **100.0%** |
 | Macro Recall |  72.8% | **100.0%** |
 | Macro F1 |  84.2% | **100.0%** |
-| Thời gian TB (ms/câu) | 0.277 | 0.610 |
+| Thời gian TB (ms/câu) | 0.343 | 0.592 |
 
 ## 2. Precision / Recall / F1 theo từng dịch vụ (v2, tập đơn-ý)
 
@@ -129,7 +129,7 @@ Rule-based chấm điểm theo từ khóa sẽ khớp *“đau răng”* ngay c�
 
 Trong 28 câu sai của tập held-out: **22** câu engine KHÔNG nhận ra gì (bot sẽ hỏi lại — hỏng nhẹ), **6** câu engine đoán SAI dịch vụ (nguy hiểm hơn: dẫn bệnh nhân tới sai bác sĩ).
 
-**Kết luận.** Rule-based chỉ đúng khi người dùng gõ *trúng* từ khóa đã liệt kê. Với câu diễn giải (“buốt tận óc”, “bàn chải dính máu”, “răng chồng lên nhau”) nó mù hoàn toàn. Thêm từ khóa chỉ chữa được phần ngọn — muốn vượt trần này phải dùng NLU theo ngữ nghĩa, tức là điểm cắm LLM `triage.classify_with_llm()`.
+**Kết luận.** Rule-based chỉ đúng khi người dùng gõ *trúng* từ khóa đã liệt kê. Với câu diễn giải (“buốt tận óc”, “bàn chải dính máu”, “răng chồng lên nhau”) nó mù hoàn toàn. Thêm từ khóa chỉ chữa được phần ngọn — muốn vượt trần này phải dùng NLU theo ngữ nghĩa. Đó là lý do dự án bổ sung engine `llm` (`triage.classify_with_llm()`); chạy `python eval/evaluate.py --llm` để xem nó vượt được trần này bao nhiêu (mục 7).
 
 | Câu held-out engine bỏ sót / đoán sai | Nhãn đúng | Dự đoán |
 |---|---|---|
@@ -160,5 +160,35 @@ Trong 28 câu sai của tập held-out: **22** câu engine KHÔNG nhận ra gì 
 | Răng sậm màu vì uống trà lâu năm | Nha khoa thẩm mỹ | _(không nhận ra)_ |
 | Có cách nào làm răng đều màu mà không mài nhiều | Nha khoa thẩm mỹ | _(không nhận ra)_ |
 | Cháu nhà em hay ngậm cơm, răng cửa mòn hết | Nha khoa trẻ em | Trám răng / Sâu răng |
+| con em so ghe nha si, co bac si nhe nhang khong | Nha khoa trẻ em | _(không nhận ra)_ |
+
+## 7. Engine LLM vs rule-based — có vượt được trần không?
+
+Engine `llm` gọi model **`google/gemini-2.5-flash-lite`** qua OpenRouter (`app/llm.py`), yêu cầu model chọn 1 mã trong đúng danh mục dịch vụ của phòng khám, nhiệt độ 0 để kết quả tái lập. Model lỗi/timeout thì hệ thống tự quay về v2, nên đây là *nâng cấp*, không phải *thay thế*.
+
+Chấm trên tập **held-out** (câu diễn giải, chưa từng dùng để chỉnh từ khóa) — chỗ rule-based yếu nhất:
+
+| Chỉ số (tập held-out) | v2 (rule-based) | llm |
+|---|---|---|
+| Accuracy (top-1) |  37.8% | ** 86.7%** |
+| Accuracy (top-2) |  40.0% | ** 86.7%** |
+| Macro F1 |  49.0% | ** 87.6%** |
+| Câu KHÔNG nhận ra gì | 22 | 1 |
+| Thời gian TB (ms/câu) | 0.595 | 1163 |
+
+| Chỉ số (tập phủ định) | v2 | llm |
+|---|---|---|
+| Không gợi ý nhầm dịch vụ bị phủ định | 100.0% | 100.0% |
+| Đúng hoàn toàn | **100.0%** |  88.9% |
+
+**Đánh đổi.** LLM hiểu câu diễn giải nhưng chậm hơn rule-based khoảng 1,955 lần và tốn phí theo lượt gọi. Vì vậy hệ thống **cache theo câu** và luôn giữ rule-based làm lưới an toàn khi mất mạng/hết credit.
+
+| Câu held-out engine LLM còn sai | Nhãn đúng | LLM dự đoán |
+|---|---|---|
+| Chiếc răng sẫm màu hơn hẳn các răng bên cạnh | Nội nha (Điều trị tủy) | Nha khoa thẩm mỹ |
+| Người yêu bảo hơi thở tôi có mùi khó chịu | Nha chu (Nướu / Lợi) | Khám tổng quát & Cạo vôi |
+| rang so tam sung dau nhieu ngay | Tiểu phẫu / Nhổ răng | Trám răng / Sâu răng |
+| ham thao lap cua me bi long roi | Phục hình / Trồng răng | Nha chu (Nướu / Lợi) |
+| mat mieng dan su o rang cua | Nha khoa thẩm mỹ | Phục hình / Trồng răng |
 | con em so ghe nha si, co bac si nhe nhang khong | Nha khoa trẻ em | _(không nhận ra)_ |
 

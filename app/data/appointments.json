@@ -181,5 +181,35 @@
     "time": "16:00",
     "created_at": "2026-06-16T14:38:59",
     "status": "confirmed"
+  },
+  {
+    "code": "SHI-6Q1BAX",
+    "session": "kiem-tra",
+    "patient_name": "Kiểm Tra",
+    "patient_phone": "0900000000",
+    "department": "Trám răng / Sâu răng",
+    "department_code": "sau_rang",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_sr_01",
+    "date": "2026-07-30",
+    "time": "09:00",
+    "created_at": "2026-07-29T10:09:42",
+    "status": "confirmed",
+    "reminders_sent": []
+  },
+  {
+    "code": "SHI-W2DZCS",
+    "session": "kiem-tra",
+    "patient_name": "Kiểm Tra",
+    "patient_phone": "0900000000",
+    "department": "Trám răng / Sâu răng",
+    "department_code": "sau_rang",
+    "doctor": "BS. Lê Minh Châu",
+    "doctor_id": "bs_sr_01",
+    "date": "2026-07-30",
+    "time": "08:00",
+    "created_at": "2026-07-29T10:11:28",
+    "status": "cancelled",
+    "reminders_sent": []
   }
 ]

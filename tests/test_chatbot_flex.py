@@ -316,3 +316,29 @@ def test_hoi_dich_vu_la_gi_giua_buoc_chon_bac_si(sid_sau_rang):
     assert "trám lại" in resp["reply"] or "lỗ sâu" in resp["reply"]
     # Bấm "Đặt lịch" sau đó phải quay lại đúng bước chọn bác sĩ.
     assert chatbot.handle_message(sid_sau_rang, "yes")["state"] == "PICK_DOCTOR"
+
+
+# --- Kể THÊM triệu chứng giữa lúc đang đặt lịch -----------------------------
+# Bug: đang ở bước chọn bác sĩ mà mô tả thêm triệu chứng thì bot đáp "Mình chưa rõ
+# bạn muốn khám với bác sĩ nào" — trong khi người dùng vừa nói đúng chủ đề. Hai
+# nguyên nhân: (1) triệu chứng mới trùng dịch vụ đang chọn nên _maybe_new_symptom()
+# trả None; (2) từ thường ngày bỏ dấu trùng tên bác sĩ nên bị nhận nhầm là đã chọn.
+def test_ke_them_trieu_chung_cung_dich_vu_thi_bot_ghi_nhan(sid):
+    resp = chatbot.handle_message(sid, "hai hàm tôi còn chen chúc lệch cả khớp cắn")
+    assert resp["state"] == "PICK_DOCTOR"          # vẫn đứng ở bước cũ
+    assert "ghi nhận" in resp["reply"].lower()
+    assert "chưa rõ" not in resp["reply"].lower()  # không được tỏ ra không hiểu
+
+
+def test_tu_thuong_ngay_khong_bi_hieu_thanh_ten_bac_si():
+    """'đỏ' -> 'do' trùng họ Đỗ, 'ăn' -> 'an' trùng tên An khi bỏ dấu."""
+    docs = [{"id": "a", "name": "BS. Đỗ Thị Giang"}, {"id": "b", "name": "BS. Nguyễn Văn An"}]
+    assert nlu.match_doctor("nướu tôi còn sưng đỏ và đau nữa", docs) is None
+    assert nlu.match_doctor("máu chảy nhiều lắm, cả khi ăn cũng chảy", docs) is None
+
+
+def test_van_chon_duoc_bac_si_khi_that_su_goi_ten():
+    docs = [{"id": "a", "name": "BS. Đỗ Thị Giang"}, {"id": "b", "name": "BS. Nguyễn Văn An"}]
+    assert nlu.match_doctor("cho tôi gặp bác sĩ Giang", docs)["id"] == "a"
+    assert nlu.match_doctor("bs an", docs)["id"] == "b"
+    assert nlu.match_doctor("giang", docs)["id"] == "a"  # trả lời cộc lốc chỉ mỗi tên

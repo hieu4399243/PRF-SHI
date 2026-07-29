@@ -210,8 +210,18 @@ def match_doctor(text: str, doctors):
             return d
 
     # Tên riêng / họ: "bác sĩ châu", "gặp bs an", "châu".
+    #
+    # CHỈ khớp lỏng khi câu THẬT SỰ đang gọi tên bác sĩ, vì bỏ dấu xong rất nhiều
+    # từ thường ngày trùng họ/tên người Việt:
+    #     "nướu đỏ"      -> "do"  trùng họ "Đỗ"
+    #     "cả khi ăn"    -> "an"  trùng tên "An"
+    #     "và"/"thị"     -> "va" / "thi"
+    # Người dùng mô tả thêm triệu chứng ở bước chọn bác sĩ sẽ bị hiểu nhầm thành
+    # "đã chọn bác sĩ X". Vì vậy đòi một trong hai dấu hiệu:
+    #   (a) câu có nhắc "bác sĩ"/"bs"/"gặp"  -> đang gọi tên thật;
+    #   (b) câu RẤT NGẮN (≤3 từ có nghĩa)    -> kiểu trả lời cộc lốc "châu", "bs an".
     msg_tokens = {t for t in na.split() if t not in _DOCTOR_STOP and len(t) > 1}
-    if msg_tokens:
+    if msg_tokens and (mentions_doctor_word(text) or len(msg_tokens) <= 3):
         hits = []
         for d in doctors:
             name_tokens = {t for t in _na(d["name"]).split() if t not in _DOCTOR_STOP}

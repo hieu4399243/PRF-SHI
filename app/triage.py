@@ -4,22 +4,33 @@ Triage engine — phần "hàm lượng AI" của đề tài (phòng khám Nha k
 Nhiệm vụ: nhận mô tả triệu chứng răng miệng bằng tiếng Việt -> phân loại đúng
 NHÓM DỊCH VỤ nha khoa (sâu răng, nội nha, nha chu, chỉnh nha...).
 
-Cách tiếp cận là *rule-based scoring* (chấm điểm theo từ khóa) để chạy được
-ngay không cần API key. Có HAI phiên bản để phục vụ ĐÁNH GIÁ/so sánh:
+Có BA phiên bản engine, dùng chung một định dạng kết quả nên thay nhau được và
+so sánh được khi ĐÁNH GIÁ:
 
-  - v1: so khớp từ khóa trên văn bản đã viết thường (bản gốc).
-  - v2: như v1 nhưng so khớp KHÔNG phân biệt dấu (accent-insensitive),
-        bắt được cả khi người dùng gõ thiếu dấu — rất phổ biến ở tiếng Việt.
+  - v1  : rule-based, so khớp từ khóa trên văn bản đã viết thường (bản gốc).
+  - v2  : như v1 nhưng so khớp KHÔNG phân biệt dấu (accent-insensitive),
+          bắt được cả khi người dùng gõ thiếu dấu — rất phổ biến ở tiếng Việt.
+  - llm : gọi mô hình ngôn ngữ qua OpenRouter (xem app/llm.py) để hiểu NGỮ NGHĨA
+          câu tiếng Việt, không phụ thuộc việc câu có chứa đúng từ khóa hay không.
 
-Cấu trúc tách rời nên có thể thay `classify_symptoms()` bằng một lời gọi LLM
-(vd. Claude) mà không đụng phần còn lại. Xem hàm classify_with_llm() ở cuối.
+Phiên bản dùng trong sản phẩm do môi trường quyết định (`default_version()`):
+có `OPENROUTER_API_KEY` -> chạy `llm`, không có -> `v2`. LLM lỗi/timeout/hết
+credit thì TỰ ĐỘNG quay về v2 — chatbot không bao giờ chết vì API bên ngoài.
 """
 
 import re
+import threading
 import unicodedata
+from . import llm
 from .data import DEPARTMENTS
 
-DEFAULT_VERSION = "v2"  # phiên bản dùng trong sản phẩm (chatbot)
+DEFAULT_VERSION = "v2"   # engine rule-based dùng làm nền/fallback
+LLM_VERSION = "llm"      # engine gọi mô hình ngôn ngữ
+
+
+def default_version() -> str:
+    """Engine dùng trong sản phẩm: 'llm' nếu đã cấu hình API key, else 'v2'."""
+    return LLM_VERSION if llm.is_enabled() else DEFAULT_VERSION
 
 # Ký tự KHÔNG phải chữ/số -> coi như khoảng trắng (tách từ, bỏ dấu câu).
 _NON_WORD = re.compile(r"[^0-9a-zA-ZÀ-ỹà-ỹ]+", re.UNICODE)
@@ -116,14 +127,22 @@ def _match_kind(haystack: str, needle: str, accent_free: bool) -> str:
     return "hit"
 
 
-def classify_symptoms(text: str, version: str = DEFAULT_VERSION):
+def classify_symptoms(text: str, version: str = None):
     """Phân loại triệu chứng -> danh sách dịch vụ kèm điểm số, giảm dần.
 
     Trả về list các dict: [{code, name, desc, score, matched: [...]}, ...]
 
-    version='v1': so khớp từ khóa có dấu.
-    version='v2': so khớp không phân biệt dấu (bắt cả văn bản gõ thiếu dấu).
+    version=None : dùng engine mặc định của môi trường (xem default_version()).
+    version='v1' : so khớp từ khóa có dấu.
+    version='v2' : so khớp không phân biệt dấu (bắt cả văn bản gõ thiếu dấu).
+    version='llm': hỏi mô hình ngôn ngữ; lỗi/không chắc -> tự fallback về v2.
     """
+    version = version or default_version()
+    if version == LLM_VERSION:
+        results = classify_with_llm(text)
+        if results is not None:
+            return results
+        version = DEFAULT_VERSION  # LLM hỏng -> quay về rule-based
     results, _ = _score(text, version)
     return results
 
@@ -167,12 +186,16 @@ def negated_matches(text: str, version: str = DEFAULT_VERSION):
     """Các dịch vụ mà người dùng nhắc tới nhưng để PHỦ ĐỊNH ("tôi không bị đau răng").
 
     Dùng để bot trả lời đúng ý thay vì vẫn gợi ý dịch vụ mà người dùng vừa loại trừ.
+    Luôn chạy bằng luật từ khóa (kể cả khi engine chính là LLM): ở đây ta cần biết
+    người dùng đã NHẮC TỚI dịch vụ nào, mà LLM thì cố tình không trả về nhãn bị phủ định.
     """
+    if version == LLM_VERSION:
+        version = DEFAULT_VERSION
     _, negated = _score(text, version)
     return negated
 
 
-def best_department(text: str, version: str = DEFAULT_VERSION):
+def best_department(text: str, version: str = None):
     """Trả về dịch vụ phù hợp nhất, hoặc None nếu không nhận diện được."""
     results = classify_symptoms(text, version=version)
     return results[0] if results else None
@@ -290,6 +313,11 @@ def confidence_level(results) -> str:
     """
     if not results:
         return "low"
+    # Engine LLM tự nói mức tin cậy của nó -> tin theo, không suy ra từ điểm số
+    # (điểm của LLM là thứ hạng quy ước, không cùng thang với rule-based).
+    stated = results[0].get("confidence")
+    if stated in ("high", "medium", "low"):
+        return stated
     if len(results) == 1:
         return "high"
     top, second = results[0]["score"], results[1]["score"]
@@ -307,18 +335,128 @@ FOLLOWUP_QUESTIONS = [
 
 
 # ---------------------------------------------------------------------------
-# ĐIỂM TÍCH HỢP LLM (tùy chọn) — để nâng cấp NLU tiếng Việt.
-# Mặc định KHÔNG bật để dự án chạy được ngay. Khi cần độ chính xác cao hơn,
-# có thể gọi Claude API tại đây và trả về cùng định dạng như classify_symptoms.
+# ENGINE LLM — hiểu NGỮ NGHĨA thay vì đếm từ khóa.
+#
+# Rule-based chỉ đúng khi câu chứa đúng cụm từ đã liệt kê; câu nói vòng
+# ("cắn miếng táo mà buốt tận óc") thì trượt. LLM đọc hiểu cả câu rồi CHỌN
+# trong đúng danh mục dịch vụ của phòng khám — nó KHÔNG được tự bịa nhãn mới,
+# KHÔNG chẩn đoán, KHÔNG kê đơn (phần chặn nội dung vẫn do app/safety.py giữ).
 # ---------------------------------------------------------------------------
-def classify_with_llm(text: str):  # pragma: no cover - placeholder tích hợp
-    """Khung tích hợp Claude (claude-opus-4-8 / claude-sonnet-4-6).
 
-    Gợi ý triển khai:
-        from anthropic import Anthropic
-        client = Anthropic(api_key=os.environ["ANTHROPIC_API_KEY"])
-        # prompt yêu cầu model chọn 1 trong các mã dịch vụ trong DEPARTMENTS,
-        # KHÔNG chẩn đoán, KHÔNG kê đơn; trả JSON {code, confidence}.
-    Hiện trả về None để hệ thống fallback sang rule-based.
+# Điểm quy ước gán cho các nhãn LLM trả về, theo thứ hạng. Chỉ để xếp hạng và
+# cho phần code cũ (đọc field "score") chạy nguyên vẹn.
+_LLM_RANK_SCORES = [10, 7, 4]
+
+# Cache theo văn bản: một lượt chat gọi classify_symptoms 2–3 lần cho CÙNG câu
+# (định tuyến state, phát hiện triệu chứng mới...). Không cache thì trả tiền
+# và chờ mạng nhiều lần cho một câu hỏi.
+_LLM_CACHE = {}
+_LLM_CACHE_MAX = 256
+_LLM_CACHE_LOCK = threading.Lock()
+
+
+def _llm_system_prompt() -> str:
+    """Prompt hệ thống: liệt kê đúng danh mục dịch vụ + ràng buộc đầu ra JSON."""
+    catalog = "\n".join(
+        f'- {code}: {d["name"]} — {d["desc"]}' for code, d in DEPARTMENTS.items()
+    )
+    return (
+        "Bạn là bộ phân loại (triage) của một PHÒNG KHÁM NHA KHOA ở Việt Nam. "
+        "Nhiệm vụ: đọc mô tả triệu chứng răng miệng bằng tiếng Việt (có thể thiếu "
+        "dấu, viết tắt, sai chính tả) và chọn NHÓM DỊCH VỤ phù hợp nhất.\n\n"
+        f"Danh mục dịch vụ (chỉ được chọn trong đây):\n{catalog}\n\n"
+        "QUY TẮC:\n"
+        "1. Chỉ trả mã dịch vụ có trong danh mục. Tuyệt đối không bịa mã mới.\n"
+        "2. Không chẩn đoán bệnh, không kê đơn thuốc, không nêu tên thuốc.\n"
+        "3. Tôn trọng phủ định: 'tôi không bị đau răng' KHÔNG phải triệu chứng "
+        "đau răng -> không trả mã đó.\n"
+        "4. Câu không liên quan răng miệng (chào hỏi, hỏi giá, hỏi đường...) -> "
+        'trả danh sách rỗng.\n'
+        "5. confidence: 'high' khi chắc chắn một dịch vụ; 'medium' khi còn phân "
+        "vân giữa vài dịch vụ; 'low' khi không đủ thông tin.\n\n"
+        "CHỈ trả JSON đúng dạng:\n"
+        '{"services": [{"code": "<mã>", "evidence": ["<cụm từ trong câu>"]}], '
+        '"confidence": "high|medium|low"}\n'
+        "Xếp services theo độ phù hợp giảm dần, tối đa 3 mã."
+    )
+
+
+def _llm_results(payload):
+    """Đổi JSON của model -> đúng định dạng của classify_symptoms(). None nếu hỏng."""
+    if not isinstance(payload, dict):
+        return None
+    services = payload.get("services")
+    if not isinstance(services, list):
+        return None
+
+    confidence = payload.get("confidence")
+    if confidence not in ("high", "medium", "low"):
+        confidence = "medium"
+
+    results, seen = [], set()
+    for item in services[:len(_LLM_RANK_SCORES)]:
+        code = item.get("code") if isinstance(item, dict) else item
+        # Bỏ mã model bịa ra hoặc trả trùng.
+        if code not in DEPARTMENTS or code in seen:
+            continue
+        seen.add(code)
+        evidence = item.get("evidence") if isinstance(item, dict) else None
+        dept = DEPARTMENTS[code]
+        results.append({
+            "code": code,
+            "name": dept["name"],
+            "desc": dept["desc"],
+            "score": _LLM_RANK_SCORES[len(results)],
+            "matched": [str(e) for e in evidence][:5] if isinstance(evidence, list) else [],
+            "confidence": confidence,
+            "source": LLM_VERSION,
+        })
+    # Model bảo có dịch vụ nhưng mã đều sai -> coi như hỏng, để tầng trên fallback.
+    if services and not results:
+        return None
+    return results
+
+
+def _cache_get(key):
+    with _LLM_CACHE_LOCK:
+        return _LLM_CACHE.get(key)
+
+
+def _cache_put(key, value):
+    with _LLM_CACHE_LOCK:
+        if len(_LLM_CACHE) >= _LLM_CACHE_MAX:
+            _LLM_CACHE.clear()  # cache demo: đầy thì xoá sạch, đủ dùng
+        _LLM_CACHE[key] = value
+
+
+def clear_llm_cache():
+    """Xoá cache LLM (dùng trong test hoặc khi đổi model lúc đang chạy)."""
+    with _LLM_CACHE_LOCK:
+        _LLM_CACHE.clear()
+
+
+def classify_with_llm(text: str):
+    """Phân loại bằng LLM. Trả về list KẾT QUẢ (có thể rỗng), hoặc None nếu KHÔNG
+    gọi được model — phân biệt hai ca này rất quan trọng:
+
+        []   = model đã trả lời và khẳng định "không có dịch vụ nào phù hợp"
+        None = LLM tắt/lỗi/timeout -> tầng trên phải fallback sang rule-based
     """
-    return None
+    if not llm.is_enabled():
+        return None
+    key = _normalize(text or "")
+    if not key:
+        return None
+
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
+
+    payload = llm.chat_json(_llm_system_prompt(), (text or "").strip()[:1000])
+    if payload is None:
+        return None
+    results = _llm_results(payload)
+    if results is None:
+        return None
+    _cache_put(key, results)
+    return results
