@@ -4,3 +4,6 @@ gunicorn==23.0.0
 # Không đặt DATABASE_URL thì app vẫn chạy với file JSON, không cần 2 gói dưới.
 psycopg[binary]==3.2.3
 python-dotenv==1.0.1
+# Authentication - JWT + password hashing
+PyJWT==2.13.0
+bcrypt==4.1.2

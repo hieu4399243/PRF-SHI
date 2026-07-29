@@ -3,12 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Quản trị — Trợ lý Nha khoa SHI</title>
+<title>Bác sĩ — Trợ lý Nha khoa SHI</title>
 <style>
   :root{
     --bg:#edf0f2; --paper:#ffffff; --ink:#1a1a1a; --body:#2e2e2e; --muted:#8a8a8a;
     --teal:#0e9b8e; --teal-deep:#0b7d72; --teal-tint:#e7f4f1; --line:#e4e4e4;
-    --warn:#b25a2b; --ok:#0e9b8e; --cancel:#b23a3a;
+    --cancel:#b23a3a;
   }
   *{box-sizing:border-box}
   body{
@@ -17,8 +17,8 @@
   }
   .head{background:linear-gradient(135deg,var(--teal),var(--teal-deep)); color:#fff;
         padding:16px 20px; display:flex; align-items:center; gap:12px}
-    .headLeft{display:flex;align-items:center;gap:12px}
-    .headRight{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .headLeft{display:flex;align-items:center;gap:12px}
+  .headRight{margin-left:auto;display:flex;align-items:center;gap:10px}
   .avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.18);
           display:flex;align-items:center;justify-content:center;font-size:22px}
   .head h1{font-size:16px;margin:0;font-weight:700}
@@ -31,7 +31,7 @@
   .userAvatar{width:28px;height:28px;border-radius:50%;display:flex;align-items:center;justify-content:center;
               background:#fff;color:var(--teal-deep);font-weight:700;font-size:12px}
   .userText{display:flex;flex-direction:column;align-items:flex-start;line-height:1.15}
-  .userText b{font-size:12px;font-weight:700;max-width:130px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .userText b{font-size:12px;font-weight:700;max-width:150px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
   .userText span{font-size:10.5px;opacity:.9}
   .chev{font-size:10px;opacity:.9;transition:transform .2s}
   .userMenu.open .chev{transform:rotate(180deg)}
@@ -53,8 +53,6 @@
   button{font:inherit;font-size:13px;padding:8px 14px;border:0;border-radius:8px;
          background:var(--teal);color:#fff;cursor:pointer}
   button:hover{background:var(--teal-deep)}
-  button.ghost{background:#fff;color:var(--teal);border:1px solid var(--teal)}
-  button.danger{background:#fff;color:var(--cancel);border:1px solid var(--cancel);padding:4px 10px;font-size:12px}
   .filters{display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
   .tabs{display:flex;gap:8px;margin-bottom:16px}
   .tabs button{background:#fff;color:var(--body);border:1px solid var(--line)}
@@ -63,6 +61,8 @@
   .stat{background:var(--teal-tint);border-radius:10px;padding:10px 16px;min-width:110px}
   .stat b{font-size:22px;color:var(--teal-deep);display:block}
   .stat span{font-size:11px;color:var(--muted)}
+  .doctorCard{margin-top:10px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fafdfc}
+  .doctorCard b{color:var(--ink)}
   table{width:100%;border-collapse:collapse;font-size:13px}
   th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
   th{font-size:11px;text-transform:uppercase;letter-spacing:.03em;color:var(--muted)}
@@ -96,17 +96,17 @@
   <div class="headLeft">
     <div class="avatar">🦷</div>
     <div>
-      <h1>Trang quản trị — Nha khoa SHI</h1>
-      <p>Xem lịch hẹn đã đặt & lịch làm việc của bác sĩ</p>
+      <h1>Bảng điều khiển bác sĩ — Nha khoa SHI</h1>
+      <p>Xem lịch hẹn và lịch làm việc của chính bạn</p>
     </div>
   </div>
   <div class="headRight">
     <div class="userMenu" id="userMenu">
       <button class="menuBtn" id="userMenuBtn" onclick="toggleUserMenu(event)">
-        <span class="userAvatar" id="userInitial">A</span>
+        <span class="userAvatar" id="userInitial">D</span>
         <span class="userText">
           <b id="whoName">...</b>
-          <span id="whoRole">admin</span>
+          <span id="whoRole">doctor</span>
         </span>
         <span class="chev">▾</span>
       </button>
@@ -117,26 +117,23 @@
   </div>
 </div>
 
-<!-- Nội dung chính -->
 <div id="main" class="wrap">
   <div class="card">
     <div class="stats" id="stats"></div>
+    <div class="doctorCard" id="doctorInfo"></div>
   </div>
 
   <div class="tabs">
-    <button id="tabList" class="active" onclick="showTab('list')">📋 Danh sách lịch hẹn</button>
-    <button id="tabSched" onclick="showTab('sched')">🗓️ Lịch làm việc bác sĩ</button>
+    <button id="tabList" class="active" onclick="showTab('list')">📋 Lịch hẹn của tôi</button>
+    <button id="tabSched" onclick="showTab('sched')">🗓️ Lịch làm việc trong ngày</button>
   </div>
 
-  <!-- TAB 1: danh sách lịch hẹn -->
   <div id="viewList">
     <div class="card">
       <h2>Bộ lọc</h2>
       <div class="filters">
         <div><label>Ngày</label>
           <select id="fDate"><option value="">Tất cả</option></select></div>
-        <div><label>Bác sĩ</label>
-          <select id="fDoctor"><option value="">Tất cả</option></select></div>
         <div><label>Trạng thái</label>
           <select id="fStatus">
             <option value="">Tất cả</option>
@@ -153,7 +150,7 @@
       <div class="tableScroll">
         <table>
           <thead><tr><th>Mã</th><th>Ngày</th><th>Giờ</th><th>Bệnh nhân</th>
-            <th>SĐT</th><th>Dịch vụ</th><th>Bác sĩ</th><th>Trạng thái</th><th></th></tr></thead>
+            <th>SĐT</th><th>Dịch vụ</th><th>Trạng thái</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
@@ -161,12 +158,10 @@
     </div>
   </div>
 
-  <!-- TAB 2: lịch làm việc bác sĩ -->
   <div id="viewSched" class="hide">
     <div class="card">
-      <h2>Chọn bác sĩ & ngày</h2>
+      <h2>Chọn ngày</h2>
       <div class="filters">
-        <div><label>Bác sĩ</label><select id="sDoctor"></select></div>
         <div><label>Ngày</label><select id="sDate"></select></div>
         <div><button onclick="loadSched()">Xem lịch làm việc</button></div>
       </div>
@@ -182,30 +177,13 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const stat = (n,l) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`;
 
 async function api(path){
   const r = await fetch(path, { credentials: "include" });
   if(r.status === 401) throw new Error("unauth");
   return r.json();
 }
-
-function fillMeta(meta){
-  // thống kê
-  const s = meta.summary;
-  $("stats").innerHTML =
-    stat(s.total, "Tổng lịch") + stat(s.confirmed, "Đã xác nhận") +
-    stat(s.cancelled, "Đã hủy");
-  // dropdown bác sĩ
-  const docOpts = meta.doctors.map(d =>
-    `<option value="${d.id}">${d.name} — ${d.dept_name}</option>`).join("");
-  $("fDoctor").innerHTML = '<option value="">Tất cả</option>' + docOpts;
-  $("sDoctor").innerHTML = docOpts;
-  // dropdown ngày
-  const dateOpts = meta.dates.map(d => `<option value="${d}">${d}</option>`).join("");
-  $("fDate").innerHTML = '<option value="">Tất cả</option>' + dateOpts;
-  $("sDate").innerHTML = dateOpts;
-}
-const stat = (n,l) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`;
 
 function showTab(t){
   $("tabList").classList.toggle("active", t==="list");
@@ -222,8 +200,7 @@ function showToast(text, type = "ok"){
 }
 
 function hideToast(){
-  const t = $("toast");
-  t.classList.remove("show");
+  $("toast").classList.remove("show");
 }
 
 function toggleUserMenu(event){
@@ -240,59 +217,67 @@ function closeUserMenu(){
 }
 
 function renderCurrentUser(user){
-  $("whoName").textContent = user.username || "admin";
-  $("whoRole").textContent = (user.role || "admin").toUpperCase();
-  const username = (user.username || "admin").trim();
-  $("userInitial").textContent = username ? username[0].toUpperCase() : "A";
+  $("whoName").textContent = user.username || "doctor";
+  $("whoRole").textContent = (user.role || "doctor").toUpperCase();
+  const username = (user.username || "doctor").trim();
+  $("userInitial").textContent = username ? username[0].toUpperCase() : "D";
+}
+
+function fillMeta(meta){
+  const s = meta.summary;
+  $("stats").innerHTML =
+    stat(s.total, "Tổng lịch") + stat(s.confirmed, "Đã xác nhận") +
+    stat(s.cancelled, "Đã hủy");
+
+  const d = meta.doctor || {};
+  $("doctorInfo").innerHTML =
+    `<b>${d.name || "Bác sĩ"}</b> · Mã: ${d.id || "-"}` +
+    (d.dept_name ? ` · Khoa: ${d.dept_name}` : "");
+
+  const dateOpts = (meta.dates || []).map(dv => `<option value="${dv}">${dv}</option>`).join("");
+  $("fDate").innerHTML = '<option value="">Tất cả</option>' + dateOpts;
+  $("sDate").innerHTML = dateOpts || '<option value="">Không có ngày</option>';
 }
 
 async function loadList(){
   const q = new URLSearchParams({
-    date:$("fDate").value, doctor_id:$("fDoctor").value,
-    status:$("fStatus").value, phone:$("fPhone").value.trim(),
+    date:$("fDate").value,
+    status:$("fStatus").value,
+    phone:$("fPhone").value.trim(),
   });
-  const data = await api("/api/admin/appointments?"+q);
+  const data = await api("/api/doctor/appointments?"+q);
   $("count").textContent = data.count;
   $("listEmpty").classList.toggle("hide", data.count>0);
   $("rows").innerHTML = data.appointments.map(a => `
     <tr>
       <td><b>${a.code}</b></td><td>${a.date}</td><td>${a.time}</td>
       <td>${a.patient_name||""}</td><td>${a.patient_phone||""}</td>
-      <td>${a.department||""}</td><td>${a.doctor||""}</td>
+      <td>${a.department||""}</td>
       <td><span class="pill ${a.status}">${a.status==="confirmed"?"Đã xác nhận":"Đã hủy"}</span></td>
-      <td>${a.status==="confirmed"
-          ? `<button class="danger" onclick="cancelAppt('${a.code}')">Hủy</button>` : ""}</td>
     </tr>`).join("");
 }
 
-async function cancelAppt(code){
-  if(!confirm("Hủy lịch "+code+"?")) return;
-  const r = await fetch("/api/admin/cancel", {
-    method:"POST",
-    headers:{"Content-Type":"application/json"},
-    credentials:"include",
-    body:JSON.stringify({code})});
-  if(r.ok){ refreshStats(); loadList(); } else { alert("Không hủy được lịch này."); }
-}
-
-async function refreshStats(){
-  const meta = await api("/api/admin/meta");
-  const s = meta.summary;
-  $("stats").innerHTML =
-    stat(s.total,"Tổng lịch")+stat(s.confirmed,"Đã xác nhận")+stat(s.cancelled,"Đã hủy");
-}
-
 async function loadSched(){
-  const did = $("sDoctor").value, date = $("sDate").value;
-  const name = $("sDoctor").selectedOptions[0].textContent;
-  const data = await api(`/api/admin/schedule?doctor_id=${did}&date=${date}`);
-  $("schedTitle").textContent = `Lịch làm việc — ${name} — ${date}`;
+  const date = $("sDate").value;
+  if(!date){
+    $("slots").innerHTML = '<div class="empty">Chưa có ngày khả dụng.</div>';
+    return;
+  }
+  const data = await api(`/api/doctor/schedule?date=${date}`);
+  $("schedTitle").textContent = `Lịch làm việc — ${date}`;
   $("slots").innerHTML = data.slots.map(s => s.appt
     ? `<div class="slot busy"><span><b>${s.time}</b> — ${s.appt.patient_name}
          (${s.appt.patient_phone||"—"}) · ${s.appt.department}</span>
          <span class="pill confirmed">Đã đặt</span></div>`
     : `<div class="slot free"><span><b>${s.time}</b></span><span>Trống</span></div>`
   ).join("") || '<div class="empty">Ngày này không có khung giờ làm việc.</div>';
+}
+
+async function refreshStats(){
+  const meta = await api("/api/doctor/meta");
+  const s = meta.summary;
+  $("stats").innerHTML =
+    stat(s.total,"Tổng lịch")+stat(s.confirmed,"Đã xác nhận")+stat(s.cancelled,"Đã hủy");
 }
 
 async function logout(){
@@ -324,14 +309,15 @@ window.addEventListener("load", async () => {
       return;
     }
     const data = await me.json();
-    if (!data.user || data.user.role !== "admin") {
+    if (!data.user || data.user.role !== "doctor") {
       window.location.href = "/login";
       return;
     }
     renderCurrentUser(data.user);
-    const meta = await api("/api/admin/meta");
+    const meta = await api("/api/doctor/meta");
     fillMeta(meta);
-    loadList();
+    await loadList();
+    await loadSched();
   } catch (e) {
     window.location.href = "/login";
   }

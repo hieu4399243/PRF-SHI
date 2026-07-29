@@ -10,6 +10,14 @@ def _client():
     return main.app.test_client()
 
 
+def _login_admin(client):
+    resp = client.post(
+        "/api/login",
+        json={"username": "admin", "password": "test123"},
+    )
+    assert resp.status_code == 200
+
+
 def test_oversized_body_rejected():
     client = _client()
     big_message = "a" * (main.app.config["MAX_CONTENT_LENGTH"] + 1024)
@@ -101,16 +109,11 @@ def test_rate_limit_blocks_after_threshold(monkeypatch):
 def test_rate_limit_applies_to_admin_routes(monkeypatch):
     monkeypatch.setattr(main, "_RATE_LIMIT", 3)
     client = _client()
+    _login_admin(client)
 
     for _ in range(3):
-        resp = client.get(
-            "/api/admin/meta",
-            headers={"X-Admin-Key": main.ADMIN_KEY},
-        )
+        resp = client.get("/api/admin/meta")
         assert resp.status_code == 200
 
-    resp = client.get(
-        "/api/admin/meta",
-        headers={"X-Admin-Key": main.ADMIN_KEY},
-    )
+    resp = client.get("/api/admin/meta")
     assert resp.status_code == 429

@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Đăng nhập - SHI Health Assistant</title>
+    <style>
+        :root {
+            --teal: #0e9b8e;
+            --teal-deep: #0b7d72;
+            --bg: #f0f2f5;
+            --paper: #ffffff;
+            --text: #1a1a1a;
+            --error: #d32f2f;
+            --success: #388e3c;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, var(--teal), var(--teal-deep));
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: var(--paper);
+            border-radius: 12px;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+            padding: 40px;
+            width: 100%;
+            max-width: 420px;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 32px;
+        }
+
+        .logo h1 {
+            font-size: 28px;
+            color: var(--teal);
+            margin-bottom: 8px;
+        }
+
+        .logo p {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text);
+            margin-bottom: 8px;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px 14px;
+            font-size: 14px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: var(--teal);
+            background: #f0fffe;
+        }
+
+        .form-group.error input {
+            border-color: var(--error);
+        }
+
+        .error-msg {
+            font-size: 12px;
+            color: var(--error);
+            margin-top: 6px;
+            display: none;
+        }
+
+        .form-group.error .error-msg {
+            display: block;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            font-size: 15px;
+            font-weight: 600;
+            color: white;
+            background: linear-gradient(135deg, var(--teal), var(--teal-deep));
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:active {
+            transform: translateY(0);
+        }
+
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .demo-users {
+            margin-top: 32px;
+            padding-top: 24px;
+            border-top: 1px solid #eee;
+        }
+
+        .demo-users p {
+            font-size: 12px;
+            color: #666;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .user-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+
+        .user-btn {
+            padding: 10px;
+            font-size: 12px;
+            background: #f5f5f5;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .user-btn:hover {
+            background: var(--teal-deep);
+            color: white;
+            border-color: var(--teal-deep);
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 16px;
+            display: none;
+        }
+
+        .message.success {
+            background: #e8f5e9;
+            color: var(--success);
+            display: block;
+        }
+
+        .message.error {
+            background: #ffebee;
+            color: var(--error);
+            display: block;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 6px;
+            vertical-align: -2px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .role-select {
+            display: none;
+            margin-bottom: 20px;
+        }
+
+        .role-select.show {
+            display: block;
+        }
+
+        .role-options {
+            display: flex;
+            gap: 8px;
+        }
+
+        .role-options label {
+            flex: 1;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-weight: 400;
+            cursor: pointer;
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            transition: all 0.2s;
+        }
+
+        .role-options input[type="radio"] {
+            width: auto;
+            margin: 0;
+            border: none;
+            cursor: pointer;
+        }
+
+        .role-options label:has(input[type="radio"]:checked) {
+            border-color: var(--teal);
+            background: #f0fffe;
+        }
+
+        .toggle-register {
+            text-align: center;
+            margin-top: 16px;
+            font-size: 13px;
+        }
+
+        .toggle-register a {
+            color: var(--teal);
+            cursor: pointer;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .toggle-register a:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo">
+            <h1>🦷 SHI</h1>
+            <p>Trợ lý Nha khoa AI</p>
+        </div>
+
+        <div id="message" class="message"></div>
+
+        <!-- Form Login -->
+        <div id="login-form">
+            <form onsubmit="handleLogin(event)">
+                <div class="form-group">
+                    <label for="login-username">Tên đăng nhập</label>
+                    <input type="text" id="login-username" placeholder="admin, doctor1, guest..." required>
+                    <div class="error-msg">Username không được trống</div>
+                </div>
+
+                <div class="form-group">
+                    <label for="login-password">Mật khẩu</label>
+                    <input type="password" id="login-password" placeholder="Nhập mật khẩu" required>
+                    <div class="error-msg">Mật khẩu không được trống</div>
+                </div>
+
+                <button type="submit" id="login-btn">Đăng nhập</button>
+            </form>
+
+            <div class="demo-users">
+                <p>📝 Demo Users:</p>
+                <div class="user-buttons">
+                    <button type="button" onclick="fillDemo('admin', 'test123')">Admin</button>
+                    <button type="button" onclick="fillDemo('bs_sr_01', 'test123')">BS: Lê Minh Châu</button>
+                    <button type="button" onclick="fillDemo('bs_nc_01', 'test123')">BS: Hoàng Thị Em 2</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Register -->
+        <div id="register-form" style="display: none;">
+            <form onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="register-username">Tên đăng nhập</label>
+                    <input type="text" id="register-username" placeholder="Tên đăng nhập" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="register-password">Mật khẩu</label>
+                    <input type="password" id="register-password" placeholder="Tối thiểu 6 ký tự" minlength="6" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="register-email">Email</label>
+                    <input type="email" id="register-email" placeholder="your@email.com">
+                </div>
+
+                <div class="form-group role-select show">
+                    <label>Role</label>
+                    <div class="role-options">
+                        <label>
+                            <input type="radio" name="role" value="guest" checked> Guest
+                        </label>
+                        <label>
+                            <input type="radio" name="role" value="doctor"> Doctor
+                        </label>
+                    </div>
+                </div>
+
+                <button type="submit" id="register-btn">Tạo tài khoản</button>
+            </form>
+
+            <div class="toggle-register">
+                Đã có tài khoản? <a onclick="toggleRegister()">Đăng nhập</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const messageEl = document.getElementById('message');
+
+        function showMessage(text, type = 'error') {
+            messageEl.textContent = text;
+            messageEl.className = `message ${type}`;
+            setTimeout(() => {
+                messageEl.className = 'message';
+            }, 4000);
+        }
+
+        function continueAsGuest() {
+            window.location.href = '/';
+        }
+
+        function fillDemo(username, password) {
+            document.getElementById('login-username').value = username;
+            document.getElementById('login-password').value = password;
+            document.getElementById('login-btn').click();
+        }
+
+        function toggleRegister() {
+            document.getElementById('login-form').style.display =
+                document.getElementById('login-form').style.display === 'none' ? 'block' : 'none';
+            document.getElementById('register-form').style.display =
+                document.getElementById('register-form').style.display === 'none' ? 'block' : 'none';
+        }
+
+        async function handleLogin(event) {
+            event.preventDefault();
+            const username = document.getElementById('login-username').value;
+            const password = document.getElementById('login-password').value;
+            const btn = document.getElementById('login-btn');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Đang xử lý...';
+
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ username, password })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage(`Chào mừng ${data.user.username}! Đang chuyển hướng...`, 'success');
+                    // Redirect theo role
+                    setTimeout(() => {
+                        if (data.user.role === 'admin') {
+                            window.location.href = '/admin';
+                        } else if (data.user.role === 'doctor') {
+                            window.location.href = '/doctor-dashboard';
+                        } else {
+                            window.location.href = '/';
+                        }
+                    }, 1000);
+                } else {
+                    showMessage(data.error || 'Login thất bại', 'error');
+                    btn.disabled = false;
+                    btn.innerHTML = 'Đăng nhập';
+                }
+            } catch (err) {
+                showMessage('Lỗi kết nối: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'Đăng nhập';
+            }
+        }
+
+        async function handleRegister(event) {
+            event.preventDefault();
+            const username = document.getElementById('register-username').value;
+            const password = document.getElementById('register-password').value;
+            const email = document.getElementById('register-email').value;
+            const role = document.querySelector('input[name="role"]:checked').value;
+            const btn = document.getElementById('register-btn');
+
+            btn.disabled = true;
+            btn.innerHTML = '<span class="loading"></span>Đang tạo...';
+
+            try {
+                const response = await fetch('/api/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password, email, role })
+                });
+
+                const data = await response.json();
+
+                if (response.ok) {
+                    showMessage('Tạo tài khoản thành công! Vui lòng đăng nhập.', 'success');
+                    setTimeout(() => toggleRegister(), 1500);
+                } else {
+                    showMessage(data.error || 'Tạo tài khoản thất bại', 'error');
+                }
+                btn.disabled = false;
+                btn.innerHTML = 'Tạo tài khoản';
+            } catch (err) {
+                showMessage('Lỗi kết nối: ' + err.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = 'Tạo tài khoản';
+            }
+        }
+
+        // Check if already logged in -> auto redirect
+        window.addEventListener('load', async () => {
+            try {
+                const response = await fetch('/api/me', {
+                    credentials: 'include'
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.user.role === 'admin') {
+                        window.location.href = '/admin';
+                    } else if (data.user.role === 'doctor') {
+                        window.location.href = '/doctor-dashboard';
+                    } else {
+                        window.location.href = '/';
+                    }
+                }
+            } catch (err) {
+                // Not logged in, show login form
+            }
+        });
+    </script>
+</body>
+</html>

@@ -8,19 +8,21 @@ Web demo: http://127.0.0.1:5000
 App native (Expo) gọi cùng các endpoint /api/*, truyền "session" trong body.
 """
 
-import hmac
 import os
 import re
 import threading
 import time
 import uuid
 from collections import OrderedDict
-from flask import Flask, render_template, request, jsonify, session, Response, abort
+from flask import Flask, render_template, request, jsonify, session, Response, abort, redirect
 
 from . import chatbot
+from .admin_api import admin_api
+from .doctor_api import doctor_api
 from .booking import calendar_ics
 from .booking import service as booking
 from .core import storage
+from .core import auth
 from .notify import push
 
 app = Flask(__name__)
@@ -28,34 +30,76 @@ app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64KB — đủ rộng cho tin nh
 # Production: đặt biến môi trường SECRET_KEY. Demo: dùng key mặc định.
 app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
 
-# Khóa truy cập trang quản trị (admin/bác sĩ). Production: đặt ADMIN_KEY trong .env.
-ADMIN_KEY = os.environ.get("ADMIN_KEY", "shi-admin-demo")
-
 _DEFAULT_SECRET_KEY = "shi-nha-khoa-demo-key"
-_DEFAULT_ADMIN_KEY = "shi-admin-demo"
+app.register_blueprint(admin_api)
+app.register_blueprint(doctor_api)
 
 
-def _default_key_warnings(secret_key, admin_key):
-    """Trả về danh sách cảnh báo nếu SECRET_KEY/ADMIN_KEY còn giá trị demo mặc định.
+def _default_key_warnings(secret_key):
+    """Trả về danh sách cảnh báo nếu SECRET_KEY còn giá trị demo mặc định.
 
     Hàm THUẦN (không print trực tiếp) để test được mà không cần reload module."""
     warnings = []
     if secret_key == _DEFAULT_SECRET_KEY:
         warnings.append("[CẢNH BÁO] SECRET_KEY đang dùng giá trị demo mặc định — "
                          "production PHẢI đặt biến môi trường SECRET_KEY (xem .env.example).")
-    if admin_key == _DEFAULT_ADMIN_KEY:
-        warnings.append("[CẢNH BÁO] ADMIN_KEY đang dùng giá trị demo mặc định — "
-                         "production PHẢI đặt biến môi trường ADMIN_KEY (xem .env.example).")
     return warnings
 
 
-for _w in _default_key_warnings(app.secret_key, ADMIN_KEY):
+for _w in _default_key_warnings(app.secret_key):
     print(_w)
 
 print(f"[storage] Chế độ lưu trữ: {'Postgres/Supabase' if storage.USE_DB else 'file JSON (local)'}")
 
 
 _SID_RE = re.compile(r"^[0-9a-f]{32}$")
+
+
+def require_auth(allowed_roles=None):
+    """Decorator để protect endpoints — kiểm tra JWT token từ cookie.
+
+    Args:
+        allowed_roles: list của roles được phép (vd. ['admin', 'doctor']).
+                      Nếu None, chỉ cần login (bất kỳ role).
+
+    Returns:
+        Decorator function
+
+    Usage:
+        @app.route("/api/admin/something")
+        @require_auth(allowed_roles=['admin'])
+        def admin_only():
+            user = request.current_user
+            return jsonify({"user_id": user["id"]})
+    """
+    from functools import wraps
+
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            token = request.cookies.get("auth_token")
+            if not token:
+                return jsonify({"error": "Chưa login"}), 401
+
+            try:
+                payload = auth.verify_jwt(token)
+                user = storage.get_user_by_id(payload["sub"])
+                if not user:
+                    return jsonify({"error": "User không tồn tại"}), 404
+
+                # Check role nếu cần
+                if allowed_roles and user["role"] not in allowed_roles:
+                    return jsonify({"error": "Không có quyền truy cập"}), 403
+
+                # Lưu user info vào request context
+                request.current_user = user
+                return func(*args, **kwargs)
+            except auth.AuthError as e:
+                return jsonify({"error": str(e)}), 401
+
+        return wrapper
+
+    return decorator
 
 
 def resolve_sid(data=None):
@@ -113,9 +157,37 @@ def _rate_limit_guard():
 
 @app.route("/")
 def index():
+    """Chatbot page — guest & authorized users can access."""
     if "sid" not in session:
         session["sid"] = uuid.uuid4().hex
     return render_template("index.html")
+
+
+@app.route("/login")
+def login_page():
+    """Trang login — auto redirect nếu đã login."""
+    token = request.cookies.get("auth_token")
+    if token:
+        try:
+            payload = auth.verify_jwt(token)
+            user = storage.get_user_by_id(payload["sub"])
+            if user and user["role"] == "admin":
+                return redirect("/admin")
+            elif user and user["role"] == "doctor":
+                return redirect("/doctor-dashboard")
+        except auth.AuthError:
+            pass
+    return render_template("login.html")
+
+
+@app.route("/doctor-dashboard")
+@require_auth(allowed_roles=["doctor"])
+def doctor_dashboard():
+    """Trang dashboard cho doctor."""
+    user = request.current_user
+    if not user.get("doctor_id"):
+        return jsonify({"error": "Tài khoản doctor chưa gán doctor_id"}), 400
+    return render_template("doctor.html")
 
 
 @app.route("/api/start", methods=["POST"])
@@ -167,81 +239,136 @@ def download_ics(code):
     )
 
 
-# ===========================================================================
-# KHU VỰC QUẢN TRỊ (admin / bác sĩ) — chỉ ĐỌC lịch đã đặt & lịch làm việc.
-# Bảo vệ bằng khóa ADMIN_KEY (chỉ qua header 'X-Admin-Key'). Đây là lớp bảo vệ
-# tối thiểu cho demo; production nên thay bằng đăng nhập thật + vai trò.
-# ===========================================================================
-def _check_admin():
-    """Chỉ chấp nhận khoá qua header X-Admin-Key — query string bị log lại
-    (access log, lịch sử trình duyệt, Referer) nên không còn được chấp nhận.
-
-    Nếu ADMIN_KEY còn là giá trị demo mặc định (quên đặt biến môi trường khi
-    chạy ngoài Docker Compose — compose đã tự chặn khởi động qua `:?`), chỉ
-    chấp nhận từ localhost. Tránh việc quên cấu hình khiến API quản trị lộ ra
-    mạng ngoài với khoá ai cũng đoán được (đọc thấy trong mã nguồn)."""
-    key = request.headers.get("X-Admin-Key", "")
-    if not hmac.compare_digest(key, ADMIN_KEY):
-        return False
-    if ADMIN_KEY == _DEFAULT_ADMIN_KEY and request.remote_addr not in ("127.0.0.1", "::1"):
-        return False
-    return True
-
-
 @app.route("/admin")
 def admin_page():
+    token = request.cookies.get("auth_token")
+    if not token:
+        return redirect("/login")
+    try:
+        payload = auth.verify_jwt(token)
+        user = storage.get_user_by_id(payload["sub"])
+        if not user or user.get("role") != "admin":
+            return redirect("/login")
+    except auth.AuthError:
+        return redirect("/login")
     return render_template("admin.html")
 
 
-@app.route("/api/admin/appointments")
-def admin_appointments():
-    if not _check_admin():
-        abort(401)
-    appts = booking.query_appointments(
-        date=request.args.get("date") or None,
-        doctor_id=request.args.get("doctor_id") or None,
-        dept_code=request.args.get("dept_code") or None,
-        phone=request.args.get("phone") or None,
-        status=request.args.get("status") or None,
-    )
-    return jsonify({"appointments": appts, "count": len(appts)})
-
-
-@app.route("/api/admin/schedule")
-def admin_schedule():
-    """Lịch làm việc của 1 bác sĩ trong 1 ngày (khung bận/rảnh)."""
-    if not _check_admin():
-        abort(401)
-    doctor_id = request.args.get("doctor_id", "")
-    date_str = request.args.get("date", "")
-    if not doctor_id or not date_str:
-        return jsonify({"error": "Cần doctor_id và date"}), 400
-    return jsonify({"doctor_id": doctor_id, "date": date_str,
-                    "slots": booking.doctor_day_schedule(doctor_id, date_str)})
-
-
-@app.route("/api/admin/meta")
-def admin_meta():
-    """Danh sách bác sĩ + ngày làm việc + thống kê nhanh cho trang quản trị."""
-    if not _check_admin():
-        abort(401)
-    return jsonify({
-        "doctors": booking.all_doctors(),
-        "dates": booking.known_dates(),
-        "summary": booking.admin_summary(),
-    })
-
-
-@app.route("/api/admin/cancel", methods=["POST"])
-def admin_cancel():
-    """Admin hủy một lịch hẹn (đổi status='cancelled')."""
-    if not _check_admin():
-        abort(401)
+# ===========================================================================
+# AUTHENTICATION API
+# ===========================================================================
+@app.route("/api/login", methods=["POST"])
+def api_login():
+    """Login với username/password. Trả về JWT token để lưu vào cookie."""
     data = request.get_json(force=True, silent=True) or {}
-    appt = booking.cancel_appointment(data.get("code", ""))
-    if not appt:
-        return jsonify({"ok": False, "error": "Không tìm thấy lịch 'confirmed'."}), 404
-    return jsonify({"ok": True, "appointment": appt})
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+
+    if not username or not password:
+        return jsonify({"error": "Username và password bắt buộc"}), 400
+
+    try:
+        result = auth.login(username, password)
+        # Lưu token vào cookie (httponly để JS không truy cập được, bảo mật hơn)
+        resp = jsonify({
+            "ok": True,
+            "user": result["user"],
+            "message": f"Chào mừng {result['user']['username']}!"
+        })
+        resp.set_cookie(
+            "auth_token",
+            result["token"],
+            httponly=True,
+            secure=os.environ.get("SECURE_COOKIE", "false").lower() == "true",  # True cho HTTPS
+            samesite="Lax",  # chống CSRF
+            max_age=24 * 60 * 60,  # 24 giờ
+        )
+        return resp
+    except auth.InvalidCredentialsError:
+        return jsonify({"error": "Username hoặc password sai"}), 401
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/logout", methods=["POST"])
+def api_logout():
+    """Logout — xoá JWT token khỏi cookie."""
+    resp = jsonify({"ok": True, "message": "Đã đăng xuất"})
+    resp.set_cookie(
+        "auth_token",
+        "",
+        httponly=True,
+        secure=os.environ.get("SECURE_COOKIE", "false").lower() == "true",
+        samesite="Lax",
+        max_age=0,  # expire ngay lập tức
+    )
+    return resp
+
+
+@app.route("/api/register", methods=["POST"])
+def api_register():
+    """Tạo user mới (admin-only hoặc self-service tuỳ config).
+
+    Để cho đơn giản, ở đây cho phép bất kỳ ai tạo user mới (guest signup).
+    Nếu muốn chỉ admin tạo, kiểm tra JWT token trước.
+    """
+    data = request.get_json(force=True, silent=True) or {}
+    username = data.get("username", "").strip()
+    password = data.get("password", "")
+    email = data.get("email", "").strip()
+    role = data.get("role", "guest")  # mặc định 'guest', có thể là 'admin' hoặc 'doctor'
+    doctor_id = data.get("doctor_id")  # chỉ cho role='doctor'
+
+    # Validate
+    if not username or not password:
+        return jsonify({"error": "Username và password bắt buộc"}), 400
+    if len(password) < 6:
+        return jsonify({"error": "Password phải tối thiểu 6 ký tự"}), 400
+    if role not in ["admin", "doctor", "guest"]:
+        return jsonify({"error": "Role không hợp lệ"}), 400
+
+    try:
+        user = auth.create_user_account(
+            username=username,
+            password=password,
+            role=role,
+            email=email if email else None,
+            doctor_id=doctor_id,
+        )
+        return jsonify({
+            "ok": True,
+            "user": user,
+            "message": f"Tạo user '{username}' thành công! Vui lòng login."
+        }), 201
+    except auth.UserAlreadyExistsError as e:
+        return jsonify({"error": str(e)}), 409
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/me", methods=["GET"])
+def api_me():
+    """Lấy thông tin user hiện tại từ JWT token."""
+    token = request.cookies.get("auth_token")
+    if not token:
+        return jsonify({"error": "Chưa login"}), 401
+
+    try:
+        payload = auth.verify_jwt(token)
+        user = storage.get_user_by_id(payload["sub"])
+        if not user:
+            return jsonify({"error": "User không tồn tại"}), 404
+        return jsonify({
+            "user": {
+                "id": user["id"],
+                "username": user["username"],
+                "role": user["role"],
+                "email": user.get("email"),
+                "doctor_id": user.get("doctor_id"),
+            }
+        })
+    except auth.AuthError as e:
+        return jsonify({"error": str(e)}), 401
 
 
 if __name__ == "__main__":
