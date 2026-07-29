@@ -5,21 +5,24 @@
 The single most important rule: **dependencies flow downward only**.
 
 ```
-main.py
-  ↓
-chatbot/ (orchestration)
-  ↓
-triage/, booking/, notify/ (business logic)
-  ↓
-core/ (infrastructure — no upward imports)
+main.py (auth entry)
+  ↓ ┌─────────────────┐
+  ├→ chatbot/ (orchestration)
+  ├→ admin_api.py (Blueprint, admin endpoints)
+  ├→ doctor_api.py (Blueprint, doctor endpoints)
+  │
+  ├→ triage/, booking/, notify/ (business logic, import from core only)
+  │
+  └→ core/ (infrastructure — NO upward imports)
 ```
 
-- **`core/`** has zero imports from any other app module
+- **`core/`** (auth, storage, catalog, text, paths) has zero imports from any other app module
 - **`triage/`, `booking/`, `notify/`** may only import from `core/`; never from each other
-- **`chatbot/`** may import all business modules to orchestrate them
-- **`main.py`** sits above all
+- **`admin_api.py`, `doctor_api.py`** are Blueprints at app level (alongside main.py); they import core + business modules
+- **`chatbot/`** orchestrates business modules (triage, booking, notify)
+- **`main.py`** sits at top; registers blueprints, handles login/logout routes, enforces `require_auth()` decorator
 
-**Why:** Prevents circular dependencies; enables independent testing; makes public contracts explicit.
+**Why:** Prevents circular dependencies; enables independent testing; makes public contracts explicit. Auth isolation in `core/` means login/token logic stays testable without the state machine.
 
 ---
 
@@ -49,9 +52,11 @@ Match the existing JSON/database schema:
 
 | Domain | Fields | Case |
 |--------|--------|------|
+| **User** | `id`, `username`, `password_hash`, `role`, `email`, `doctor_id`, `created_at`, `updated_at` | `snake_case` |
 | **Appointment** | `id`, `doctor_id`, `date`, `time`, `patient_name`, `phone` | `snake_case` |
 | **Service/Department** | `id`, `name`, `description` | `snake_case` |
 | **Triage result** | `services`, `confidence` | `snake_case` |
+| **JWT token** | `sub` (user_id), `username`, `role`, `iat`, `exp` | `snake_case` |
 
 ---
 
@@ -281,10 +286,14 @@ Sensitive values go in `.env` only:
 
 ```env
 DATABASE_URL=postgresql://...
-SECRET_KEY=<random-hex>
-ADMIN_KEY=<random-key>
+SECRET_KEY=<random-hex>  # Also used as JWT signing key
+JWT_EXPIRATION_HOURS=24
+SECURE_COOKIE=false  # Set true behind HTTPS
 OPENROUTER_API_KEY=sk-or-v1-...
+ADMIN_KEY=<legacy-unused>  # DEPRECATED: auth now uses JWT + password hashing
 ```
+
+**Note:** `ADMIN_KEY` environment variable is legacy/unused (removed from active auth flow). Docs will migrate references away; variable can be removed in future cleanup.
 
 ### Environment-Based Selection
 
@@ -308,12 +317,17 @@ Demo-safe defaults (app still works without secrets):
 
 ```python
 SECRET_KEY = os.getenv("SECRET_KEY", "dev-key-change-in-prod")
-ADMIN_KEY = os.getenv("ADMIN_KEY", "admin")  # Not production-safe; warn
+JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
+SECURE_COOKIE = os.getenv("SECURE_COOKIE", "false").lower() == "true"
 LLM_ENABLED = os.getenv("LLM_ENABLED", "1") == "1"
 LLM_TIMEOUT = int(os.getenv("LLM_TIMEOUT", "8"))
+ADMIN_KEY = os.getenv("ADMIN_KEY", "admin")  # Legacy; unused in JWT auth flow
 ```
 
-**Production rule:** Never use demo defaults; always set random `SECRET_KEY` and `ADMIN_KEY`.
+**Production rule:** 
+- Always set random `SECRET_KEY` (used for JWT signing + Flask session encryption)
+- Set `SECURE_COOKIE=true` when deploying behind HTTPS
+- `ADMIN_KEY` can be omitted; it no longer controls admin access (JWT does)
 
 ---
 

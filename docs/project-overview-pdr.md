@@ -31,7 +31,9 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 | **Appointment reminders** | Push notifications (Expo) + `.ics` calendar file (Google/Apple/Outlook) + Google Calendar quick-add link | ✓ Implemented: `notify/worker.py` + `calendar_ics.py` |
 | **Mobile client** | React Native (Expo SDK 54) app; works offline for chat UI, syncs to backend via LAN IP | ✓ Implemented: `mobile/` Expo project |
 | **Web demo** | Minimal web interface for testing without mobile app | ✓ Implemented: `templates/index.html` |
-| **Admin panel** | View appointments, doctor schedule, clinic metadata; cancel bookings | ✓ Implemented: `/admin` + `/api/admin/*` |
+| **Admin panel** | View appointments, doctor schedule, clinic metadata; cancel bookings; JWT auth required | ✓ Implemented: `/admin` + `/api/admin/*`; JWT cookie auth |
+| **User authentication** | Login/register with password hashing (bcrypt); JWT session tokens (HS256) | ✓ Implemented: `core/auth.py`; stateless 24h tokens |
+| **Role-based access** | Separate routes for admin/doctor/guest roles; cookie-based session validation | ✓ Implemented: `require_auth()` decorator; `/api/doctor/*`, `/api/admin/*` |
 
 ---
 
@@ -69,9 +71,9 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 - Multi-clinic support (would require tenant isolation, different DB schemas)
 - Multi-language (currently Vietnamese-only)
 - Two-way Google Calendar sync (OAuth, complex reconciliation)
-- Production authentication (currently static ADMIN_KEY)
 - Advanced analytics/BI dashboards
 - SMS/WhatsApp integration (currently Expo push only)
+- OAuth/LDAP clinic staff login (currently JWT + password-based)
 
 ---
 
@@ -101,10 +103,11 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 |-----------|--------|-------|
 | Availability | 99.5% uptime | production; dev may have downtime |
 | Response time | < 500ms triage, < 200ms booking | excludes external LLM calls |
-| Concurrency | 1 process (dev); 2+ workers @ production | session & slot management needs Redis/DB |
+| Concurrency | 1 process (dev); 2+ workers @ production | session & slot management needs Redis/DB; JWT stateless per-request |
 | Data retention | Audit log rotated at 5MB | per Decree 13/2023 |
-| PII handling | Masked in audit log | phone/email/ID redacted before logging |
+| PII handling | Masked in audit log; passwords hashed (bcrypt) | phone/email/ID redacted in logs; bcrypt rounds=12 |
 | Language support | Vietnamese (phonetic, diacritics) | handles underspecified text ("toi muon nieng rang") |
+| Authentication | JWT tokens (HS256, 24h default) | httponly cookie; secure flag for HTTPS |
 
 ---
 
@@ -127,7 +130,8 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 | **Phase 2: Booking & reminders** | Appointment management, push notifications, .ics export | ✓ Complete |
 | **Phase 3: Mobile app** | React Native frontend with Expo | ✓ Complete |
 | **Phase 4: Evaluation & tuning** | AI metrics, dataset labeling, v1 vs v2 comparison | ✓ Complete |
-| **Phase 5: Production readiness** | Postgres migration, auth hardening, CORS, HTTPS deployment | In progress (see `project-roadmap.md`) |
+| **Phase 5: Auth hardening** | JWT + bcrypt password hashing, role-based access, user management | ✓ Complete |
+| **Phase 6: Production readiness** | Redis session store, CORS, HTTPS deployment, monitoring | In progress (see `project-roadmap.md`) |
 
 ---
 
@@ -144,9 +148,13 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 ## Links to Key Files
 
 - `README.md` — Setup & quick-start (Vietnamese), links into `docs/`
-- `app/main.py` — Flask entry point
+- `app/main.py` — Flask entry point; login routes, session handling
+- `app/core/auth.py` — JWT token generation, password hashing (bcrypt)
+- `app/admin_api.py` — Admin endpoints (appointment view, schedule); JWT-gated
+- `app/doctor_api.py` — Doctor-specific endpoints; JWT + doctor role required
 - `app/chatbot/router.py` — State machine orchestration
 - `app/triage/engine.py` — Triage v1/v2/LLM engines
+- `scripts/seed_users.py` — Initialize admin/doctor user accounts (Postgres only)
 - `eval/evaluate.py` — AI evaluation metrics
 - `mobile/` — React Native source
 

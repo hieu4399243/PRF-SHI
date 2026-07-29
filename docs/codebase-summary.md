@@ -10,10 +10,10 @@ PRF-SHI/
 ├── scripts/                Utility scripts
 ├── tests/                  Pytest test suite
 ├── README.md              Setup & quick-start (Vietnamese), links into docs/
-├── requirements.txt       Python dependencies (prod, used by Docker)
-├── requirements-dev.txt   Python dependencies + pytest (local dev)
-├── docker-compose.yml     Local Postgres + gunicorn orchestration
-└── Dockerfile             Container image
+├── requirements.txt       Python dependencies (prod, used by Docker); base file
+├── requirements-dev.txt   Extends requirements.txt with pytest (local dev only)
+├── docker-compose.yml     Postgres + gunicorn + worker orchestration
+└── Dockerfile             Multi-stage container image (production-ready)
 ```
 
 ---
@@ -24,8 +24,9 @@ PRF-SHI/
 
 | Module | Responsibility | Key Functions/Classes |
 |--------|-----------------|----------------------|
+| **`auth.py`** | Authentication & authorization: JWT, bcrypt password hashing | `hash_password()`, `verify_password()`, `generate_jwt()`, `verify_jwt()`, `login()`, `create_user_account()` |
+| **`storage.py`** | Pluggable persistence layer (JSON ↔ Postgres), module-level functions (no class) | `init_schema()`, `add_appointment()`, `list_appointments()`, `add_token()`, `create_user()`, `get_user_by_username()`, `get_user_by_id()` |
 | **`catalog.py`** | Clinic data: 9 dental services, doctors, working hours | `DEPARTMENTS`, `DOCTORS`, `generate_available_slots()` |
-| **`storage.py`** | Pluggable persistence layer (JSON ↔ Postgres), module-level functions (no class) | `init_schema()`, `add_appointment()`, `list_appointments()`, `add_token()` |
 | **`text.py`** | Vietnamese text utilities: accent removal, normalization | `strip_accents()`, `normalize()` |
 | **`paths.py`** | Data directory & audit log path declarations | `DATA_DIR`, `AUDIT_LOG_PATH` |
 
@@ -102,17 +103,23 @@ Sends appointment confirmations and reminders.
 
 ---
 
-### API & Web (`app/main.py` & `app/templates/`)
+### API & Web (`app/main.py`, `app/admin_api.py`, `app/doctor_api.py`, `app/templates/`)
 
 | File | Responsibility |
 |------|-----------------|
-| **`main.py`** | Flask app entry; REST `/api/*` endpoints; rate-limit (30 req/60s IP); session resolution |
+| **`main.py`** | Flask app entry; login/logout routes; rate-limit (30 req/60s IP); session resolution; `require_auth()` decorator |
+| **`admin_api.py`** | Blueprint: `/api/admin/*` endpoints; GET appointments/schedule/meta, POST cancel; JWT admin role required |
+| **`doctor_api.py`** | Blueprint: `/api/doctor/*` endpoints; GET appointments/schedule/meta scoped to doctor's own data; JWT doctor role required |
 | **`templates/index.html`** | Web demo (fallback UI; mobile app is primary) |
-| **`templates/admin.html`** | Admin panel: view appointments, schedule, metadata; cancel bookings |
+| **`templates/admin.html`** | Admin panel: view appointments, schedule, metadata; cancel bookings (now JWT-gated) |
+| **`templates/login.html`** | Login form (username/password); JWT auth flow entry point |
+| **`templates/doctor.html`** | Doctor dashboard: view own schedule & appointments; JWT doctor role required |
 
-**Session resolution:**
-- Web: Flask cookie session
-- Mobile: app sends `session` (uuid4-hex) in JSON body; resolved by `resolve_sid()`
+**Auth flow:**
+- GET `/login` → form
+- POST `/api/login` → validates credentials → JWT cookie (httponly, secure flag per env, samesite=Lax, max_age=86400s)
+- Subsequent requests: `require_auth()` extracts & verifies JWT from cookie; checks role
+- GET `/api/logout` → clears cookie
 
 ---
 
@@ -169,6 +176,7 @@ AI quality metrics for triage engine comparison.
 
 | Script | Purpose |
 |--------|---------|
+| **`seed_users.py`** | Initialize admin & doctor user accounts (Postgres only); idempotent. Run once before first login: `python -m scripts.seed_users` |
 | **`migrate_to_supabase.py`** | Migrate JSON → Postgres/Supabase |
 | **`clean_stale_appointments.py`** | Remove expired/invalid bookings |
 | **`try_llm.py`** | Interactive LLM testing or suite of edge cases |
@@ -196,25 +204,38 @@ Pytest test files covering business logic & integration.
 ## Import Dependency Map
 
 ```
-┌─────────────────────┐
-│   main.py (Flask)   │  top-level entry
-└──────────┬──────────┘
-           │
-    ┌──────┴──────┐
-    │             │
-┌───▼──────┐  ┌──┴────────┐
-│ chatbot/ │  │ templates │
-└───┬──────┘  └───────────┘
-    │
- ┌──┼──────────────┬──────────────┐
- │  │              │              │
-┌┴──▼──┐  ┌───────▼──┐  ┌────────▼──┐  ┌────────────┐
-│triage│  │ booking/ │  │ notify/   │  │ core/      │
-└──────┘  └──────────┘  └───────────┘  │(no upward) │
-                                        └────────────┘
+┌──────────────────────────────┐
+│   main.py (Flask + auth)     │  top-level entry
+└───────────┬──────────────────┘
+            │
+      ┌─────┴───────────────┐
+      │                     │
+ ┌────▼───────────┐   ┌────▼──────────┐
+ │ admin_api.py   │   │ doctor_api.py │  (blueprints, JWT-gated)
+ │ chatbot/       │   │ templates/    │
+ └────┬───────────┘   └────┬──────────┘
+      │                    │
+   ┌──┼──────────────┬─────┼──────────┐
+   │  │              │              │  │
+┌──┴──▼──┐ ┌────────▼──┐  ┌───────▼──┐
+│triage/ │ │ booking/  │  │ notify/  │
+└────────┘ └───────────┘  └──────────┘
+   │         │              │
+   └─────────┴──────────────┤
+                            ▼
+                     ┌─────────────────┐
+                     │ core/           │
+                     │ (no upward)     │
+                     │ - auth.py       │
+                     │ - storage.py    │
+                     │ - catalog.py    │
+                     │ - text.py       │
+                     │ - paths.py      │
+                     └─────────────────┘
 ```
 
-**Core rule:** `core/` has no imports from other app modules; all others import from `core/`.
+**Core rule:** `core/` has no imports from other app modules; all others import from `core/` (single dependency direction).
+**API layer rule:** `admin_api.py` & `doctor_api.py` are blueprints at same level as main.py, importing from core + business modules.
 
 ---
 
@@ -223,9 +244,10 @@ Pytest test files covering business logic & integration.
 - **Naming:** `snake_case` for functions/variables, `PascalCase` for classes
 - **Vietnamese strings:** UTF-8 encoded; domain-specific terms kept in Vietnamese (e.g., "sâu răng", "chỉnh nha")
 - **Text normalization:** Always pass Vietnamese input through `text.remove_accents()` for rule-based matching
-- **Error handling:** Explicit exceptions; LLM module never raises (returns `None`)
-- **Session/state:** Always acquire per-session lock before mutation
-- **Database:** Always use `core/storage.py` abstraction; never directly open files
+- **Error handling:** Explicit exceptions; LLM module never raises (returns `None`); auth module raises `AuthError`, `InvalidCredentialsError`, `UserAlreadyExistsError`
+- **Authentication:** Use `core/auth.py` functions for password hashing (bcrypt) and JWT creation; never hardcode auth logic
+- **Session/state:** Always acquire per-session lock before mutation; JWT tokens are stateless
+- **Database:** Always use `core/storage.py` abstraction; never directly open files. Note: user accounts require Postgres (no JSON fallback)
 
 ---
 

@@ -27,11 +27,14 @@ SHI is a two-tier system: **Backend** (Flask) and **Frontend** (React Native + m
 │           ▼                                                      │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │ Business Logic Modules                                   │  │
+│  ├─ core/auth.py (JWT, bcrypt password hashing)          │  │
 │  ├─ triage/engine.py (v1/v2/llm engines)                  │  │
 │  ├─ booking/service.py (slot management)                  │  │
 │  ├─ notify/push.py (Expo integration)                     │  │
 │  ├─ triage/safety.py (guardrails + audit log)             │  │
-│  └─ core/* (catalog, storage, text utilities)             │  │
+│  ├─ admin_api.py (admin endpoints, JWT-gated)             │  │
+│  ├─ doctor_api.py (doctor endpoints, JWT-gated)           │  │
+│  └─ core/* (auth, storage, catalog, text utilities)       │  │
 │  └─────────────────┬──────────────────────────────────────┘  │
 │                    ▼                                            │
 │  ┌──────────────────────────────────────────────────────────┐  │
@@ -266,6 +269,15 @@ sequenceDiagram
 
 ### Schema
 
+**Users table** (Postgres/Supabase only; no JSON fallback):
+- `id` (uuid, PK)
+- `username` (unique string, NOT NULL)
+- `password_hash` (bcrypt hash, NOT NULL)
+- `role` (check: admin/doctor/guest, NOT NULL)
+- `email` (nullable)
+- `doctor_id` (FK to doctors, nullable)
+- `created_at`, `updated_at` (timestamps)
+
 **Appointments table:**
 - `id` (uuid, PK)
 - `doctor_id`, `date`, `time` (UNIQUE INDEX)
@@ -281,6 +293,8 @@ sequenceDiagram
 **Safety patterns table** (optional, loaded from DB if available):
 - For extending guardrail rules without code deploy
 
+**Important limitation:** User accounts (`create_user`, `get_user_by_username`, etc.) require Postgres and have no JSON-file fallback. Auth is a hard Postgres dependency for production.
+
 Usage patterns and correct/incorrect access examples: **[code-standards.md § Storage Layer](./code-standards.md#storage-layer-corestoragepy)**.
 
 ---
@@ -290,21 +304,35 @@ Usage patterns and correct/incorrect access examples: **[code-standards.md § St
 | Endpoint | Method | Purpose | Auth |
 |----------|--------|---------|------|
 | `/` | GET | Web demo (index.html) | None |
-| `/api/start` | POST | New session | Rate-limit |
+| `/login` | GET | Login form (username/password) | None |
+| `/api/login` | POST | Authenticate, set JWT cookie | Rate-limit |
+| `/api/logout` | GET | Clear auth cookie | None |
+| `/api/me` | GET | Current user info (from JWT) | JWT cookie |
+| `/api/register` | POST | Self-service signup (open; can set role) | Rate-limit |
+| `/api/start` | POST | New chat session | Rate-limit |
 | `/api/chat` | POST | Send message, get response | Rate-limit |
 | `/api/register-push` | POST | Register Expo token | Rate-limit |
 | `/api/ics/<code>` | GET | Download `.ics` file | Session ownership |
-| `/admin` | GET | Admin panel HTML | None |
-| `/api/admin/appointments` | GET | List appointments | `X-Admin-Key` |
-| `/api/admin/schedule` | GET | Doctor working hours | `X-Admin-Key` |
-| `/api/admin/meta` | GET | Clinic metadata | `X-Admin-Key` |
-| `/api/admin/cancel` | POST | Cancel appointment | `X-Admin-Key` |
+| `/admin` | GET | Admin panel HTML | JWT cookie (admin role) |
+| `/doctor-dashboard` | GET | Doctor dashboard HTML | JWT cookie (doctor role) |
+| `/api/admin/appointments` | GET | List appointments | JWT cookie (admin role) |
+| `/api/admin/schedule` | GET | Doctor working hours | JWT cookie (admin role) |
+| `/api/admin/meta` | GET | Clinic metadata | JWT cookie (admin role) |
+| `/api/admin/cancel` | POST | Cancel appointment | JWT cookie (admin role) |
+| `/api/doctor/appointments` | GET | List own appointments | JWT cookie (doctor role) |
+| `/api/doctor/schedule` | GET | Own working hours | JWT cookie (doctor role) |
+| `/api/doctor/meta` | GET | Own metadata | JWT cookie (doctor role) |
 
 **Rate-limiting:** 30 requests per 60 seconds per IP (only `/api/*`).
 
+**Auth mechanism:** 
+- Old `X-Admin-Key` header replaced with JWT cookie (`auth_token`, httponly, secure flag per `SECURE_COOKIE` env var, samesite=Lax, max_age=86400s)
+- Token verified via `core/auth.verify_jwt()` + role check in route decorator `require_auth(allowed_roles=[...])`
+- Token lifetime configurable via `JWT_EXPIRATION_HOURS` env var (default 24)
+
 **Session resolution:**
-- **Web:** Flask cookie session (`session["sid"]`)
-- **Mobile:** App sends `session` (uuid4-hex) in JSON body; parsed by `resolve_sid(app/main.py)`
+- **Web:** Flask session + JWT cookie
+- **Mobile:** App sends `session` (uuid4-hex) in JSON body; JWT cookie also sent
 
 ---
 
