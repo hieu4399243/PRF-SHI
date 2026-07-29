@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-shi}
       POSTGRES_USER: ${POSTGRES_USER:-shi}
@@ -12,12 +13,24 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   web:
     build: .
     restart: unless-stopped
+    # Bind to localhost only — put Nginx/Caddy in front for TLS + public access
+    # (see docs/deployment-guide.md § Reverse Proxy). Do not expose gunicorn directly.
     ports:
-      - "5001:5001"
+      - "127.0.0.1:5001:5001"
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-shi}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-shi}
       SECRET_KEY: ${SECRET_KEY:?set SECRET_KEY in .env}
@@ -27,6 +40,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
 
   worker:
     build: .
@@ -39,6 +64,21 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Image HEALTHCHECK probes HTTP :5001 (the web CMD) — worker doesn't serve HTTP.
+    healthcheck:
+      disable: true
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
 
 volumes:
   pgdata:
