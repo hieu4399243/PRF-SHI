@@ -17,3 +17,7 @@ mobile/node_modules/
 
 # Plan làm việc của Claude Code (không phải tài liệu dự án chính thức)
 plans/
+
+# Artifact tự sinh của tool ClaudeKit/repomix (không phải tài liệu dự án)
+release-manifest.json
+.repomixignore
