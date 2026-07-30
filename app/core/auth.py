@@ -131,7 +131,9 @@ def verify_jwt(token: str) -> dict:
         raise AuthError(f"Token không hợp lệ: {e}")
 
 
-def create_user_account(username: str, password: str, role: str, email: str = None, doctor_id: str = None):
+def create_user_account(username: str, password: str, role: str, email: str = None,
+                        phone: str = None, address: str = None, doctor_id: str = None,
+                        patient_id: str = None):
     """Tạo user mới và lưu vào DB.
 
     Args:
@@ -139,7 +141,10 @@ def create_user_account(username: str, password: str, role: str, email: str = No
         password: plain text password
         role: 'admin', 'doctor', hoặc 'guest'
         email: email (tùy chọn)
+        phone: số điện thoại (tùy chọn)
+        address: địa chỉ (tùy chọn)
         doctor_id: doctor_id (chỉ cho role='doctor')
+        patient_id: patient_id (chỉ cho role='guest' có hồ sơ bệnh nhân)
 
     Returns:
         dict user info
@@ -161,7 +166,10 @@ def create_user_account(username: str, password: str, role: str, email: str = No
             password_hash=password_hash,
             role=role,
             email=email,
+            phone=phone,
+            address=address,
             doctor_id=doctor_id,
+            patient_id=patient_id,
         )
     except storage.DuplicateUsernameError:
         raise UserAlreadyExistsError(f"Username '{username}' đã tồn tại")
@@ -175,7 +183,10 @@ def create_user_account(username: str, password: str, role: str, email: str = No
         "username": username,
         "role": role,
         "email": email,
+        "phone": phone,
+        "address": address,
         "doctor_id": doctor_id,
+        "patient_id": patient_id,
     }
 
 

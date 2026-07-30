@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trang chủ bệnh nhân - SHI</title>
+    <style>
+        :root {
+            --teal: #0e9b8e;
+            --teal-deep: #0b7d72;
+            --bg: #eef3f2;
+            --paper: #ffffff;
+            --text: #1a1a1a;
+            --muted: #687074;
+            --border: #d8e1df;
+            --success-bg: #e8f5e9;
+            --success-text: #2e7d32;
+            --cancel-bg: #ffebee;
+            --cancel-text: #b71c1c;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            color: var(--text);
+            background: linear-gradient(140deg, #d9f2ee 0%, #f7fbfa 50%, #ecf4f2 100%);
+            min-height: 100vh;
+        }
+
+        .wrap {
+            max-width: 920px;
+            margin: 0 auto;
+            padding: 24px;
+        }
+
+        .card {
+            background: var(--paper);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 8px 24px rgba(15, 49, 46, 0.08);
+            overflow: hidden;
+        }
+
+        .head {
+            padding: 20px 22px;
+            background: linear-gradient(135deg, var(--teal), var(--teal-deep));
+            color: #fff;
+        }
+
+        .head h1 {
+            margin: 0;
+            font-size: 22px;
+        }
+
+        .head p {
+            margin: 8px 0 0;
+            font-size: 14px;
+            opacity: 0.95;
+        }
+
+        .actions {
+            padding: 16px 22px;
+            display: flex;
+            justify-content: space-between;
+            gap: 10px;
+            align-items: center;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .actions-left {
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        .btn {
+            border: none;
+            border-radius: 10px;
+            padding: 10px 14px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+        }
+
+        .btn-chat {
+            color: #fff;
+            background: linear-gradient(135deg, var(--teal), var(--teal-deep));
+        }
+
+        .content {
+            padding: 10px 22px 22px;
+        }
+
+        .empty {
+            margin: 16px 0 0;
+            padding: 16px;
+            border: 1px dashed var(--border);
+            border-radius: 10px;
+            background: #fafdfd;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 8px;
+        }
+
+        th, td {
+            text-align: left;
+            padding: 12px 10px;
+            border-bottom: 1px solid var(--border);
+            font-size: 14px;
+            vertical-align: top;
+        }
+
+        th {
+            color: #354547;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .status {
+            display: inline-block;
+            border-radius: 999px;
+            padding: 4px 10px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .status-confirmed {
+            background: var(--success-bg);
+            color: var(--success-text);
+        }
+
+        .status-cancelled {
+            background: var(--cancel-bg);
+            color: var(--cancel-text);
+        }
+
+        .loading {
+            padding: 24px 8px;
+            color: var(--muted);
+            font-size: 14px;
+        }
+
+        @media (max-width: 760px) {
+            .wrap {
+                padding: 14px;
+            }
+
+            .actions {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            th, td {
+                font-size: 13px;
+                padding: 10px 8px;
+            }
+
+            .hide-mobile {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <main class="wrap">
+        <section class="card">
+            <header class="head">
+                <h1>Trang chủ bệnh nhân</h1>
+                <p id="welcome">Đang tải thông tin tài khoản...</p>
+            </header>
+
+            <div class="actions">
+                <div class="actions-left">Lịch sử đặt lịch gần đây của bạn</div>
+                <button type="button" class="btn btn-chat" onclick="window.location.href='/'">Đi tới chat</button>
+            </div>
+
+            <div class="content">
+                <div id="loading" class="loading">Đang tải lịch sử đặt lịch...</div>
+                <div id="empty" class="empty" style="display:none;">Bạn chưa có lịch sử đặt lịch. Nhấn "Đi tới chat" để bắt đầu đặt lịch.</div>
+
+                <table id="appt-table" style="display:none;">
+                    <thead>
+                        <tr>
+                            <th>Mã lịch</th>
+                            <th>Ngày giờ</th>
+                            <th class="hide-mobile">Bác sĩ</th>
+                            <th class="hide-mobile">Dịch vụ</th>
+                            <th>Trạng thái</th>
+                        </tr>
+                    </thead>
+                    <tbody id="appt-body"></tbody>
+                </table>
+            </div>
+        </section>
+    </main>
+
+    <script>
+        function fmtDateTime(date, time) {
+            if (!date) {
+                return '--';
+            }
+            return `${date} ${time || ''}`.trim();
+        }
+
+        function statusClass(status) {
+            if (status === 'cancelled') {
+                return 'status status-cancelled';
+            }
+            return 'status status-confirmed';
+        }
+
+        function statusLabel(status) {
+            if (status === 'cancelled') {
+                return 'Da huy';
+            }
+            if (status === 'confirmed') {
+                return 'Da xac nhan';
+            }
+            return status || '--';
+        }
+
+        async function loadMe() {
+            const response = await fetch('/api/me', { credentials: 'include' });
+            if (!response.ok) {
+                window.location.href = '/login';
+                return;
+            }
+            const data = await response.json();
+            const username = (data.user && data.user.username) || 'ban';
+            document.getElementById('welcome').textContent = `Xin chao ${username}`;
+        }
+
+        async function loadAppointments() {
+            const loading = document.getElementById('loading');
+            const table = document.getElementById('appt-table');
+            const tbody = document.getElementById('appt-body');
+            const empty = document.getElementById('empty');
+
+            try {
+                const response = await fetch('/api/patient/appointments', {
+                    credentials: 'include'
+                });
+
+                if (!response.ok) {
+                    if (response.status === 401) {
+                        window.location.href = '/login';
+                        return;
+                    }
+                    throw new Error('Khong the tai lich su dat lich');
+                }
+
+                const data = await response.json();
+                const appointments = data.appointments || [];
+
+                loading.style.display = 'none';
+
+                if (!appointments.length) {
+                    empty.style.display = 'block';
+                    return;
+                }
+
+                const rows = appointments.map((a) => `
+                    <tr>
+                        <td>${a.code || '--'}</td>
+                        <td>${fmtDateTime(a.date, a.time)}</td>
+                        <td class="hide-mobile">${a.doctor || '--'}</td>
+                        <td class="hide-mobile">${a.department || '--'}</td>
+                        <td><span class="${statusClass(a.status)}">${statusLabel(a.status)}</span></td>
+                    </tr>
+                `).join('');
+
+                tbody.innerHTML = rows;
+                table.style.display = 'table';
+            } catch (err) {
+                loading.textContent = `Loi: ${err.message}`;
+            }
+        }
+
+        window.addEventListener('load', async () => {
+            await loadMe();
+            await loadAppointments();
+        });
+    </script>
+</body>
+</html>

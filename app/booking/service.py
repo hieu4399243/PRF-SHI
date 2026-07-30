@@ -231,6 +231,20 @@ def _insert_with_race_guard(appointment, date_str, time_str, patient_phone,
 # ---------------------------------------------------------------------------
 def all_doctors():
     """Danh sách phẳng mọi bác sĩ kèm dịch vụ phụ trách (cho bộ lọc ở trang admin)."""
+    managed = storage.list_admin_doctors()
+    if managed:
+        return [
+            {
+                "id": d.get("id"),
+                "name": d.get("name"),
+                "dept_code": d.get("service_code"),
+                "dept_name": d.get("dept_name") or d.get("service_code"),
+                "phone": d.get("phone") or "",
+                "email": d.get("email") or "",
+            }
+            for d in managed
+        ]
+
     out = []
     for dept_code, docs in DOCTORS.items():
         for d in docs:

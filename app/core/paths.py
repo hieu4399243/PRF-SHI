@@ -14,5 +14,7 @@ DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 APPOINTMENTS_PATH = os.path.join(DATA_DIR, "appointments.json")
 TOKENS_PATH = os.path.join(DATA_DIR, "device_tokens.json")
+DOCTORS_PATH = os.path.join(DATA_DIR, "doctors.json")
+PATIENTS_PATH = os.path.join(DATA_DIR, "patients.json")
 AUDIT_LOG_PATH = os.path.join(DATA_DIR, "audit_log.jsonl")
 OUTBOX_DIR = os.path.join(DATA_DIR, "outbox")

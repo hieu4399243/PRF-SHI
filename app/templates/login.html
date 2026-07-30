@@ -281,6 +281,13 @@
                 <button type="submit" id="login-btn">Đăng nhập</button>
             </form>
 
+            <div class="toggle-register" style="margin-top: 16px;">
+                Chưa có tài khoản? <a onclick="toggleRegister()">Đăng ký ngay</a>
+            </div>
+            <div class="toggle-register" style="margin-top: 8px;">
+                <a onclick="window.location.href='/'">Tiếp tục không đăng nhập →</a>
+            </div>
+
             <div class="demo-users">
                 <p>📝 Demo Users:</p>
                 <div class="user-buttons">
@@ -294,6 +301,11 @@
         <!-- Form Register -->
         <div id="register-form" style="display: none;">
             <form onsubmit="handleRegister(event)">
+                <div class="form-group">
+                    <label for="register-name">Họ và tên</label>
+                    <input type="text" id="register-name" placeholder="Nguyễn Văn A">
+                </div>
+
                 <div class="form-group">
                     <label for="register-username">Tên đăng nhập</label>
                     <input type="text" id="register-username" placeholder="Tên đăng nhập" required>
@@ -309,16 +321,14 @@
                     <input type="email" id="register-email" placeholder="your@email.com">
                 </div>
 
-                <div class="form-group role-select show">
-                    <label>Role</label>
-                    <div class="role-options">
-                        <label>
-                            <input type="radio" name="role" value="guest" checked> Guest
-                        </label>
-                        <label>
-                            <input type="radio" name="role" value="doctor"> Doctor
-                        </label>
-                    </div>
+                <div class="form-group">
+                    <label for="register-phone">Số điện thoại</label>
+                    <input type="tel" id="register-phone" placeholder="0901 234 567">
+                </div>
+
+                <div class="form-group">
+                    <label for="register-address">Địa chỉ</label>
+                    <input type="text" id="register-address" placeholder="Số nhà, đường, quận/huyện, thành phố">
                 </div>
 
                 <button type="submit" id="register-btn">Tạo tài khoản</button>
@@ -386,7 +396,7 @@
                         } else if (data.user.role === 'doctor') {
                             window.location.href = '/doctor-dashboard';
                         } else {
-                            window.location.href = '/';
+                            window.location.href = '/home';
                         }
                     }, 1000);
                 } else {
@@ -403,10 +413,12 @@
 
         async function handleRegister(event) {
             event.preventDefault();
+            const name = document.getElementById('register-name').value;
             const username = document.getElementById('register-username').value;
             const password = document.getElementById('register-password').value;
             const email = document.getElementById('register-email').value;
-            const role = document.querySelector('input[name="role"]:checked').value;
+            const phone = document.getElementById('register-phone').value;
+            const address = document.getElementById('register-address').value;
             const btn = document.getElementById('register-btn');
 
             btn.disabled = true;
@@ -416,7 +428,7 @@
                 const response = await fetch('/api/register', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ username, password, email, role })
+                    body: JSON.stringify({ name, username, password, email, phone, address })
                 });
 
                 const data = await response.json();
@@ -449,13 +461,19 @@
                     } else if (data.user.role === 'doctor') {
                         window.location.href = '/doctor-dashboard';
                     } else {
-                        window.location.href = '/';
+                        window.location.href = '/home';
                     }
                 }
             } catch (err) {
                 // Not logged in, show login form
             }
         });
+
+        // Toggle link: Đăng ký / Đăng nhập
+        const toggleLink = document.getElementById('toggle-register-link');
+        if (toggleLink) {
+            toggleLink.textContent = 'Đăng ký';
+        }
     </script>
 </body>
 </html>

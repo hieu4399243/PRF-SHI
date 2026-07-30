@@ -16,6 +16,8 @@ biến môi trường `DATABASE_URL`.
 import json
 import os
 import threading
+import uuid
+from datetime import datetime
 
 # Nạp biến môi trường từ file .env nếu có (tùy chọn — không có python-dotenv vẫn chạy).
 try:
@@ -27,7 +29,7 @@ except ImportError:
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_DB = bool(DATABASE_URL)
 
-from .paths import APPOINTMENTS_PATH, TOKENS_PATH  # noqa: F401  (re-export cho code cũ)
+from .paths import APPOINTMENTS_PATH, DOCTORS_PATH, PATIENTS_PATH, TOKENS_PATH  # noqa: F401  (re-export cho code cũ)
 
 _schema_ready = False
 _SCHEMA_LOCK = threading.Lock()
@@ -104,16 +106,36 @@ CREATE TABLE IF NOT EXISTS doctors (
     name         TEXT,
     sort_order   INT DEFAULT 0
 );
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS email TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS created_at TEXT;
+ALTER TABLE doctors ADD COLUMN IF NOT EXISTS updated_at TEXT;
+CREATE TABLE IF NOT EXISTS patients (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    phone       TEXT NOT NULL UNIQUE,
+    email       TEXT,
+    address     TEXT,
+    notes       TEXT,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS users (
     id              TEXT PRIMARY KEY,
     username        TEXT NOT NULL UNIQUE,
     password_hash   TEXT NOT NULL,
     role            TEXT NOT NULL CHECK (role IN ('admin', 'doctor', 'guest')),
     email           TEXT,
+    phone           TEXT,
+    address         TEXT,
     doctor_id       TEXT REFERENCES doctors(id),
+    patient_id      TEXT REFERENCES patients(id),
     created_at      TEXT NOT NULL,
     updated_at      TEXT NOT NULL
 );
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS patient_id TEXT REFERENCES patients(id);
 CREATE TABLE IF NOT EXISTS safety_patterns (
     kind    TEXT NOT NULL,   -- 'emergency' | 'diagnosis' | 'handoff'
     pattern TEXT NOT NULL,
@@ -145,6 +167,8 @@ DROP INDEX IF EXISTS ux_appointments_slot;
 _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
               "department_code", "doctor", "doctor_id", "date", "time", "created_at",
               "status", "reminders_sent"]
+_DOCTOR_COLS = ["id", "service_code", "name", "phone", "email", "created_at", "updated_at"]
+_PATIENT_COLS = ["id", "name", "phone", "email", "address", "notes", "created_at", "updated_at"]
 
 
 def init_schema():
@@ -200,6 +224,14 @@ def _row_to_appt(row):
         rs = json.loads(rs)
     appt["reminders_sent"] = rs or []
     return appt
+
+
+def _row_to_doctor(row):
+    return dict(zip(_DOCTOR_COLS, row))
+
+
+def _row_to_patient(row):
+    return dict(zip(_PATIENT_COLS, row))
 
 
 # ---------------------------------------------------------------------------
@@ -422,12 +454,15 @@ def list_doctors():
         return {}
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
-        cur.execute("SELECT id, service_code, name FROM doctors "
+        cur.execute("SELECT id, service_code, name, phone, email, "
+                    "COALESCE(created_at, ''), COALESCE(updated_at, '') "
+                    "FROM doctors "
                     "ORDER BY sort_order, id")
         rows = cur.fetchall()
     out = {}
-    for did, scode, name in rows:
-        out.setdefault(scode, []).append({"id": did, "name": name})
+    for row in rows:
+        doctor = _row_to_doctor(row)
+        out.setdefault(doctor["service_code"], []).append(doctor)
     return out
 
 
@@ -531,6 +566,400 @@ def sync_catalog(departments, doctors):
     return (len(departments), sum(len(v) for v in doctors.values()))
 
 
+def _now_iso():
+    return datetime.utcnow().isoformat(timespec="seconds")
+
+
+def _seed_doctor_records():
+    from .catalog import DEPARTMENTS, DOCTORS
+
+    out = []
+    now = _now_iso()
+    for dept_code, docs in DOCTORS.items():
+        for d in docs:
+            out.append({
+                "id": d["id"],
+                "service_code": dept_code,
+                "name": d["name"],
+                "phone": "",
+                "email": "",
+                "created_at": now,
+                "updated_at": now,
+                "dept_name": DEPARTMENTS.get(dept_code, {}).get("name", dept_code),
+            })
+    return out
+
+
+def _json_doctor_items():
+    items = _json_load(DOCTORS_PATH, [])
+    if items:
+        return items
+    items = _seed_doctor_records()
+    _json_save(DOCTORS_PATH, items)
+    return items
+
+
+def _json_patient_items():
+    return _json_load(PATIENTS_PATH, [])
+
+
+def list_admin_doctors(search=None):
+    """Danh sách bác sĩ cho màn quản trị."""
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT d.id, d.service_code, d.name, d.phone, d.email, "
+                "COALESCE(d.created_at, ''), COALESCE(d.updated_at, ''), "
+                "COALESCE(s.name, d.service_code) "
+                "FROM doctors d "
+                "LEFT JOIN services s ON s.code = d.service_code "
+                "ORDER BY d.sort_order, d.id"
+            )
+            rows = cur.fetchall()
+        doctors = []
+        for row in rows:
+            doctor = _row_to_doctor(row[:7])
+            doctor["dept_name"] = row[7]
+            doctors.append(doctor)
+    else:
+        from .catalog import DEPARTMENTS
+
+        doctors = []
+        for d in _json_doctor_items():
+            doctor = dict(d)
+            doctor["dept_name"] = DEPARTMENTS.get(
+                doctor.get("service_code", ""), {}
+            ).get("name", doctor.get("service_code", ""))
+            doctors.append(doctor)
+
+    if search:
+        q = search.strip().lower()
+        doctors = [
+            d for d in doctors
+            if q in (d.get("id") or "").lower()
+            or q in (d.get("name") or "").lower()
+            or q in (d.get("phone") or "").lower()
+            or q in (d.get("email") or "").lower()
+        ]
+    return doctors
+
+
+def create_admin_doctor(doctor_id, name, service_code, phone=None, email=None):
+    """Tạo mới bác sĩ."""
+    did = (doctor_id or "").strip()
+    dname = (name or "").strip()
+    scode = (service_code or "").strip()
+    if not did or not dname or not scode:
+        raise ValueError("doctor_id, name, service_code là bắt buộc")
+
+    if USE_DB:
+        init_schema()
+        now = _now_iso()
+        try:
+            with _connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO services (code, name, descr, keywords, sort_order) "
+                    "VALUES (%s,%s,%s,%s,%s) ON CONFLICT (code) DO NOTHING",
+                    (scode, scode, "", "[]", 9999),
+                )
+                cur.execute(
+                    "SELECT COALESCE(MAX(sort_order), -1) + 1 FROM doctors "
+                    "WHERE service_code = %s",
+                    (scode,),
+                )
+                sort_order = cur.fetchone()[0]
+                cur.execute(
+                    "INSERT INTO doctors "
+                    "(id, service_code, name, sort_order, phone, email, created_at, updated_at) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (did, scode, dname, sort_order, phone or None, email or None, now, now),
+                )
+                conn.commit()
+        except Exception as exc:
+            if "duplicate key" in str(exc).lower() or "unique" in str(exc).lower():
+                raise ValueError("Mã bác sĩ đã tồn tại")
+            raise
+        return {
+            "id": did,
+            "service_code": scode,
+            "name": dname,
+            "phone": phone or "",
+            "email": email or "",
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    with _JSON_LOCK:
+        items = _json_doctor_items()
+        if any((d.get("id") or "") == did for d in items):
+            raise ValueError("Mã bác sĩ đã tồn tại")
+        now = _now_iso()
+        doctor = {
+            "id": did,
+            "service_code": scode,
+            "name": dname,
+            "phone": phone or "",
+            "email": email or "",
+            "created_at": now,
+            "updated_at": now,
+        }
+        items.append(doctor)
+        _json_save(DOCTORS_PATH, items)
+        return doctor
+
+
+def update_admin_doctor(doctor_id, name=None, service_code=None, phone=None, email=None):
+    """Cập nhật thông tin bác sĩ theo id."""
+    did = (doctor_id or "").strip()
+    if not did:
+        raise ValueError("doctor_id là bắt buộc")
+
+    if USE_DB:
+        init_schema()
+        now = _now_iso()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, service_code, name, phone, email, "
+                "COALESCE(created_at, ''), COALESCE(updated_at, '') "
+                "FROM doctors WHERE id = %s",
+                (did,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            current = _row_to_doctor(row)
+            new_name = (name or current["name"]).strip()
+            new_service_code = (service_code or current["service_code"]).strip()
+            new_phone = phone if phone is not None else current.get("phone")
+            new_email = email if email is not None else current.get("email")
+            cur.execute(
+                "UPDATE doctors SET service_code = %s, name = %s, phone = %s, "
+                "email = %s, updated_at = %s WHERE id = %s",
+                (new_service_code, new_name, new_phone or None, new_email or None, now, did),
+            )
+            cur.execute(
+                "UPDATE appointments SET doctor = %s, department_code = %s "
+                "WHERE doctor_id = %s",
+                (new_name, new_service_code, did),
+            )
+            conn.commit()
+        current.update({
+            "service_code": new_service_code,
+            "name": new_name,
+            "phone": new_phone or "",
+            "email": new_email or "",
+            "updated_at": now,
+        })
+        return current
+
+    with _JSON_LOCK:
+        items = _json_doctor_items()
+        target = None
+        for d in items:
+            if (d.get("id") or "") == did:
+                target = d
+                break
+        if not target:
+            return None
+        if name is not None:
+            target["name"] = name.strip()
+        if service_code is not None:
+            target["service_code"] = service_code.strip()
+        if phone is not None:
+            target["phone"] = phone.strip()
+        if email is not None:
+            target["email"] = email.strip()
+        target["updated_at"] = _now_iso()
+        _json_save(DOCTORS_PATH, items)
+
+        appts = _json_load(APPOINTMENTS_PATH, [])
+        changed = False
+        for a in appts:
+            if a.get("doctor_id") == did:
+                a["doctor"] = target.get("name")
+                if target.get("service_code"):
+                    a["department_code"] = target.get("service_code")
+                changed = True
+        if changed:
+            _json_save(APPOINTMENTS_PATH, appts)
+        return dict(target)
+
+
+def list_patients(search=None):
+    """Danh sách hồ sơ bệnh nhân cho admin."""
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, phone, email, address, notes, created_at, updated_at "
+                "FROM patients ORDER BY updated_at DESC, created_at DESC"
+            )
+            patients = [_row_to_patient(r) for r in cur.fetchall()]
+    else:
+        patients = _json_patient_items()
+
+    if search:
+        q = search.strip().lower()
+        patients = [
+            p for p in patients
+            if q in (p.get("name") or "").lower()
+            or q in (p.get("phone") or "").lower()
+            or q in (p.get("email") or "").lower()
+        ]
+    return patients
+
+
+def create_patient_profile(name, phone, email=None, address=None, notes=None):
+    """Tạo hồ sơ bệnh nhân mới."""
+    pname = (name or "").strip()
+    pphone = (phone or "").strip()
+    if not pname or not pphone:
+        raise ValueError("name và phone là bắt buộc")
+
+    patient_id = f"pt_{uuid.uuid4().hex[:10]}"
+    now = _now_iso()
+
+    if USE_DB:
+        init_schema()
+        try:
+            with _connect() as conn, conn.cursor() as cur:
+                cur.execute(
+                    "INSERT INTO patients "
+                    "(id, name, phone, email, address, notes, created_at, updated_at) "
+                    "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
+                    (patient_id, pname, pphone, email or None, address or None, notes or None, now, now),
+                )
+                conn.commit()
+        except Exception as exc:
+            if "duplicate key" in str(exc).lower() or "unique" in str(exc).lower():
+                raise ValueError("Số điện thoại đã tồn tại")
+            raise
+    else:
+        with _JSON_LOCK:
+            items = _json_patient_items()
+            if any((p.get("phone") or "") == pphone for p in items):
+                raise ValueError("Số điện thoại đã tồn tại")
+            items.append({
+                "id": patient_id,
+                "name": pname,
+                "phone": pphone,
+                "email": email or "",
+                "address": address or "",
+                "notes": notes or "",
+                "created_at": now,
+                "updated_at": now,
+            })
+            _json_save(PATIENTS_PATH, items)
+
+    return {
+        "id": patient_id,
+        "name": pname,
+        "phone": pphone,
+        "email": email or "",
+        "address": address or "",
+        "notes": notes or "",
+        "created_at": now,
+        "updated_at": now,
+    }
+
+
+def update_patient_profile_admin(patient_id, name=None, phone=None, email=None,
+                                 address=None, notes=None):
+    """Cập nhật hồ sơ bệnh nhân theo id."""
+    pid = (patient_id or "").strip()
+    if not pid:
+        raise ValueError("patient_id là bắt buộc")
+
+    if USE_DB:
+        init_schema()
+        now = _now_iso()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, phone, email, address, notes, created_at, updated_at "
+                "FROM patients WHERE id = %s",
+                (pid,),
+            )
+            row = cur.fetchone()
+            if not row:
+                return None
+            current = _row_to_patient(row)
+            new_name = (name if name is not None else current["name"]).strip()
+            new_phone = (phone if phone is not None else current["phone"]).strip()
+            new_email = (email if email is not None else current.get("email") or "").strip()
+            new_address = (address if address is not None else current.get("address") or "").strip()
+            new_notes = (notes if notes is not None else current.get("notes") or "").strip()
+            try:
+                cur.execute(
+                    "UPDATE patients SET name = %s, phone = %s, email = %s, "
+                    "address = %s, notes = %s, updated_at = %s WHERE id = %s",
+                    (new_name, new_phone, new_email or None, new_address or None,
+                     new_notes or None, now, pid),
+                )
+            except Exception as exc:
+                if "duplicate key" in str(exc).lower() or "unique" in str(exc).lower():
+                    raise ValueError("Số điện thoại đã tồn tại")
+                raise
+
+            old_phone = (current.get("phone") or "").strip()
+            if old_phone:
+                cur.execute(
+                    "UPDATE appointments SET patient_name = %s, patient_phone = %s "
+                    "WHERE patient_phone = %s",
+                    (new_name, new_phone, old_phone),
+                )
+            conn.commit()
+        current.update({
+            "name": new_name,
+            "phone": new_phone,
+            "email": new_email,
+            "address": new_address,
+            "notes": new_notes,
+            "updated_at": now,
+        })
+        return current
+
+    with _JSON_LOCK:
+        items = _json_patient_items()
+        target = None
+        for p in items:
+            if (p.get("id") or "") == pid:
+                target = p
+                break
+        if not target:
+            return None
+
+        new_name = (name if name is not None else target.get("name") or "").strip()
+        new_phone = (phone if phone is not None else target.get("phone") or "").strip()
+        if any((p.get("phone") or "") == new_phone and p.get("id") != pid for p in items):
+            raise ValueError("Số điện thoại đã tồn tại")
+
+        old_phone = (target.get("phone") or "").strip()
+        target["name"] = new_name
+        target["phone"] = new_phone
+        if email is not None:
+            target["email"] = email.strip()
+        if address is not None:
+            target["address"] = address.strip()
+        if notes is not None:
+            target["notes"] = notes.strip()
+        target["updated_at"] = _now_iso()
+        _json_save(PATIENTS_PATH, items)
+
+        appts = _json_load(APPOINTMENTS_PATH, [])
+        changed = False
+        if old_phone:
+            for a in appts:
+                if a.get("patient_phone") == old_phone:
+                    a["patient_name"] = new_name
+                    a["patient_phone"] = new_phone
+                    changed = True
+        if changed:
+            _json_save(APPOINTMENTS_PATH, appts)
+
+        return dict(target)
+
+
 # ===========================================================================
 # API CÔNG KHAI — USERS (authentication)
 # ===========================================================================
@@ -541,11 +970,6 @@ class UserNotFoundError(Exception):
 
 class DuplicateUsernameError(Exception):
     """Username đã được sử dụng."""
-    pass
-
-
-class UserStoreUnavailableError(Exception):
-    """User store cần Postgres (DATABASE_URL) — không có JSON-mode fallback."""
     pass
 
 
@@ -568,9 +992,9 @@ def create_user(user_id, username, password_hash, role, email=None, doctor_id=No
             now = datetime.utcnow().isoformat()
             cur.execute(
                 "INSERT INTO users "
-                "(id, username, password_hash, role, email, doctor_id, created_at, updated_at) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s)",
-                (user_id, username, password_hash, role, email, doctor_id, now, now),
+                "(id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                (user_id, username, password_hash, role, email, phone, address, doctor_id, patient_id, now, now),
             )
             conn.commit()
         return True
@@ -593,7 +1017,7 @@ def get_user_by_username(username):
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
+            "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
             "FROM users WHERE username = %s",
             (username,),
         )
@@ -605,9 +1029,12 @@ def get_user_by_username(username):
                 "password_hash": row[2],
                 "role": row[3],
                 "email": row[4],
-                "doctor_id": row[5],
-                "created_at": row[6],
-                "updated_at": row[7],
+                "phone": row[5],
+                "address": row[6],
+                "doctor_id": row[7],
+                "patient_id": row[8],
+                "created_at": row[9],
+                "updated_at": row[10],
             }
     return None
 
@@ -625,7 +1052,7 @@ def get_user_by_id(user_id):
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
+            "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
             "FROM users WHERE id = %s",
             (user_id,),
         )
@@ -637,40 +1064,192 @@ def get_user_by_id(user_id):
                 "password_hash": row[2],
                 "role": row[3],
                 "email": row[4],
-                "doctor_id": row[5],
-                "created_at": row[6],
-                "updated_at": row[7],
+                "phone": row[5],
+                "address": row[6],
+                "doctor_id": row[7],
+                "patient_id": row[8],
+                "created_at": row[9],
+                "updated_at": row[10],
             }
     return None
 
 
-def get_user_by_doctor_id(doctor_id):
-    """Lấy user (role=doctor) đã claim doctor_id này. Trả về dict hoặc None.
-
-    Raises:
-        UserStoreUnavailableError: không có DATABASE_URL.
-    """
+def update_user_profile(user_id, email=None, phone=None, address=None):
+    """Cập nhật email, phone, address của user. Trả về True nếu thành công."""
     if not USE_DB:
-        raise UserStoreUnavailableError(
-            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        return False
+    init_schema()
+    from datetime import datetime
+    now = datetime.utcnow().isoformat()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "UPDATE users SET email = %s, phone = %s, address = %s, updated_at = %s "
+            "WHERE id = %s",
+            (email, phone, address, now, user_id),
         )
+        updated = cur.rowcount
+        conn.commit()
+    return updated > 0
+
+
+def get_user_by_doctor_id(doctor_id):
+    """Lấy user theo doctor_id. Trả về dict hoặc None."""
+    if not USE_DB:
+        return None
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
-            "SELECT id, username, password_hash, role, email, doctor_id, created_at, updated_at "
-            "FROM users WHERE doctor_id = %s AND role = 'doctor'",
+            "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
+            "FROM users WHERE doctor_id = %s",
             (doctor_id,),
         )
         row = cur.fetchone()
         if row:
             return {
-                "id": row[0],
-                "username": row[1],
-                "password_hash": row[2],
-                "role": row[3],
-                "email": row[4],
-                "doctor_id": row[5],
-                "created_at": row[6],
-                "updated_at": row[7],
+                "id": row[0], "username": row[1], "password_hash": row[2],
+                "role": row[3], "email": row[4], "phone": row[5],
+                "address": row[6], "doctor_id": row[7], "patient_id": row[8],
+                "created_at": row[9], "updated_at": row[10],
             }
     return None
+
+
+def get_user_by_patient_id(patient_id):
+    """Lấy user theo patient_id. Trả về dict hoặc None."""
+    if not USE_DB:
+        return None
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
+            "FROM users WHERE patient_id = %s",
+            (patient_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0], "username": row[1], "password_hash": row[2],
+                "role": row[3], "email": row[4], "phone": row[5],
+                "address": row[6], "doctor_id": row[7], "patient_id": row[8],
+                "created_at": row[9], "updated_at": row[10],
+            }
+    return None
+
+
+def link_user_patient(user_id, patient_id):
+    """Liên kết user với hồ sơ bệnh nhân."""
+    if not USE_DB:
+        return
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute("UPDATE users SET patient_id = %s WHERE id = %s", (patient_id, user_id))
+        conn.commit()
+
+
+def get_doctor_detail(doctor_id):
+    """Chi tiết đầy đủ của một bác sĩ: thông tin bác sĩ + tài khoản + khoa."""
+    from .catalog import DEPARTMENTS
+
+    did = (doctor_id or "").strip()
+    if not did:
+        return None
+
+    doctor = None
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT d.id, d.service_code, d.name, d.phone, d.email, "
+                "COALESCE(d.created_at,''), COALESCE(d.updated_at,''), "
+                "COALESCE(s.name, d.service_code) "
+                "FROM doctors d "
+                "LEFT JOIN services s ON s.code = d.service_code "
+                "WHERE d.id = %s",
+                (did,),
+            )
+            row = cur.fetchone()
+            if row:
+                doctor = _row_to_doctor(row[:7])
+                doctor["dept_name"] = row[7]
+    else:
+        for d in _json_doctor_items():
+            if d.get("id") == did:
+                doctor = dict(d)
+                doctor["dept_name"] = DEPARTMENTS.get(
+                    doctor.get("service_code", ""), {}
+                ).get("name", doctor.get("service_code", ""))
+                break
+
+    if not doctor:
+        return None
+
+    # Gộp thông tin tài khoản user
+    user = get_user_by_doctor_id(did)
+    if user:
+        doctor["user"] = {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "created_at": str(user.get("created_at") or ""),
+            "updated_at": str(user.get("updated_at") or ""),
+        }
+
+    # Lịch hẹn gần đây (10 lịch mới nhất)
+    all_appts = list_appointments()
+    doctor_appts = [a for a in all_appts if a.get("doctor_id") == did]
+    doctor_appts.sort(key=lambda a: (a.get("date", ""), a.get("time", "")), reverse=True)
+    doctor["recent_appointments"] = doctor_appts[:10]
+    doctor["total_appointments"] = len(doctor_appts)
+    doctor["confirmed_appointments"] = sum(1 for a in doctor_appts if a.get("status") == "confirmed")
+
+    return doctor
+
+
+def get_patient_detail(patient_id):
+    """Chi tiết đầy đủ của một bệnh nhân: thông tin hồ sơ + tài khoản + lịch sử lịch hẹn."""
+    pid = (patient_id or "").strip()
+    if not pid:
+        return None
+
+    patient = None
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, phone, email, address, notes, created_at, updated_at "
+                "FROM patients WHERE id = %s",
+                (pid,),
+            )
+            row = cur.fetchone()
+            if row:
+                patient = _row_to_patient(row)
+    else:
+        for p in _json_patient_items():
+            if p.get("id") == pid:
+                patient = dict(p)
+                break
+
+    if not patient:
+        return None
+
+    # Gộp thông tin tài khoản user
+    user = get_user_by_patient_id(pid)
+    if user:
+        patient["user"] = {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "created_at": str(user.get("created_at") or ""),
+            "updated_at": str(user.get("updated_at") or ""),
+        }
+
+    # Lịch sử lịch hẹn theo SĐT
+    all_appts = list_appointments()
+    phone = patient.get("phone", "")
+    patient_appts = [a for a in all_appts if a.get("patient_phone") == phone]
+    patient_appts.sort(key=lambda a: (a.get("date", ""), a.get("time", "")), reverse=True)
+    patient["appointment_history"] = patient_appts[:20]
+    patient["total_appointments"] = len(patient_appts)
+    patient["confirmed_appointments"] = sum(1 for a in patient_appts if a.get("status") == "confirmed")
+
+    return patient
