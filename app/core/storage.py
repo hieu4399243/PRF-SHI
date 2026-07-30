@@ -29,7 +29,15 @@ except ImportError:
 DATABASE_URL = os.environ.get("DATABASE_URL", "").strip()
 USE_DB = bool(DATABASE_URL)
 
-from .paths import APPOINTMENTS_PATH, DOCTORS_PATH, PATIENTS_PATH, TOKENS_PATH  # noqa: F401  (re-export cho code cũ)
+from .paths import (  # noqa: F401  (re-export cho code cũ)
+    APPOINTMENTS_PATH,
+    DOCTORS_PATH,
+    PATIENT_PREFS_PATH,
+    PATIENTS_PATH,
+    REC_LOG_PATH,
+    TOKENS_PATH,
+    TREATMENT_HISTORY_PATH,
+)
 
 _schema_ready = False
 _SCHEMA_LOCK = threading.Lock()
@@ -141,6 +149,77 @@ CREATE TABLE IF NOT EXISTS safety_patterns (
     pattern TEXT NOT NULL,
     PRIMARY KEY (kind, pattern)
 );
+
+-- Thuộc tính LÂM SÀNG của bệnh nhân, dùng làm đầu vào cho engine gợi ý:
+-- `birth_year` -> feature age_group (AC SMMG-65 yêu cầu gợi ý theo độ tuổi),
+-- `allergies`  -> feature allergy_flags.
+-- Đặt trên `patients` chứ không phải `users`: một bệnh nhân là một hồ sơ lâm sàng,
+-- có thể chưa có tài khoản đăng nhập nào.
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS birth_year SMALLINT;
+ALTER TABLE patients ADD COLUMN IF NOT EXISTS allergies  JSONB;
+
+-- ===========================================================================
+-- GỢI Ý DỊCH VỤ (REC-01/02) — 3 bảng theo ER-S2-Recommendation (Confluence 8192034).
+-- Sai lệch có chủ đích so với ER: khoá dùng TEXT (patients.id / service_code /
+-- doctor_id) thay vì UUID — xem §3 (D3) docs/patient-recommendation-design.md.
+-- ===========================================================================
+CREATE TABLE IF NOT EXISTS treatment_history (
+    history_id        TEXT PRIMARY KEY,
+    appointment_code  TEXT UNIQUE REFERENCES appointments(code),
+    patient_id        TEXT,
+    patient_phone     TEXT,
+    service_code      TEXT NOT NULL,
+    doctor_id         TEXT,
+    treatment_date    TEXT NOT NULL,
+    outcome           TEXT NOT NULL DEFAULT 'success',
+    followup_required BOOLEAN NOT NULL DEFAULT FALSE,
+    followup_due_date TEXT,
+    patient_rating    SMALLINT,
+    created_at        TEXT NOT NULL
+);
+-- KHÔNG đặt FK trên patient_id: lịch sử được backfill từ các lịch hẹn đặt qua
+-- chatbot, mà những lịch đó chưa gắn với hồ sơ bệnh nhân nào.
+CREATE INDEX IF NOT EXISTS idx_th_patient_date
+    ON treatment_history (patient_id, treatment_date DESC);
+CREATE INDEX IF NOT EXISTS idx_th_phone_date
+    ON treatment_history (patient_phone, treatment_date DESC);
+
+CREATE TABLE IF NOT EXISTS recommendation_log (
+    rec_log_id       TEXT PRIMARY KEY,
+    patient_id       TEXT NOT NULL,
+    generated_at     TEXT NOT NULL,
+    trigger          TEXT NOT NULL,
+    model_version    TEXT NOT NULL,
+    is_cold_start    BOOLEAN NOT NULL DEFAULT FALSE,
+    recommendations  JSONB NOT NULL DEFAULT '[]'::jsonb,
+    latency_ms       INT,
+    patient_action   TEXT,
+    patient_acted_service_code TEXT,
+    patient_acted_rank SMALLINT,
+    dentist_feedback JSONB,
+    dentist_acted_at TEXT,
+    feature_snapshot JSONB
+);
+CREATE INDEX IF NOT EXISTS idx_reclog_patient_generated
+    ON recommendation_log (patient_id, generated_at DESC);
+
+CREATE TABLE IF NOT EXISTS patient_preference (
+    patient_id              TEXT PRIMARY KEY,
+    dismissed_service_codes JSONB NOT NULL DEFAULT '[]'::jsonb,
+    preferred_doctor_id     TEXT,
+    service_ratings         JSONB NOT NULL DEFAULT '{}'::jsonb,
+    updated_at              TEXT NOT NULL
+);
+"""
+
+# Tách riêng khỏi SCHEMA_SQL vì KHÔNG idempotent theo kiểu `IF NOT EXISTS`:
+# constraint cũ phải DROP rồi ADD lại để nhận thêm role 'patient' (bệnh nhân đăng
+# nhập vào portal gợi ý). Chạy trong try/except riêng — fail thì app vẫn chạy, chỉ
+# mất khả năng TẠO tài khoản role='patient'.
+ROLE_CHECK_SQL = """
+ALTER TABLE users DROP CONSTRAINT IF EXISTS users_role_check;
+ALTER TABLE users ADD  CONSTRAINT users_role_check
+    CHECK (role IN ('admin', 'doctor', 'guest', 'patient'));
 """
 
 # Tách riêng khỏi SCHEMA_SQL: UNIQUE index này có thể FAIL nếu dữ liệu prod đã có
@@ -188,6 +267,16 @@ def init_schema():
         with _connect() as conn, conn.cursor() as cur:
             cur.execute(SCHEMA_SQL)
             conn.commit()
+            try:
+                cur.execute(ROLE_CHECK_SQL)
+                conn.commit()
+            except Exception as exc:  # noqa: BLE001 - phải bắt mọi lỗi DB ở đây
+                conn.rollback()
+                print(
+                    "[storage] CẢNH BÁO: không cập nhật được CHECK constraint "
+                    f"users.role để nhận role 'patient'. Lỗi: {exc}. App vẫn chạy "
+                    "nhưng KHÔNG tạo được tài khoản bệnh nhân."
+                )
             try:
                 # THỨ TỰ BẮT BUỘC: CREATE index mới TRƯỚC, DROP index cũ SAU. Nếu
                 # CREATE fail (vd. dữ liệu trùng sẵn có theo bộ khoá mới), index cũ
@@ -968,12 +1057,21 @@ class UserNotFoundError(Exception):
     pass
 
 
+class UserStoreUnavailableError(Exception):
+    """User store cần Postgres (DATABASE_URL) — không có JSON-mode fallback.
+
+    (Khôi phục: class này bị thiếu định nghĩa trong khi vẫn được `raise` ở 3 hàm
+    đọc/ghi user -> mọi đường JSON mode ném NameError thay vì lỗi có nghĩa.)
+    """
+
+
 class DuplicateUsernameError(Exception):
     """Username đã được sử dụng."""
     pass
 
 
-def create_user(user_id, username, password_hash, role, email=None, doctor_id=None):
+def create_user(user_id, username, password_hash, role, email=None, doctor_id=None,
+                phone=None, address=None, patient_id=None):
     """Tạo user mới (idempotent nếu đã tồn tại).
 
     Trả về True nếu tạo thành công, False nếu username đã tồn tại.
@@ -1093,9 +1191,18 @@ def update_user_profile(user_id, email=None, phone=None, address=None):
 
 
 def get_user_by_doctor_id(doctor_id):
-    """Lấy user theo doctor_id. Trả về dict hoặc None."""
+    """Lấy user theo doctor_id. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL — GIỐNG 3 hàm user còn
+        lại. Trả None ở JSON mode sẽ khiến `/api/register` tưởng doctor_id còn
+        trống và đi tiếp, thay vì báo lỗi cấu hình (xem commit 54b0e0e "fail loud
+        on storage unavailable").
+    """
     if not USE_DB:
-        return None
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
@@ -1253,3 +1360,363 @@ def get_patient_detail(patient_id):
     patient["confirmed_appointments"] = sum(1 for a in patient_appts if a.get("status") == "confirmed")
 
     return patient
+# ===========================================================================
+# API CÔNG KHAI — LỊCH SỬ ĐIỀU TRỊ (treatment_history)
+#
+# Khác `users`: các bảng gợi ý CÓ JSON-mode fallback, vì `eval/` phải chạy được
+# offline (không DATABASE_URL) để chấm điểm engine — xem §14 doc thiết kế.
+# ===========================================================================
+_TH_COLS = ["history_id", "appointment_code", "patient_id", "patient_phone",
+            "service_code", "doctor_id", "treatment_date", "outcome",
+            "followup_required", "followup_due_date", "patient_rating", "created_at"]
+
+
+def _row_to_treatment(row):
+    rec = dict(zip(_TH_COLS, row))
+    rec["followup_required"] = bool(rec.get("followup_required"))
+    return rec
+
+
+def add_treatment(rec):
+    """Ghi 1 lượt điều trị đã hoàn tất. Trả True nếu thêm mới, False nếu đã có.
+
+    `ON CONFLICT DO NOTHING` KHÔNG chỉ định cột đích -> bắt cả trùng `history_id`
+    (PK) lẫn trùng `appointment_code` (UNIQUE). Cần cả hai: backfill dedupe theo
+    mã lịch hẹn, còn dữ liệu seed demo không gắn với lịch hẹn nào
+    (`appointment_code = NULL`, mà nhiều NULL thì Postgres coi là không trùng) nên
+    chỉ dedupe được theo `history_id`.
+    """
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO treatment_history ({', '.join(_TH_COLS)}) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s) "
+                "ON CONFLICT DO NOTHING",
+                tuple(rec.get(c) for c in _TH_COLS),
+            )
+            added = cur.rowcount
+            conn.commit()
+        return added > 0
+    with _JSON_LOCK:
+        items = _json_load(TREATMENT_HISTORY_PATH, [])
+        code = rec.get("appointment_code")
+        hid = rec.get("history_id")
+        if any(r.get("history_id") == hid for r in items):
+            return False
+        if code and any(r.get("appointment_code") == code for r in items):
+            return False
+        items.append({c: rec.get(c) for c in _TH_COLS})
+        _json_save(TREATMENT_HISTORY_PATH, items)
+        return True
+
+
+def list_treatments(patient_id=None, patient_phone=None, limit=None):
+    """Lịch sử điều trị, MỚI NHẤT TRƯỚC.
+
+    Lọc theo `patient_id` HOẶC `patient_phone` (OR, không phải AND): một bệnh nhân
+    có thể có lịch đặt trước khi tạo tài khoản (chỉ có SĐT) lẫn sau khi có tài
+    khoản (có patient_id) — cả hai đều là lịch sử của cùng người.
+    Không truyền tiêu chí nào -> trả toàn bộ (dùng cho bảng đồng xuất hiện).
+    """
+    if USE_DB:
+        init_schema()
+        where, params = [], []
+        if patient_id:
+            where.append("patient_id = %s")
+            params.append(patient_id)
+        if patient_phone:
+            where.append("patient_phone = %s")
+            params.append(patient_phone)
+        sql = f"SELECT {', '.join(_TH_COLS)} FROM treatment_history"
+        if where:
+            sql += " WHERE " + " OR ".join(where)
+        sql += " ORDER BY treatment_date DESC, created_at DESC"
+        if limit:
+            sql += " LIMIT %s"
+            params.append(int(limit))
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            return [_row_to_treatment(r) for r in cur.fetchall()]
+    items = _json_load(TREATMENT_HISTORY_PATH, [])
+    if patient_id or patient_phone:
+        items = [r for r in items
+                 if (patient_id and r.get("patient_id") == patient_id)
+                 or (patient_phone and r.get("patient_phone") == patient_phone)]
+    items.sort(key=lambda r: (r.get("treatment_date") or "",
+                              r.get("created_at") or ""), reverse=True)
+    return items[:int(limit)] if limit else items
+
+
+# ===========================================================================
+# API CÔNG KHAI — LOG GỢI Ý (recommendation_log)
+# Append-only: mỗi lần engine sinh gợi ý ghi 1 dòng; hành động của bệnh nhân
+# được cập nhật sau vào đúng dòng đó (SEQ 5.4 + bước 7).
+# ===========================================================================
+_RECLOG_COLS = ["rec_log_id", "patient_id", "generated_at", "trigger",
+                "model_version", "is_cold_start", "recommendations", "latency_ms",
+                "patient_action", "patient_acted_service_code", "patient_acted_rank",
+                "dentist_feedback", "dentist_acted_at", "feature_snapshot"]
+
+# JSON mode: chặn file phình vô hạn (Postgres thì giữ đủ để làm analytics).
+_RECLOG_JSON_MAX = 2000
+
+_JSONB_RECLOG_FIELDS = ("recommendations", "dentist_feedback", "feature_snapshot")
+
+
+def _row_to_rec_log(row):
+    entry = dict(zip(_RECLOG_COLS, row))
+    for field in _JSONB_RECLOG_FIELDS:
+        val = entry.get(field)
+        if isinstance(val, str):
+            try:
+                val = json.loads(val)
+            except json.JSONDecodeError:
+                val = None
+        entry[field] = val
+    entry["recommendations"] = entry.get("recommendations") or []
+    entry["is_cold_start"] = bool(entry.get("is_cold_start"))
+    return entry
+
+
+def add_rec_log(entry):
+    """Ghi 1 dòng log gợi ý. Trả về rec_log_id."""
+    if USE_DB:
+        init_schema()
+        values = []
+        for col in _RECLOG_COLS:
+            val = entry.get(col)
+            if col in _JSONB_RECLOG_FIELDS and val is not None:
+                val = json.dumps(val)
+            values.append(val)
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO recommendation_log ({', '.join(_RECLOG_COLS)}) "
+                "VALUES (" + ",".join(["%s"] * len(_RECLOG_COLS)) + ")",
+                tuple(values),
+            )
+            conn.commit()
+        return entry.get("rec_log_id")
+    with _JSON_LOCK:
+        items = _json_load(REC_LOG_PATH, [])
+        items.append({c: entry.get(c) for c in _RECLOG_COLS})
+        _json_save(REC_LOG_PATH, items[-_RECLOG_JSON_MAX:])
+    return entry.get("rec_log_id")
+
+
+def get_rec_log(rec_log_id):
+    """Đọc 1 dòng log theo id. Trả dict hoặc None."""
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {', '.join(_RECLOG_COLS)} FROM recommendation_log "
+                "WHERE rec_log_id = %s", (rec_log_id,))
+            row = cur.fetchone()
+            return _row_to_rec_log(row) if row else None
+    for entry in _json_load(REC_LOG_PATH, []):
+        if entry.get("rec_log_id") == rec_log_id:
+            return entry
+    return None
+
+
+def set_rec_log_action(rec_log_id, action, service_code=None, rank=None):
+    """Ghi hành động của bệnh nhân lên dòng log đã có. Trả True nếu có cập nhật.
+
+    CHỈ ghi khi dòng đó chưa có hành động: một lượt gợi ý có đúng một hành động
+    quyết định, và người dùng bấm 2 lần (hoặc 2 tab) không được ghi đè 'book'
+    thành 'view_detail' — thứ tự tới của request không đảm bảo.
+    """
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE recommendation_log SET patient_action = %s, "
+                "patient_acted_service_code = %s, patient_acted_rank = %s "
+                "WHERE rec_log_id = %s AND patient_action IS NULL",
+                (action, service_code, rank, rec_log_id),
+            )
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        items = _json_load(REC_LOG_PATH, [])
+        for entry in items:
+            if entry.get("rec_log_id") == rec_log_id and not entry.get("patient_action"):
+                entry["patient_action"] = action
+                entry["patient_acted_service_code"] = service_code
+                entry["patient_acted_rank"] = rank
+                _json_save(REC_LOG_PATH, items)
+                return True
+    return False
+
+
+# ===========================================================================
+# API CÔNG KHAI — SỞ THÍCH BỆNH NHÂN (patient_preference)
+# ===========================================================================
+def get_patient_preference(patient_id):
+    """Sở thích của 1 bệnh nhân. Luôn trả dict (rỗng nếu chưa có bản ghi)."""
+    empty = {"patient_id": patient_id, "dismissed_service_codes": [],
+             "preferred_doctor_id": None, "service_ratings": {}, "updated_at": None}
+    if not patient_id:
+        return empty
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT patient_id, dismissed_service_codes, preferred_doctor_id, "
+                "       service_ratings, updated_at "
+                "FROM patient_preference WHERE patient_id = %s", (patient_id,))
+            row = cur.fetchone()
+        if not row:
+            return empty
+        dismissed, ratings = row[1], row[3]
+        if isinstance(dismissed, str):
+            dismissed = json.loads(dismissed)
+        if isinstance(ratings, str):
+            ratings = json.loads(ratings)
+        return {"patient_id": row[0], "dismissed_service_codes": dismissed or [],
+                "preferred_doctor_id": row[2], "service_ratings": ratings or {},
+                "updated_at": row[4]}
+    return _json_load(PATIENT_PREFS_PATH, {}).get(patient_id) or empty
+
+
+def add_dismissed_service(patient_id, service_code):
+    """Thêm 1 dịch vụ vào danh sách bệnh nhân đã "Không quan tâm".
+
+    TC-REC-004 yêu cầu dịch vụ bị bỏ qua KHÔNG xuất hiện lại ở lần sau -> lưu
+    bền, không phải trạng thái phiên. Trả về danh sách đã cập nhật.
+    """
+    from datetime import datetime
+    now = datetime.now().isoformat(timespec="seconds")
+    if not patient_id or not service_code:
+        return []
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            # Gộp không trùng ở phía DB (cùng cách set_reminder_sent làm) -> không
+            # cần đọc-sửa-ghi, nên 2 request song song không ghi đè lẫn nhau.
+            cur.execute(
+                "INSERT INTO patient_preference "
+                "(patient_id, dismissed_service_codes, updated_at) "
+                "VALUES (%s, %s, %s) "
+                "ON CONFLICT (patient_id) DO UPDATE SET "
+                "  dismissed_service_codes = ("
+                "    SELECT to_jsonb(array(SELECT DISTINCT jsonb_array_elements_text("
+                "      patient_preference.dismissed_service_codes || %s::jsonb))) ), "
+                "  updated_at = EXCLUDED.updated_at",
+                (patient_id, json.dumps([service_code]), now,
+                 json.dumps([service_code])),
+            )
+            conn.commit()
+        return get_patient_preference(patient_id)["dismissed_service_codes"]
+    with _JSON_LOCK:
+        prefs = _json_load(PATIENT_PREFS_PATH, {})
+        entry = prefs.setdefault(patient_id, {
+            "patient_id": patient_id, "dismissed_service_codes": [],
+            "preferred_doctor_id": None, "service_ratings": {}, "updated_at": None})
+        if service_code not in entry["dismissed_service_codes"]:
+            entry["dismissed_service_codes"].append(service_code)
+        entry["updated_at"] = now
+        _json_save(PATIENT_PREFS_PATH, prefs)
+        return list(entry["dismissed_service_codes"])
+
+
+def reset_dismissed_services(patient_id):
+    """Xoá danh sách đã bỏ qua (link "reset preferences" ở empty state, TC-REC-005)."""
+    from datetime import datetime
+    now = datetime.now().isoformat(timespec="seconds")
+    if not patient_id:
+        return False
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE patient_preference SET dismissed_service_codes = '[]'::jsonb, "
+                "updated_at = %s WHERE patient_id = %s", (now, patient_id))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        prefs = _json_load(PATIENT_PREFS_PATH, {})
+        entry = prefs.get(patient_id)
+        if not entry:
+            return False
+        entry["dismissed_service_codes"] = []
+        entry["updated_at"] = now
+        _json_save(PATIENT_PREFS_PATH, prefs)
+        return True
+
+
+def get_patient_clinical(patient_id):
+    """Thuộc tính lâm sàng của bệnh nhân cho engine gợi ý: tuổi + dị ứng + SĐT.
+
+    Tách khỏi `get_patient_detail()` (hàm đó gộp cả tài khoản + lịch hẹn, dùng cho
+    màn admin) vì engine chỉ cần đúng 4 trường và được gọi ở mọi request gợi ý.
+    Trả dict rỗng nếu không tìm thấy — engine coi như không biết tuổi, không loại
+    oan dịch vụ nào.
+    """
+    pid = (patient_id or "").strip()
+    if not pid:
+        return {}
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, name, phone, birth_year, allergies FROM patients "
+                "WHERE id = %s", (pid,))
+            row = cur.fetchone()
+        if not row:
+            return {}
+        allergies = row[4]
+        if isinstance(allergies, str):
+            try:
+                allergies = json.loads(allergies)
+            except json.JSONDecodeError:
+                allergies = None
+        return {"id": row[0], "name": row[1], "phone": row[2],
+                "birth_year": row[3], "allergies": allergies or []}
+    for p in _json_patient_items():
+        if p.get("id") == pid:
+            return {"id": p.get("id"), "name": p.get("name"), "phone": p.get("phone"),
+                    "birth_year": p.get("birth_year"),
+                    "allergies": p.get("allergies") or []}
+    return {}
+
+
+def set_patient_clinical(patient_id, birth_year=None, allergies=None):
+    """Cập nhật thuộc tính lâm sàng của hồ sơ bệnh nhân (tuổi, dị ứng).
+
+    Chỉ ghi những trường được truyền (None = giữ nguyên), để không vô tình xoá dữ
+    liệu do nha sĩ nhập khi seed/script chỉ muốn đặt một trường.
+    """
+    pid = (patient_id or "").strip()
+    if not pid or (birth_year is None and allergies is None):
+        return False
+    if USE_DB:
+        init_schema()
+        sets, params = [], []
+        if birth_year is not None:
+            sets.append("birth_year = %s")
+            params.append(int(birth_year))
+        if allergies is not None:
+            sets.append("allergies = %s")
+            params.append(json.dumps(allergies))
+        params.append(pid)
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(f"UPDATE patients SET {', '.join(sets)} WHERE id = %s",
+                        tuple(params))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        items = _json_load(PATIENTS_PATH, [])
+        for p in items:
+            if p.get("id") == pid:
+                if birth_year is not None:
+                    p["birth_year"] = int(birth_year)
+                if allergies is not None:
+                    p["allergies"] = allergies
+                _json_save(PATIENTS_PATH, items)
+                return True
+    return False

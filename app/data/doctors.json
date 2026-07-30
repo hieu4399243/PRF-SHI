@@ -1,0 +1,112 @@
+[
+  {
+    "id": "bs_tq_01",
+    "service_code": "kham_tong_quat",
+    "name": "BS. Nguyễn Văn An",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Khám tổng quát & Cạo vôi"
+  },
+  {
+    "id": "bs_tq_02",
+    "service_code": "kham_tong_quat",
+    "name": "BS. Trần Thị Bình",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Khám tổng quát & Cạo vôi"
+  },
+  {
+    "id": "bs_sr_01",
+    "service_code": "sau_rang",
+    "name": "BS. Lê Minh Châu",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Trám răng / Sâu răng"
+  },
+  {
+    "id": "bs_nn_01",
+    "service_code": "noi_nha",
+    "name": "BS. Phạm Quốc Dũng",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Nội nha (Điều trị tủy)"
+  },
+  {
+    "id": "bs_nc_01",
+    "service_code": "nha_chu",
+    "name": "BS. Hoàng Thị Em",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Nha chu (Nướu / Lợi)"
+  },
+  {
+    "id": "bs_nhr_01",
+    "service_code": "nho_rang",
+    "name": "BS. Vũ Đình Phúc",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Tiểu phẫu / Nhổ răng"
+  },
+  {
+    "id": "bs_cn_01",
+    "service_code": "chinh_nha",
+    "name": "BS. Đỗ Thị Giang",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Chỉnh nha (Niềng răng)"
+  },
+  {
+    "id": "bs_cn_02",
+    "service_code": "chinh_nha",
+    "name": "BS. Ngô Văn Hải",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Chỉnh nha (Niềng răng)"
+  },
+  {
+    "id": "bs_ph_01",
+    "service_code": "phuc_hinh",
+    "name": "BS. Bùi Thị Inh",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Phục hình / Trồng răng"
+  },
+  {
+    "id": "bs_tm_01",
+    "service_code": "tham_my",
+    "name": "BS. Dương Văn Khang",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Nha khoa thẩm mỹ"
+  },
+  {
+    "id": "bs_nhi_01",
+    "service_code": "nha_nhi",
+    "name": "BS. Lý Thị Lan",
+    "phone": "",
+    "email": "",
+    "created_at": "2026-07-30T07:56:08",
+    "updated_at": "2026-07-30T07:56:08",
+    "dept_name": "Nha khoa trẻ em"
+  }
+]

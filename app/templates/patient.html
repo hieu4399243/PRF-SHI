@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Bệnh nhân — Trợ lý Nha khoa SHI</title>
+<style>
+  :root{
+    --bg:#edf0f2; --paper:#ffffff; --ink:#1a1a1a; --body:#2e2e2e; --muted:#8a8a8a;
+    --teal:#0e9b8e; --teal-deep:#0b7d72; --teal-tint:#e7f4f1; --line:#e4e4e4;
+    --navy:#1e3a5f; --violet:#5b4b9e; --violet-tint:#efedfa;
+    --warn:#b25a2b; --warn-tint:#fdf1e7; --danger:#b23a3a;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--body);min-height:100vh;
+       font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif}
+
+  /* Topbar — AC PAT-01: tên app + Đăng xuất, giống các WF khác */
+  .head{background:linear-gradient(135deg,var(--teal),var(--teal-deep));color:#fff;
+        padding:16px 20px;display:flex;align-items:center;gap:12px}
+  .avatar{width:42px;height:42px;border-radius:50%;background:rgba(255,255,255,.18);
+          display:flex;align-items:center;justify-content:center;font-size:22px}
+  .head h1{font-size:16px;margin:0;font-weight:700}
+  .head p{font-size:11.5px;margin:2px 0 0;opacity:.9}
+  .headRight{margin-left:auto;display:flex;align-items:center;gap:10px}
+  .btnGhost{background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.4);
+            border-radius:10px;padding:8px 12px;color:#fff;cursor:pointer;font-size:12.5px}
+  .btnGhost:hover{background:rgba(255,255,255,.26)}
+
+  .wrap{max-width:1040px;margin:0 auto;padding:20px 16px 90px}
+  .card{background:var(--paper);border:1px solid var(--line);border-radius:12px;
+        padding:16px 18px;margin-bottom:16px;box-shadow:0 1px 2px rgba(0,0,0,.04)}
+  h2{font-size:14px;margin:0 0 4px;color:var(--ink)}
+  .sub{font-size:12px;color:var(--muted);margin:0 0 14px}
+
+  button{font:inherit;font-size:13px;padding:9px 14px;border:0;border-radius:8px;
+         background:var(--teal);color:#fff;cursor:pointer}
+  button:hover{background:var(--teal-deep)}
+  button.secondary{background:#fff;color:var(--body);border:1px solid var(--line)}
+  button.secondary:hover{background:#f3f5f7}
+  button.danger{background:#fff;color:var(--danger);border:1px solid #e8cccc}
+  button.danger:hover{background:#fdf3f3}
+  button:disabled{opacity:.55;cursor:default}
+
+  /* Trạng thái loading / empty / error — AC PAT-01 đòi cả ba */
+  .state{padding:22px;text-align:center;color:var(--muted);font-size:13px}
+  .state.error{color:var(--danger)}
+  .skeleton{height:14px;border-radius:6px;background:linear-gradient(90deg,#eee,#f6f6f6,#eee);
+            background-size:200% 100%;animation:shine 1.2s infinite;margin:8px 0}
+  @keyframes shine{0%{background-position:200% 0}100%{background-position:-200% 0}}
+
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  tbody tr:last-child td{border-bottom:0}
+
+  /* Gợi ý AI — REC-01 */
+  .recHead{background:var(--violet-tint);border:1px solid #ddd8f5;border-radius:10px;
+           padding:11px 14px;margin-bottom:14px;font-size:13px;color:var(--violet)}
+  .recHead b{color:#43378a}
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:14px}
+  .rec{border:1.5px solid var(--line);border-radius:12px;padding:14px;display:flex;
+       flex-direction:column;gap:9px;background:#fff}
+  .rec.top{border-color:var(--navy)}
+  .recTop{display:flex;align-items:flex-start;gap:8px}
+  .recName{font-weight:700;color:var(--ink);font-size:13.5px;line-height:1.35}
+  .rank{font-size:11px;color:var(--muted);font-weight:700;flex-shrink:0}
+  .badge{font-size:10.5px;padding:2px 8px;border-radius:20px;font-weight:700;white-space:nowrap}
+  .badge.high{background:#fdeaea;color:#a32b2b}
+  .badge.medium{background:var(--teal-tint);color:var(--teal-deep)}
+  .badge.low{background:#f1f3f5;color:#6b7280}
+  .fit{font-size:12.5px;color:var(--body)}
+  .fit b{font-size:15px;color:var(--navy)}
+  .meta{font-size:11.5px;color:var(--muted)}
+  .reason{background:#f7f8fa;border-left:3px solid var(--violet);border-radius:6px;
+          padding:8px 10px;font-size:12.5px;line-height:1.5;color:#3f3f46}
+  .recActions{display:flex;gap:8px;margin-top:auto}
+  .recActions button{flex:1}
+
+  .coldNote{background:var(--warn-tint);border:1px solid #f0d9c4;border-radius:10px;
+            padding:11px 14px;margin-bottom:14px;font-size:12.5px;color:var(--warn)}
+  .disclaimer{font-size:11px;color:var(--muted);margin-top:12px;line-height:1.5}
+
+  /* Card mở rộng — REC-02. Là một STATE của trang (2 cột), không phải modal. */
+  .detail{display:grid;grid-template-columns:1fr 250px;gap:16px;align-items:start}
+  @media (max-width:760px){ .detail{grid-template-columns:1fr} }
+  .why{background:var(--violet-tint);border-radius:10px;padding:12px 14px;margin:14px 0}
+  .why h4{margin:0 0 8px;font-size:12px;color:#43378a;text-transform:uppercase;letter-spacing:.04em}
+  .why ul{margin:0;padding-left:18px;font-size:12.5px;line-height:1.65;color:#3f3f46}
+  .detailRow{border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+             font-size:12.5px;line-height:1.6;margin-bottom:10px}
+  .detailRow b{color:var(--ink)}
+  .sideList h4{margin:0 0 9px;font-size:11px;color:var(--muted);
+               text-transform:uppercase;letter-spacing:.04em}
+  .sideItem{display:block;width:100%;text-align:left;background:#fff;color:var(--body);
+            border:1px solid var(--line);border-radius:10px;padding:11px 13px;
+            margin-bottom:9px;font-size:12.5px;line-height:1.5;cursor:pointer}
+  .sideItem:hover{background:#f3f5f7;border-color:var(--navy)}
+  .sideAll{width:100%;background:#fff;color:var(--violet);
+           border:1px solid #ddd8f5;border-radius:10px;padding:9px;font-size:12.5px}
+  .sideAll:hover{background:var(--violet-tint)}
+
+  /* Chat widget — chatbot nằm TRONG luồng bệnh nhân, không còn là cả ứng dụng */
+  .bubble{position:fixed;right:22px;bottom:22px;width:56px;height:56px;border-radius:50%;
+          background:var(--teal);color:#fff;font-size:25px;display:flex;align-items:center;
+          justify-content:center;cursor:pointer;box-shadow:0 6px 18px rgba(0,0,0,.22);
+          border:0;z-index:50}
+  .bubble:hover{background:var(--teal-deep)}
+  .chatPanel{position:fixed;right:22px;bottom:22px;width:380px;max-width:calc(100vw - 32px);
+             height:540px;max-height:calc(100vh - 40px);background:#fff;border-radius:14px;
+             box-shadow:0 12px 36px rgba(0,0,0,.26);display:none;flex-direction:column;
+             overflow:hidden;z-index:55}
+  .chatPanel.show{display:flex}
+  .chatHead{background:linear-gradient(135deg,var(--teal),var(--teal-deep));color:#fff;
+            padding:12px 14px;display:flex;align-items:center;gap:9px;font-size:13px;font-weight:700}
+  .chatHead .close{margin-left:auto;background:transparent;border:0;color:#fff;
+                   font-size:19px;cursor:pointer;padding:0 4px}
+  .msgs{flex:1;overflow-y:auto;background:#f6f8f8;padding:14px;display:flex;
+        flex-direction:column;gap:10px}
+  .row{display:flex;gap:7px;max-width:92%}
+  .row.bot{align-self:flex-start}
+  .row.user{align-self:flex-end;flex-direction:row-reverse}
+  .msgBubble{padding:9px 12px;border-radius:14px;font-size:13px;line-height:1.5;
+             box-shadow:0 1px 2px rgba(0,0,0,.05);word-wrap:break-word}
+  .bot .msgBubble{background:#fff;border-bottom-left-radius:4px}
+  .user .msgBubble{background:var(--teal);color:#fff;border-bottom-right-radius:4px}
+  .miniAvatar{width:26px;height:26px;border-radius:50%;flex-shrink:0;font-size:14px;
+              display:flex;align-items:center;justify-content:center;
+              background:var(--teal-tint);color:var(--teal-deep)}
+  .user .miniAvatar{background:#dfe7e6}
+  .options{display:flex;flex-wrap:wrap;gap:6px;align-self:flex-start;max-width:92%}
+  .opt{border:1.5px solid var(--teal);color:var(--teal-deep);background:#fff;
+       padding:6px 11px;border-radius:18px;font-size:12px;font-weight:600;cursor:pointer}
+  .opt:hover{background:var(--teal);color:#fff}
+  .chatForm{border-top:1px solid var(--line);background:#fff;display:flex;gap:7px;padding:10px}
+  .chatForm input{flex:1;border:1.5px solid var(--line);border-radius:20px;padding:9px 13px;
+                  font:inherit;font-size:13px;outline:none}
+  .chatForm input:focus{border-color:var(--teal)}
+  .chatForm button{width:40px;height:40px;border-radius:50%;padding:0;flex-shrink:0}
+  .msgBubble .cal-link{display:inline-block;margin-top:6px;padding:7px 11px;border-radius:9px;
+       background:var(--teal-tint);color:var(--teal-deep);text-decoration:none;
+       font-size:12px;font-weight:700;border:1px solid var(--teal)}
+</style>
+</head>
+<body>
+  <div class="head">
+    <div class="avatar">🦷</div>
+    <div>
+      <h1>SHI Patient · Trợ lý Nha khoa</h1>
+      <p id="hello">Đang tải…</p>
+    </div>
+    <div class="headRight">
+      <button class="btnGhost" id="btnLogin" style="display:none"
+              onclick="location.href='/login'">Đăng nhập</button>
+      <button class="btnGhost" id="btnLogout" style="display:none">Đăng xuất</button>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <!-- Chế độ khách: vẫn xem được gợi ý, nhưng chưa cá nhân hoá được -->
+    <div class="coldNote" id="guestBanner" style="display:none">
+      Bạn đang xem với tư cách <b>khách</b>. Các gợi ý dưới đây là dịch vụ phổ biến
+      chung. <a href="/login">Đăng nhập</a> để nhận gợi ý dựa trên lịch sử điều trị
+      của bạn — bạn vẫn đặt được lịch ngay bằng ô chat ở góc phải.
+    </div>
+    <!-- ================= PAT-01: tổng quan + lịch sử dịch vụ ================= -->
+    <div class="card">
+      <h2>Lịch sử sử dụng dịch vụ</h2>
+      <p class="sub">Các lần điều trị đã hoàn tất tại phòng khám.</p>
+      <div id="historyBox"><div class="state"><div class="skeleton"></div><div class="skeleton"></div></div></div>
+    </div>
+
+    <div class="card">
+      <h2>Lịch hẹn sắp tới</h2>
+      <p class="sub">Lịch đã xác nhận, tính từ hôm nay.</p>
+      <div id="apptBox"><div class="state"><div class="skeleton"></div></div></div>
+    </div>
+
+    <!-- ================= REC-01: gợi ý điều trị ================= -->
+    <div class="card">
+      <h2 id="recTitle">Gợi ý điều trị</h2>
+      <p class="sub" id="recSub">Dựa trên lịch sử điều trị và độ tuổi của bạn.</p>
+      <div id="recBox">
+        <div class="state">
+          <button id="btnShowRec">Xem gợi ý dịch vụ</button>
+          <p style="margin-top:10px">Bấm để xem các dịch vụ phù hợp với bạn.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= Chat widget ================= -->
+  <button class="bubble" id="btnChat" title="Trợ lý SHI">💬</button>
+  <div class="chatPanel" id="chatPanel">
+    <div class="chatHead">
+      <span>🤖</span> Trợ lý Nha khoa SHI
+      <button class="close" id="btnCloseChat">×</button>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <form class="chatForm" id="chatForm" autocomplete="off">
+      <input id="chatText" placeholder="Nhập tin nhắn…">
+      <button type="submit">➤</button>
+    </form>
+  </div>
+
+<script>
+// ===========================================================================
+// Tiện ích
+// ===========================================================================
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
+
+function money(n){
+  if (n == null) return null;
+  if (n >= 1000000) return (n/1000000).toFixed(n % 1000000 ? 1 : 0).replace(".0","") + " triệu";
+  return Math.round(n/1000) + "k";
+}
+function priceText(item){
+  const lo = money(item.price_from), hi = money(item.price_to);
+  if (lo && hi) return `${lo}–${hi}`;
+  if (lo) return `từ ${lo}`;
+  return "liên hệ";
+}
+// Danh mục nha sĩ đến từ DB và có thể bị trùng tên (dữ liệu nhập tay/test). Bỏ
+// trùng và cắt bớt để một dịch vụ có 11 nha sĩ không làm vỡ bố cục card.
+function doctorList(names, max = 3){
+  const uniq = [...new Set(names)];
+  const shown = uniq.slice(0, max).map(esc).join(" · ");
+  const rest = uniq.length - max;
+  return rest > 0 ? `${shown} <span class="meta">và ${rest} nha sĩ khác</span>` : shown;
+}
+
+function fmtDate(iso){
+  if (!iso) return "—";
+  const [y,m,d] = iso.split("-");
+  return `${d}/${m}/${y}`;
+}
+async function api(path, options){
+  const res = await fetch(path, { credentials: "include", ...(options || {}) });
+  if (res.status === 401) { window.location.href = "/login"; throw new Error("401"); }
+  if (!res.ok) throw new Error("HTTP " + res.status);
+  return res.json();
+}
+function postJSON(path, body){
+  return api(path, { method: "POST", headers: { "Content-Type": "application/json" },
+                     body: JSON.stringify(body) });
+}
+
+// ===========================================================================
+// PAT-01 — tổng quan
+// ===========================================================================
+// Chế độ khách quyết định: header, banner, và có hiện nút "Không quan tâm" hay không
+// (khách không có tài khoản để lưu lựa chọn đó).
+let isGuest = true;
+
+async function loadMe(){
+  try {
+    const me = await api("/api/patient/me");
+    isGuest = !!me.is_guest;
+    if (isGuest){
+      $("hello").textContent = "Chọn dịch vụ nha khoa & đặt lịch hẹn";
+      $("guestBanner").style.display = "block";
+      $("btnLogin").style.display = "inline-block";
+      // Khách không có lịch sử để đọc trước, nên hiện gợi ý luôn. (AC PAT-01 chỉ
+      // yêu cầu bệnh nhân ĐÃ ĐĂNG NHẬP không nhảy thẳng vào màn gợi ý.)
+      loadRec();
+    } else {
+      $("hello").textContent =
+        `${me.full_name} · ${me.visit_count} lần điều trị đã ghi nhận`;
+      $("btnLogout").style.display = "inline-block";
+    }
+  } catch (e) { $("hello").textContent = "Không tải được thông tin tài khoản."; }
+}
+
+async function loadHistory(){
+  const box = $("historyBox");
+  try {
+    const data = await api("/api/patient/history");
+    if (!data.count){
+      box.innerHTML = data.is_guest
+        ? `<div class="state">Đăng nhập để xem lịch sử điều trị của bạn.</div>`
+        : `<div class="state">Chưa có lịch sử điều trị nào.
+           Bạn vẫn có thể xem gợi ý dịch vụ phổ biến ở dưới.</div>`;
+      return;
+    }
+    box.innerHTML = `<table><thead><tr>
+        <th>Ngày</th><th>Dịch vụ</th><th>Bác sĩ</th><th>Trạng thái</th><th>Hẹn tái khám</th>
+      </tr></thead><tbody>${data.history.map(r => `<tr>
+        <td>${fmtDate(r.date)}</td>
+        <td>${esc(r.service_name)}</td>
+        <td>${esc(r.doctor)}</td>
+        <td>${r.outcome === "success" ? "Hoàn tất" : esc(r.outcome)}</td>
+        <td>${r.followup_due_date ? fmtDate(r.followup_due_date) : "—"}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) {
+    box.innerHTML = `<div class="state error">Không tải được lịch sử. Vui lòng thử lại.</div>`;
+  }
+}
+
+async function loadAppointments(){
+  const box = $("apptBox");
+  // Endpoint lịch hẹn (bản nhánh quản lý BN) yêu cầu đăng nhập -> khách gọi vào sẽ
+  // bị 401 và `api()` đá về /login. Chặn từ đây thay vì để người dùng bị văng ra.
+  if (isGuest){
+    box.innerHTML = `<div class="state">Đăng nhập để xem lịch hẹn của bạn.</div>`;
+    return;
+  }
+  try {
+    const data = await api("/api/patient/appointments");
+    if (!data.count){
+      box.innerHTML = data.is_guest
+        ? `<div class="state">Đăng nhập để xem lịch hẹn của bạn.</div>`
+        : `<div class="state">Bạn chưa có lịch hẹn nào sắp tới.</div>`;
+      return;
+    }
+    box.innerHTML = `<table><thead><tr>
+        <th>Ngày</th><th>Giờ</th><th>Dịch vụ</th><th>Bác sĩ</th><th>Mã lịch hẹn</th>
+      </tr></thead><tbody>${data.appointments.map(a => `<tr>
+        <td>${fmtDate(a.date)}</td><td>${esc(a.time)}</td>
+        <td>${esc(a.department)}</td><td>${esc(a.doctor)}</td><td>${esc(a.code)}</td>
+      </tr>`).join("")}</tbody></table>`;
+  } catch (e) {
+    box.innerHTML = `<div class="state error">Không tải được lịch hẹn.</div>`;
+  }
+}
+
+// ===========================================================================
+// REC-01 / REC-02 — gợi ý điều trị
+// ===========================================================================
+let recData = null;
+
+function urgencyLabel(u){
+  return u === "high" ? "Cần thiết" : (u === "medium" ? "Nên làm" : "Tham khảo");
+}
+
+function cardHTML(item, i){
+  // Cold-start và card bù không có "% phù hợp" — điểm của chúng đến từ độ phổ
+  // biến chung, không phải mức phù hợp với riêng bệnh nhân này.
+  const fit = item.fit_percent == null
+    ? `<div class="meta">${item.duration_min} phút · ${priceText(item)}</div>`
+    : `<div class="fit">Phù hợp <b>${item.fit_percent}%</b>
+         <span class="meta">· ${item.duration_min} phút · ${priceText(item)}</span></div>`;
+  return `<div class="rec ${i === 0 && item.fit_percent != null ? "top" : ""}">
+    <div class="recTop">
+      <span class="rank">#${item.rank}</span>
+      <span class="recName">${esc(item.name)}</span>
+      <span class="badge ${esc(item.urgency)}" style="margin-left:auto">${urgencyLabel(item.urgency)}</span>
+    </div>
+    ${fit}
+    <div class="reason">${esc(item.reason_text)}</div>
+    <div class="recActions">
+      <button data-book="${esc(item.service_code)}" data-rank="${item.rank}">Đặt lịch</button>
+      <button class="secondary" data-detail="${esc(item.service_code)}">Xem thêm</button>
+      ${isGuest ? "" : `<button class="danger" data-dismiss="${esc(item.service_code)}"
+        title="Không quan tâm">✕</button>`}
+    </div>
+  </div>`;
+}
+
+function renderRec(){
+  const box = $("recBox");
+  const d = recData;
+
+  if (!d.items.length){
+    // TC-REC-005 — empty state + link reset. Khách không có gì để reset (không lưu
+    // được lựa chọn "Không quan tâm") nên không hiện nút.
+    box.innerHTML = `<div class="state">
+      <p>${esc(d.empty_text || "Không còn gợi ý phù hợp.")}</p>
+      ${isGuest ? "" : `<button class="secondary" id="btnReset">
+        Bỏ đánh dấu "Không quan tâm"</button>`}
+    </div>`;
+    if (!isGuest) $("btnReset").onclick = async () => {
+      await postJSON("/api/patient/recommendations/reset", {});
+      loadRec();
+    };
+    return;
+  }
+
+  const head = d.is_cold_start
+    ? `<div class="coldNote">${esc(d.cold_start_note)}</div>`
+    : `<div class="recHead"><b>AI gợi ý cho bạn</b> · Dựa trên lịch sử điều trị ·
+         top ${d.items.length}</div>`;
+
+  box.innerHTML = head
+    + `<div class="cards">${d.items.map(cardHTML).join("")}</div>
+       <div class="recActions" style="margin-top:14px">
+         <button class="secondary" id="btnSkipAll">Bỏ qua tất cả, tôi tự chọn dịch vụ</button>
+       </div>
+       <p class="disclaimer">ℹ️ Đây là gợi ý <b>dịch vụ</b> dựa trên lịch sử điều trị,
+         <b>không phải chẩn đoán bệnh</b>. Quyết định điều trị thuộc về nha sĩ sau khi
+         thăm khám trực tiếp.</p>`;
+
+  box.querySelectorAll("[data-book]").forEach(b => b.onclick = () =>
+    bookFromRec(b.dataset.book, Number(b.dataset.rank)));
+  box.querySelectorAll("[data-detail]").forEach(b => b.onclick = () =>
+    openDetail(b.dataset.detail));
+  box.querySelectorAll("[data-dismiss]").forEach(b => b.onclick = () =>
+    dismiss(b.dataset.dismiss));
+  $("btnSkipAll").onclick = async () => {
+    await postJSON("/api/patient/recommendations/action",
+                   { rec_log_id: recData.rec_log_id, action: "skip_all" });
+    openChat();
+  };
+}
+
+async function loadRec(){
+  const box = $("recBox");
+  box.innerHTML = `<div class="state"><div class="skeleton"></div><div class="skeleton"></div>
+                   <div class="skeleton"></div></div>`;
+  try {
+    recData = await api("/api/patient/recommendations?trigger=booking_page");
+    renderRec();
+  } catch (e) {
+    box.innerHTML = `<div class="state error">Không tải được gợi ý.
+      <button class="secondary" onclick="loadRec()">Thử lại</button></div>`;
+  }
+}
+
+// REC-02 — state "Card mở rộng": thay chỗ danh sách bằng màn chi tiết 2 cột,
+// KHÔNG phải modal. Wireframe vẽ đây là một trạng thái riêng của trang (đổi tiêu
+// đề + nút "Quay lại danh sách" + cột "Gợi ý khác" bên phải).
+function openDetail(code){
+  const item = recData.items.find(i => i.service_code === code);
+  if (!item) return;
+  postJSON("/api/patient/recommendations/action", {
+    rec_log_id: recData.rec_log_id, action: "view_detail",
+    service_code: code, rank: item.rank }).catch(() => {});
+
+  const others = recData.items.filter(i => i.service_code !== code);
+  const fitLine = item.fit_percent != null
+    ? `Mức độ phù hợp <b>${item.fit_percent}%</b> · ${item.duration_min} phút · ${priceText(item)}`
+    : `${item.duration_min} phút · ${priceText(item)}`;
+
+  $("recTitle").textContent = "Chi tiết gợi ý";
+  $("recSub").textContent = "Vì sao dịch vụ này được gợi ý cho bạn.";
+  $("recBox").innerHTML = `
+    <button class="secondary" id="btnBackList" style="margin-bottom:14px">← Quay lại danh sách</button>
+    <div class="detail">
+      <div>
+        <div class="rec top" style="gap:12px">
+          <div class="recTop">
+            <span class="rank">#${item.rank}</span>
+            <span class="recName">${esc(item.name)}</span>
+            <span class="badge ${esc(item.urgency)}" style="margin-left:auto">${urgencyLabel(item.urgency)}</span>
+          </div>
+          <div class="fit">${fitLine}</div>
+        </div>
+
+        <div class="why">
+          <h4>Tại sao AI gợi ý?</h4>
+          <ul>${item.reason_detail.map(r => `<li>${esc(r)}</li>`).join("")}</ul>
+        </div>
+
+        ${item.doctors && item.doctors.length ? `<div class="detailRow">
+          <b>Nha sĩ phụ trách</b><br>${doctorList(item.doctors)}</div>` : ""}
+
+        <div class="detailRow"><b>Về dịch vụ</b><br>${esc(item.desc)}</div>
+
+        <div class="recActions" style="margin-top:14px">
+          <button data-book="${esc(item.service_code)}" data-rank="${item.rank}">Đặt lịch ngay</button>
+          ${isGuest ? "" : `<button class="danger"
+            data-dismiss="${esc(item.service_code)}">Không quan tâm</button>`}
+        </div>
+      </div>
+
+      <div class="sideList">
+        <h4>Gợi ý khác</h4>
+        ${others.map(o => `<button class="sideItem" data-detail="${esc(o.service_code)}">
+            <b>#${o.rank} ${esc(o.name)}</b><br>
+            <span class="meta">${o.fit_percent != null ? o.fit_percent + "% · " : ""}${o.duration_min} phút</span>
+          </button>`).join("")}
+        <button class="sideAll" id="btnSeeAll">Xem tất cả →</button>
+      </div>
+    </div>
+    <p class="disclaimer">ℹ️ Đây là gợi ý <b>dịch vụ</b> dựa trên lịch sử điều trị,
+      <b>không phải chẩn đoán bệnh</b>. Quyết định điều trị thuộc về nha sĩ sau khi
+      thăm khám trực tiếp.</p>`;
+
+  $("btnBackList").onclick = backToList;
+  $("btnSeeAll").onclick = backToList;
+  $("recBox").querySelector("[data-book]").onclick = () => bookFromRec(code, item.rank);
+  const btnDismiss = $("recBox").querySelector("[data-dismiss]");
+  if (btnDismiss) btnDismiss.onclick = () => dismiss(code);
+  $("recBox").querySelectorAll(".sideItem").forEach(b =>
+    b.onclick = () => openDetail(b.dataset.detail));
+  window.scrollTo({ top: $("recBox").offsetTop - 20, behavior: "smooth" });
+}
+
+function backToList(){
+  $("recTitle").textContent = "Gợi ý điều trị";
+  $("recSub").textContent = "Dựa trên lịch sử điều trị và độ tuổi của bạn.";
+  renderRec();
+}
+
+async function dismiss(code){
+  try {
+    await postJSON("/api/patient/recommendations/action", {
+      rec_log_id: recData.rec_log_id, action: "dismiss", service_code: code });
+  } catch (e) { /* vẫn tải lại để UI khớp trạng thái server */ }
+  loadRec();
+}
+
+// TC-REC-003 — mở luồng đặt lịch với dịch vụ đã chọn sẵn, không phải chọn lại.
+async function bookFromRec(code, rank){
+  postJSON("/api/patient/recommendations/action", {
+    rec_log_id: recData.rec_log_id, action: "book", service_code: code, rank }).catch(() => {});
+  openChat();
+  await startChat(code);
+}
+
+// ===========================================================================
+// Chat widget
+// ===========================================================================
+let sessionId = null;
+let chatStarted = false;
+
+function openChat(){ $("chatPanel").classList.add("show"); $("btnChat").style.display = "none"; }
+function closeChat(){ $("chatPanel").classList.remove("show"); $("btnChat").style.display = "flex"; }
+$("btnChat").onclick = async () => { openChat(); if (!chatStarted) await startChat(); };
+$("btnCloseChat").onclick = closeChat;
+
+function addMessage(html, who){
+  const row = document.createElement("div");
+  row.className = "row " + who;
+  row.innerHTML = `<div class="miniAvatar">${who === "bot" ? "🤖" : "🙂"}</div>
+                   <div class="msgBubble">${html}</div>`;
+  $("msgs").appendChild(row);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+
+function addOptions(options){
+  if (!options || !options.length) return;
+  const wrap = document.createElement("div");
+  wrap.className = "options";
+  options.forEach(o => {
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.textContent = o.label;
+    b.onclick = () => { wrap.remove(); addMessage(esc(o.label), "user"); sendChat(o.value); };
+    wrap.appendChild(b);
+  });
+  $("msgs").appendChild(wrap);
+  $("msgs").scrollTop = $("msgs").scrollHeight;
+}
+
+async function startChat(serviceCode){
+  chatStarted = true;
+  $("msgs").innerHTML = "";
+  const body = { session: sessionId };
+  if (serviceCode) body.service = serviceCode;
+  try {
+    const data = await postJSON("/api/start", body);
+    sessionId = data.session || sessionId;
+    addMessage(data.reply, "bot");
+    addOptions(data.options);
+  } catch (e) { addMessage("Không kết nối được trợ lý. Vui lòng thử lại.", "bot"); }
+}
+
+async function sendChat(message){
+  try {
+    const data = await postJSON("/api/chat", { message, session: sessionId });
+    sessionId = data.session || sessionId;
+    addMessage(data.reply, "bot");
+    addOptions(data.options);
+    // Đặt lịch xong -> làm mới lịch hẹn + gợi ý (dịch vụ vừa đặt sẽ bị lọc khỏi
+    // danh sách gợi ý, xem post-filter "đã có lịch hẹn").
+    if (data.done){ loadAppointments(); if (recData) loadRec(); }
+  } catch (e) { addMessage("Có lỗi kết nối. Vui lòng thử lại.", "bot"); }
+}
+
+$("chatForm").onsubmit = (e) => {
+  e.preventDefault();
+  const m = $("chatText").value.trim();
+  if (!m) return;
+  addMessage(esc(m), "user");
+  $("chatText").value = "";
+  sendChat(m);
+};
+
+// ===========================================================================
+$("btnShowRec").onclick = loadRec;
+$("btnLogout").onclick = async () => {
+  await fetch("/api/logout", { method: "POST", credentials: "include" });
+  window.location.href = "/login";
+};
+
+// Thứ tự có chủ đích: loadMe() xác định isGuest trước, các phần sau dựa vào nó.
+loadMe().then(() => { loadHistory(); loadAppointments(); });
+</script>
+</body>
+</html>

@@ -178,6 +178,96 @@ SERVICE_INFO = {
 
 
 # ---------------------------------------------------------------------------
+# NHÓM TUỔI — feature `age_group` của engine gợi ý (SEQ 4.opt.1).
+# AC SMMG-65 yêu cầu gợi ý dựa trên "lịch sử điều trị / tình trạng / độ tuổi".
+# ---------------------------------------------------------------------------
+AGE_GROUPS = ("child", "teen", "adult", "senior")
+
+
+def age_group_of(birth_year, today=None):
+    """Đổi năm sinh -> nhóm tuổi. None nếu không biết năm sinh (hoặc vô lý).
+
+    Không biết tuổi KHÁC với "người lớn": trả None để engine bỏ qua các luật theo
+    tuổi, thay vì mặc định 'adult' rồi gợi ý sai cho trẻ em.
+    """
+    if not birth_year:
+        return None
+    year = (today or date.today()).year
+    try:
+        age = year - int(birth_year)
+    except (TypeError, ValueError):
+        return None
+    if age < 0 or age > 120:      # dữ liệu nhập sai -> coi như không biết
+        return None
+    if age < 13:
+        return "child"
+    if age < 18:
+        return "teen"
+    if age < 60:
+        return "adult"
+    return "senior"
+
+
+# ---------------------------------------------------------------------------
+# THÔNG TIN VẬN HÀNH CỦA DỊCH VỤ — thời lượng, giá, chu kỳ, nhóm tuổi phù hợp.
+#
+# Khoá theo MÃ dịch vụ và overlay lên danh mục (giống SERVICE_INFO) nên không cần
+# thêm cột trên Supabase. Dùng cho:
+#   - modal chi tiết REC-02 (TC-REC-007 đòi hiện thời lượng + giá cơ bản)
+#   - state cold-start (hiện "30 phút · từ 200k" thay cho % phù hợp)
+#   - luật `past_treatment` (recurring_months) và luật/bộ lọc theo tuổi (age_groups)
+#
+# `recurring_months`: chu kỳ khuyến nghị. CHỈ đặt cho dịch vụ có tính định kỳ —
+# thiếu khoá này nghĩa là dịch vụ KHÔNG được gợi ý lặp lại (không ai cần trồng
+# implant định kỳ).
+# `age_groups`: nhóm tuổi được phép gợi ý. `age_affinity`: điểm cộng khi đúng nhóm.
+#
+# ⚠️ GIÁ Ở ĐÂY LÀ SỐ MINH HOẠ, chưa phải bảng giá thật của phòng khám — xem §18
+# docs/patient-recommendation-design.md.
+# ---------------------------------------------------------------------------
+DEFAULT_SERVICE_META = {
+    "duration_min": 30,
+    "price_from": None,
+    "price_to": None,
+    "recurring_months": None,
+    "age_groups": AGE_GROUPS,
+    "age_affinity": {},
+}
+
+SERVICE_META = {
+    "kham_tong_quat": {"duration_min": 30, "price_from": 200_000, "price_to": 350_000,
+                       "recurring_months": 6},
+    "sau_rang":       {"duration_min": 45, "price_from": 300_000, "price_to": 800_000},
+    "noi_nha":        {"duration_min": 60, "price_from": 1_500_000, "price_to": 4_000_000},
+    "nha_chu":        {"duration_min": 45, "price_from": 500_000, "price_to": 2_000_000,
+                       "recurring_months": 3},
+    "nho_rang":       {"duration_min": 45, "price_from": 500_000, "price_to": 3_000_000},
+    "chinh_nha":      {"duration_min": 60, "price_from": 25_000_000, "price_to": 60_000_000,
+                       "age_groups": ("teen", "adult"),
+                       "age_affinity": {"teen": 0.25}},
+    "phuc_hinh":      {"duration_min": 60, "price_from": 3_000_000, "price_to": 25_000_000,
+                       "age_groups": ("adult", "senior"),
+                       "age_affinity": {"senior": 0.25}},
+    "tham_my":        {"duration_min": 45, "price_from": 1_000_000, "price_to": 8_000_000,
+                       "recurring_months": 12,
+                       "age_groups": ("teen", "adult", "senior")},
+    "nha_nhi":        {"duration_min": 30, "price_from": 200_000, "price_to": 500_000,
+                       "recurring_months": 6,
+                       "age_groups": ("child",),
+                       "age_affinity": {"child": 0.25}},
+}
+
+
+def service_meta(code):
+    """Thông tin vận hành của một dịch vụ, đã điền đủ khoá mặc định.
+
+    Danh mục có thể nạp từ Supabase và chứa mã CHƯA có trong SERVICE_META (admin
+    thêm dịch vụ mới qua dashboard) -> luôn trả về dict đủ khoá thay vì KeyError.
+    """
+    return {**DEFAULT_SERVICE_META, **SERVICE_META.get(code, {})}
+
+
+# ---------------------------------------------------------------------------
 # DANH SÁCH BÁC SĨ (nha sĩ) theo dịch vụ
 # ---------------------------------------------------------------------------
 _SEED_DOCTORS = {

@@ -30,7 +30,7 @@ This is a **demo project** (PRF-SHI school context) with an integrated AI evalua
 | **Safety guardrails** | Block diagnosis/prescription requests; detect emergencies (→ 115); audit all chats (PII-masked) per Decree 13/2023 | ✓ Implemented: `triage/safety.py` |
 | **Appointment reminders** | Push notifications (Expo) + `.ics` calendar file (Google/Apple/Outlook) + Google Calendar quick-add link | ✓ Implemented: `notify/worker.py` + `calendar_ics.py` |
 | **Mobile client** | React Native (Expo SDK 54) app; works offline for chat UI, syncs to backend via LAN IP | ✓ Implemented: `mobile/` Expo project |
-| **Web demo** | Minimal web interface for testing without mobile app | ✓ Implemented: `templates/index.html` |
+| **Web portal** | Patient portal (lịch sử + gợi ý AI), chatbot là widget bên trong | ✓ Implemented: `templates/patient.html` |
 | **Admin panel** | View appointments, doctor schedule, clinic metadata; cancel bookings; JWT auth required | ✓ Implemented: `/admin` + `/api/admin/*`; JWT cookie auth |
 | **User authentication** | Login/register with password hashing (bcrypt); JWT session tokens (HS256) | ✓ Implemented: `core/auth.py`; stateless 24h tokens |
 | **Role-based access** | Separate routes for admin/doctor/guest roles; cookie-based session validation | ✓ Implemented: `require_auth()` decorator; `/api/doctor/*`, `/api/admin/*` |

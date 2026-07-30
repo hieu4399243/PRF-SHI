@@ -110,7 +110,7 @@ Sends appointment confirmations and reminders.
 | **`main.py`** | Flask app entry; login/logout routes; rate-limit (30 req/60s IP); session resolution; `require_auth()` decorator |
 | **`admin_api.py`** | Blueprint: `/api/admin/*` endpoints; GET appointments/schedule/meta, POST cancel; JWT admin role required |
 | **`doctor_api.py`** | Blueprint: `/api/doctor/*` endpoints; GET appointments/schedule/meta scoped to doctor's own data; JWT doctor role required |
-| **`templates/index.html`** | Web demo (fallback UI; mobile app is primary) |
+| **`templates/patient.html`** | Patient portal: lịch sử dịch vụ (PAT-01) + gợi ý AI (REC-01/02) + chat widget |
 | **`templates/admin.html`** | Admin panel: view appointments, schedule, metadata; cancel bookings (now JWT-gated) |
 | **`templates/login.html`** | Login form (username/password); JWT auth flow entry point |
 | **`templates/doctor.html`** | Doctor dashboard: view own schedule & appointments; JWT doctor role required |

@@ -21,3 +21,8 @@ plans/
 # Artifact tự sinh của tool ClaudeKit/repomix (không phải tài liệu dự án)
 release-manifest.json
 .repomixignore
+
+# Lịch sử điều trị ở JSON mode — dữ liệu bệnh nhân (kể cả demo), không commit
+app/data/treatment_history.json
+app/data/recommendation_log.json
+app/data/patient_preference.json

@@ -1,9 +1,11 @@
 # Trợ lý Nha khoa SHI
 
-Chatbot tiếng Việt cho **một phòng khám nha khoa**: bệnh nhân mô tả triệu chứng răng
-miệng → bot phân loại **đúng nhóm dịch vụ** (triage) → đặt lịch → nhắc lịch qua
-push/`.ics`. Đề tài demo (PRF/SHI), có **hệ thống đánh giá AI** (Precision/Recall/F1,
-so sánh v1 vs v2) ở `eval/`.
+**Portal bệnh nhân** cho một phòng khám nha khoa: xem lịch sử điều trị → nhận
+**gợi ý dịch vụ cá nhân hoá** kèm lý do dễ hiểu (AI) → đặt lịch → nhắc lịch qua
+push/`.ics`. Chatbot triage tiếng Việt là **widget nằm trong trang**, không phải
+một trang riêng — bệnh nhân mô tả triệu chứng, bot phân loại đúng nhóm dịch vụ và
+dẫn đặt lịch. Đề tài demo (PRF/SHI), có **hệ thống đánh giá AI**
+(Precision/Recall/F1, so sánh v1 vs v2) ở `eval/`.
 
 Tài liệu chi tiết nằm ở [`docs/`](docs/) — README này chỉ là điểm khởi động nhanh.
 
@@ -38,6 +40,25 @@ Hướng dẫn đầy đủ (Docker Compose, biến môi trường, production, 
 
 ## Thử nhanh
 
+Mở `http://127.0.0.1:5001` — đó là **portal bệnh nhân**. Khách chưa đăng nhập vẫn
+xem được gợi ý (dịch vụ phổ biến) và vẫn đặt được lịch qua ô chat góc phải.
+
+Đăng nhập ở `/login` để thấy gợi ý cá nhân hoá (mật khẩu tất cả: `test123`):
+
+| User | Xem được gì |
+|------|-------------|
+| `bn101` | quá hạn tái khám → `followup_due` |
+| `bn103` | vừa nội nha → `care_pathway` gợi ý phục hình |
+| `bn104` | `similar_patients` (đồng xuất hiện) |
+| `bn107` | **cold-start** — không hiện %, chỉ thời lượng + giá |
+| `bn108` | trẻ em → chỉ gợi ý nha khoa trẻ em |
+| `admin` / `bs_sr_01` | tự chuyển sang trang admin / nha sĩ |
+
+Cơ chế gợi ý (6 luật, noisy-OR, bộ lọc an toàn):
+**[docs/patient-recommendation-design.md](docs/patient-recommendation-design.md)**.
+
+Thử chatbot trong widget:
+
 - *"răng tôi bị sâu và ê buốt khi ăn ngọt"* → dịch vụ **Trám răng / Sâu răng** → đặt lịch.
 - *"toi muon nieng rang"* (không dấu) → **Chỉnh nha** (nhờ engine v2 không phân biệt dấu).
 - *"chảy máu chân răng và hôi miệng"* → **Nha chu**.
@@ -48,9 +69,15 @@ Hướng dẫn đầy đủ (Docker Compose, biến môi trường, production, 
 ## Test & đánh giá hệ thống AI
 
 ```bash
-.venv/bin/python -m pytest                 # bộ test backend (tests/)
+DATABASE_URL= .venv/bin/python -m pytest   # bộ test backend (tests/)
 .venv/bin/python eval/evaluate.py          # Accuracy/Precision/Recall/Macro-F1 cho v1 & v2
 ```
+
+> ⚠️ **Luôn đặt `DATABASE_URL=`** khi chạy pytest. Bộ test giả định chế độ JSON;
+> thiếu biến này thì test sẽ ghi thẳng vào Supabase thật.
+>
+> `REC_LLM_REASON=0` để tắt phần LLM viết lý do gợi ý (nhanh hơn, kết quả tái lập
+> được — dùng khi đánh giá).
 
 Chi tiết dataset, cách chấm điểm LLM: **[docs/codebase-summary.md § Evaluation System](docs/codebase-summary.md#evaluation-system-eval)**.
 
@@ -77,3 +104,18 @@ Thử bằng tay — gõ câu, xem hai engine trả lời cạnh nhau:
 | [code-standards.md](docs/code-standards.md) | Quy ước đặt tên, quy tắc phụ thuộc, pattern xử lý lỗi |
 | [deployment-guide.md](docs/deployment-guide.md) | Cài đặt local/Docker/production, biến môi trường, troubleshooting |
 | [project-roadmap.md](docs/project-roadmap.md) | Khoảng trống trước production, hướng nâng cấp |
+| [patient-recommendation-design.md](docs/patient-recommendation-design.md) | **Đề xuất:** patient portal + gợi ý dịch vụ AI (REC-01/02, PAT-01) |
+
+
+<!-- Đăng nhập thử ở /login (mật khẩu tất cả là test123):
+
+User	Xem được gì
+bn101	quá hạn tái khám → followup_due
+bn103	vừa nội nha → care_pathway gợi ý phục hình
+bn104	similar_patients (đồng xuất hiện)
+bn107	cold-start — dải cam, không hiện %, chỉ thời lượng + giá
+bn108	trẻ em → chỉ gợi ý nha khoa trẻ em
+admin / bs_sr_01	trang admin / nha sĩ như trước
+Hai lưu ý khi test: .venv/bin/pip hỏng shebang (venv tạo từ đường dẫn cũ Desktop/PRF-SHI) → dùng .venv/bin/python -m pip. Và luôn đặt DATABASE_URL= khi chạy pytest — bộ test giả định JSON mode, chạy thiếu biến này sẽ ghi thật vào Supabase.
+
+Muốn tắt LLM (chạy nhanh hơn, kết quả tái lập được): REC_LLM_REASON=0. -->

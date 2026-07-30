@@ -9,7 +9,7 @@ SHI is a two-tier system: **Backend** (Flask) and **Frontend** (React Native + m
 │                        Users                                    │
 ├──────────────────┬──────────────────────────────────────────────┤
 │   Web/Desktop    │          Mobile (iOS/Android)                 │
-│  (index.html)    │        (Expo, React Native)                   │
+│ (patient.html)   │        (Expo, React Native)                   │
 │  (localhost)     │        (LAN IP via config.js)                 │
 └────────┬─────────┴──────────────────────────────────┬────────────┘
          │                                            │
@@ -303,7 +303,7 @@ Usage patterns and correct/incorrect access examples: **[code-standards.md § St
 
 | Endpoint | Method | Purpose | Auth |
 |----------|--------|---------|------|
-| `/` | GET | Web demo (index.html) | None |
+| `/` | GET | Patient portal (patient.html) — chatbot là widget bên trong; admin/nha sĩ được redirect về trang của họ | None |
 | `/login` | GET | Login form (username/password) | None |
 | `/api/login` | POST | Authenticate, set JWT cookie | Rate-limit |
 | `/api/logout` | GET | Clear auth cookie | None |

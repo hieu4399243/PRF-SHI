@@ -18,3 +18,8 @@ DOCTORS_PATH = os.path.join(DATA_DIR, "doctors.json")
 PATIENTS_PATH = os.path.join(DATA_DIR, "patients.json")
 AUDIT_LOG_PATH = os.path.join(DATA_DIR, "audit_log.jsonl")
 OUTBOX_DIR = os.path.join(DATA_DIR, "outbox")
+
+# Gợi ý dịch vụ (REC-01/02) — xem docs/patient-recommendation-design.md
+TREATMENT_HISTORY_PATH = os.path.join(DATA_DIR, "treatment_history.json")
+REC_LOG_PATH = os.path.join(DATA_DIR, "recommendation_log.json")
+PATIENT_PREFS_PATH = os.path.join(DATA_DIR, "patient_preference.json")

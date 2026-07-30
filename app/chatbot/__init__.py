@@ -15,7 +15,13 @@ Luồng state:
 `from app import chatbot` cho ra API mà app.main dùng: start / handle_message.
 """
 
-from .router import greeting, handle_message, start, stop_booking  # noqa: F401
+from .router import (  # noqa: F401
+    greeting,
+    handle_message,
+    start,
+    start_with_service,
+    stop_booking,
+)
 from .session import (  # noqa: F401
     MAX_SESSIONS,
     SESSION_TTL_SECONDS,

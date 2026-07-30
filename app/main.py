@@ -19,6 +19,7 @@ from flask import Flask, render_template, request, jsonify, session, Response, a
 from . import chatbot
 from .admin_api import admin_api
 from .doctor_api import doctor_api
+from .patient_api import patient_api
 from .booking import calendar_ics
 from .booking import service as booking
 from .core import storage
@@ -33,6 +34,7 @@ app.secret_key = os.environ.get("SECRET_KEY", "shi-nha-khoa-demo-key")
 _DEFAULT_SECRET_KEY = "shi-nha-khoa-demo-key"
 app.register_blueprint(admin_api)
 app.register_blueprint(doctor_api)
+app.register_blueprint(patient_api)
 
 
 def _default_key_warnings(secret_key):
@@ -226,6 +228,23 @@ def patient_home():
     return render_template("home.html")
 
 
+@app.route("/recommendations")
+def recommendations_page():
+    """Màn gợi ý điều trị AI (REC-01/02) — vào từ nút trên trang `/home` (BN-01).
+
+    KHÔNG yêu cầu đăng nhập: khách vẫn xem được gợi ý dịch vụ phổ biến (cold-start)
+    và vẫn đặt lịch qua widget chatbot. Admin/nha sĩ được đưa về trang của họ.
+    """
+    if "sid" not in session:
+        session["sid"] = uuid.uuid4().hex
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if user and user.get("role") == "admin":
+        return redirect("/admin")
+    if user and user.get("role") == "doctor":
+        return redirect("/doctor-dashboard")
+    return render_template("patient.html")
+
+
 @app.route("/doctor-dashboard")
 @require_auth(allowed_roles=["doctor"])
 def doctor_dashboard():
@@ -238,9 +257,15 @@ def doctor_dashboard():
 
 @app.route("/api/start", methods=["POST"])
 def start():
+    """Mở phiên hội thoại.
+
+    `service` (tùy chọn) = mã dịch vụ chọn sẵn từ card gợi ý AI -> vào thẳng bước
+    chọn nha sĩ, không hỏi lại triệu chứng (TC-REC-003).
+    """
     data = request.get_json(force=True, silent=True) or {}
     sid = resolve_sid(data)
-    resp = chatbot.start(sid)
+    service = data.get("service")
+    resp = chatbot.start_with_service(sid, service) if service else chatbot.start(sid)
     resp["session"] = sid  # trả về để app native lưu lại
     return jsonify(resp)
 

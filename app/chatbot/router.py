@@ -74,6 +74,38 @@ def start(session_id: str):
     return resp
 
 
+def start_with_service(session_id: str, dept_code: str):
+    """Mở phiên đặt lịch với dịch vụ ĐÃ CHỌN SẴN — nút "Đặt lịch ngay" ở card gợi ý.
+
+    Bỏ qua bước TRIAGE và vào thẳng chọn nha sĩ: bệnh nhân đã chọn dịch vụ trên
+    card thì hỏi lại triệu chứng là bắt họ làm lại việc vừa làm (TC-REC-003: "không
+    cần chọn lại dịch vụ").
+
+    Mã dịch vụ lạ -> quay về lời chào bình thường, KHÔNG lỗi: card gợi ý có thể là
+    bản cũ trong tab đang mở, còn danh mục thì đã đổi.
+    """
+    from ..core.catalog import DEPARTMENTS
+
+    reset_session(session_id)
+    sess = get_session(session_id)
+    sess["_id"] = session_id
+
+    if dept_code not in DEPARTMENTS:
+        resp = greeting()
+    else:
+        sess["dept_code"] = dept_code
+        dept_name = DEPARTMENTS[dept_code]["name"]
+        resp = doctor_step.start_doctor_pick(
+            sess,
+            prefix=f"Bạn đang đặt lịch cho dịch vụ <b>{dept_name}</b> (từ gợi ý "
+                   "điều trị).<br>",
+        )
+    sess["state"] = resp["state"]
+    safety.audit(session_id, "bot", resp["reply"],
+                 {"state": resp["state"], "intent": "reco_book"})
+    return resp
+
+
 def handle_message(session_id: str, raw_message: str):
     """Xử lý một lượt tin nhắn của bệnh nhân và trả về phản hồi của bot."""
     sess = get_session(session_id)
