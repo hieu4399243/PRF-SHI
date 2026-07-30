@@ -9,6 +9,7 @@ hỏi thêm.
 from ...core.catalog import DEPARTMENTS, SERVICE_INFO
 from ...triage import nlu, safety
 from ... import triage
+from .. import llm_reply
 from ..reply import reply
 
 
@@ -41,11 +42,18 @@ def do_triage(sess, message):
         # miệng (bộ phận + cảm giác khó chịu) -> đưa lựa chọn có cấu trúc để chốt.
         if triage.mentions_dental_discomfort(message):
             return dental_followup(diag_note)
-        # Không nhận ra gì -> hỏi follow-up có cấu trúc.
-        return reply(
+        # Không nhận ra gì -> hỏi follow-up có cấu trúc. Đây là nhánh "bó tay" của
+        # bộ luật, cũng là nơi câu mặc định lộ rõ nhất là văn bản đúc sẵn ("tôi ăn
+        # cơm thấy không ngon" -> "Mình chưa rõ triệu chứng của bạn") -> để LLM
+        # trả lời đúng câu người dùng vừa nói rồi mới hỏi tiếp.
+        template = (
             diag_note + "Mình chưa rõ triệu chứng của bạn. "
             + triage.FOLLOWUP_QUESTIONS[0]
-            + "<br><i>Bạn có thể mô tả cụ thể hơn, ví dụ vị trí đau, thời gian, mức độ.</i>",
+            + "<br><i>Bạn có thể mô tả cụ thể hơn, ví dụ vị trí đau, thời gian, mức độ.</i>")
+        return reply(
+            llm_reply.soften(sess, message, "TRIAGE", template,
+                             facts={"CÂU HỎI GỢI Ý ĐỂ LÀM RÕ":
+                                    " | ".join(triage.FOLLOWUP_QUESTIONS)}),
             state="TRIAGE",
         )
 
@@ -166,13 +174,21 @@ def confirm_dept(sess, message):
             or triage.negated_matches(message):
         return do_triage(sess, message)
 
+    # Không phải yes/no, không phải tên dịch vụ, cũng không phải triệu chứng —
+    # thường là câu HỎI LẠI về đề xuất ("bạn có chắc không?", "sao lại là nội nha?").
+    # Bộ luật không có nhánh cho nó, nên để LLM trả lời rồi mời chọn tiếp; nút bấm
+    # và state vẫn do nhánh này quyết định.
     options = [{"label": r["name"], "value": r["code"]}
                for r in sess.get("candidates", [])[:3]]
     options.append({"label": "📋 Xem tất cả dịch vụ", "value": "còn dịch vụ nào khác"})
     options.append({"label": "🔁 Mô tả lại triệu chứng", "value": "redo"})
-    return reply(
+    template = (
         "Bạn vui lòng chọn một dịch vụ ở các nút bên trên, gõ <b>tên dịch vụ</b>, hoặc "
-        "<b>mô tả lại triệu chứng</b> nhé. Nếu không cần đặt lịch nữa, gõ <b>“thôi”</b>.",
+        "<b>mô tả lại triệu chứng</b> nhé. Nếu không cần đặt lịch nữa, gõ <b>“thôi”</b>.")
+    return reply(
+        llm_reply.soften(sess, message, "CONFIRM_DEPT", template,
+                         facts={"NÚT ĐANG HIỂN THỊ":
+                                " | ".join(o["label"] for o in options)}),
         options=options,
         state="CONFIRM_DEPT")
 

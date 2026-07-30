@@ -41,6 +41,22 @@ _HANDLERS = {
 }
 
 
+# Số lượt người dùng giữ lại làm ngữ cảnh cho llm_reply.soften().
+_MAX_USER_TURNS = 5
+
+# Ở các bước này, tin nhắn CHÍNH LÀ dữ liệu định danh -> không lưu vào phiên.
+_PII_INPUT_STATES = {"ASK_NAME", "ASK_PHONE", "CANCEL_ASK_PHONE"}
+
+
+def _remember_turn(sess, message):
+    """Ghi lượt vừa rồi của người dùng để bước sau còn hiểu câu tham chiếu ngược."""
+    if not message or sess["state"] in _PII_INPUT_STATES:
+        return
+    turns = sess.setdefault("user_turns", [])
+    turns.append(message)
+    del turns[:-_MAX_USER_TURNS]
+
+
 def stop_booking(message):
     """Người dùng dừng đặt lịch. Nếu vì đã đỡ thì chúc mừng, kèm dặn dò an toàn."""
     if nlu.recovered(message):
@@ -118,6 +134,7 @@ def handle_message(session_id: str, raw_message: str):
         # (không phải phone/email/CCCD) -> ẩn thủ công trước khi ghi log.
         logged_message = "[TÊN ĐÃ ẨN]" if sess["state"] == "ASK_NAME" else message
         safety.audit(session_id, "user", logged_message, {"state": sess["state"]})
+        _remember_turn(sess, message)
 
         # --- Lệnh tiện ích ---
         low = message.lower()

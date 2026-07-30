@@ -4,7 +4,8 @@ Máy trạng thái hội thoại.
     router.py    cửa vào duy nhất: guardrail + định tuyến theo state
     session.py   phiên hội thoại in-memory (SESSIONS) + TTL + khoá per-session
     reply.py     định dạng response, format ngày, chuẩn hoá số điện thoại
-    flex.py      "trả lời linh hoạt": quay lại / đổi bước / kể thêm triệu chứng
+    flex.py      "trả lời linh hoạt" bằng LUẬT: quay lại / đổi bước / kể thêm triệu chứng
+    llm_reply.py "trả lời linh hoạt" bằng LLM: viết lại câu ở các nhánh bộ luật bó tay
     steps/       mỗi file là MỘT bước: triage → bác sĩ → ngày giờ → xác nhận → hủy
 
 Luồng state:

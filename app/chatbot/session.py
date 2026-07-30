@@ -28,6 +28,12 @@ def new_session(reuse_lock=None):
         "patient_name": "",
         "patient_phone": "",
         "candidates": [],  # các khoa ứng viên từ triage
+        # Vài lượt gần nhất DO NGƯỜI DÙNG gõ, để chatbot/llm_reply.py hiểu câu
+        # tham chiếu ngược ("bạn có chắc không" — chắc về cái gì?). Chỉ giữ phía
+        # người dùng: phía bot tái dựng được từ state + dept_code, mà giữ thêm
+        # thì tốn bộ nhớ phiên vô ích. Router KHÔNG ghi lượt ở các bước nhập
+        # tên/SĐT — xem _remember_turn().
+        "user_turns": [],
         # Đề xuất đổi dịch vụ đang CHỜ người dùng xác nhận (vd. gọi tên bác sĩ của
         # dịch vụ khác). Chỉ ghi đè dept_code/doctor_id khi họ bấm đồng ý.
         "pending_dept_code": None,

@@ -10,7 +10,7 @@ comment tại chỗ trước khi đổi.
 from ...booking import service as booking
 from ...core.catalog import DEPARTMENTS
 from ...triage import nlu
-from .. import flex
+from .. import flex, llm_reply
 from ..reply import reply
 from . import schedule_step
 
@@ -71,11 +71,20 @@ def pick_doctor(sess, message):
     # Người dùng đang KỂ THÊM TRIỆU CHỨNG chứ không phải chọn bác sĩ -> ghi nhận
     # rồi mời chọn tiếp, đừng nói "chưa rõ bạn muốn khám với bác sĩ nào".
     ack = flex.symptom_ack(sess, message)
-    return reply(
-        (ack + "Giờ bạn muốn khám với <b>bác sĩ nào</b>?") if ack else
+    if ack:
+        return reply(ack + "Giờ bạn muốn khám với <b>bác sĩ nào</b>?",
+                     options=doctor_options(doctors), state="PICK_DOCTOR")
+
+    # Không dính dáng gì tới bác sĩ lẫn triệu chứng -> nhánh "bó tay". Giao cho LLM
+    # trả lời, kèm DANH SÁCH BÁC SĨ THẬT để nó không bịa tên (xem llm_reply.py).
+    template = (
         "Mình chưa rõ bạn muốn khám với bác sĩ nào. Bạn có thể <b>bấm nút</b>, gõ "
         "<b>tên bác sĩ</b> (vd. <i>“bác sĩ Châu”</i>), gõ <b>“ai cũng được”</b> để mình "
-        "xếp giúp, hoặc <b>“đổi dịch vụ”</b> nếu muốn chọn dịch vụ khác.",
+        "xếp giúp, hoặc <b>“đổi dịch vụ”</b> nếu muốn chọn dịch vụ khác.")
+    return reply(
+        llm_reply.soften(sess, message, "PICK_DOCTOR", template,
+                         facts={"BÁC SĨ CỦA DỊCH VỤ NÀY (chỉ được nhắc các tên này)":
+                                ", ".join(d["name"] for d in doctors)}),
         options=doctor_options(doctors),
         state="PICK_DOCTOR",
     )
