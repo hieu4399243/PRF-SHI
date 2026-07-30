@@ -33,7 +33,7 @@ pip install -r requirements-dev.txt
 
 # 4. Setup environment
 cp .env.example .env
-# Edit .env: set SECRET_KEY, ADMIN_KEY, OPENROUTER_API_KEY (optional)
+# Edit .env: set SECRET_KEY, OPENROUTER_API_KEY (optional)
 # Leave DATABASE_URL empty for file JSON mode
 ```
 
@@ -91,16 +91,23 @@ cp .env.docker.example .env
 # Edit .env:
 #   POSTGRES_PASSWORD=<random-password>
 #   SECRET_KEY=<random-hex-string>
-#   ADMIN_KEY=<random-key>
+#   JWT_EXPIRATION_HOURS=24
+#   SECURE_COOKIE=false  (set true behind HTTPS)
 #   OPENROUTER_API_KEY=<optional>
 
 # 3. Build & start services
 docker compose up --build -d
 
-# 4. Verify services are running
+# 4. Initialize user database (first run only)
+# Must run BEFORE first login; creates admin + doctor accounts
+docker compose exec web python -m scripts.seed_users
+
+# 5. Verify services are running
 docker compose ps
-# Should show: web, worker, db all running
+# Should show: db, web, worker all in "running" state with (healthy)
 ```
+
+**Important:** Step 4 (`seed_users.py`) is required before the app is usable with auth. This creates one admin account (`username=admin, password=test123`) and 11 doctor accounts.
 
 ### Monitoring Logs
 
@@ -116,6 +123,26 @@ docker compose logs -f worker
 docker compose down
 docker compose up -d
 ```
+
+### Authentication & First-Run Setup
+
+**BEFORE using admin or doctor login**, seed the user database (Postgres only):
+
+```bash
+# Initialize admin + doctor user accounts
+docker compose exec web python -m scripts.seed_users
+# Output: "✓ Seeded 1 admin + 11 doctors (idempotent)"
+
+# Log in to /login:
+#   Admin: username=admin, password=test123
+#   Doctor: username=doctor_id (e.g., doctor_1), password=test123
+```
+
+**Important notes:**
+- `seed_users.py` is **Postgres-only** (no JSON fallback). Requires `DATABASE_URL` to be set.
+- Script is **idempotent** — safe to run multiple times.
+- Passwords are demo defaults; **change them in production** (update directly in database or implement password reset flow).
+- First visit to `/login` or `/admin` auto-redirects to login form if not authenticated.
 
 ### Stop & Cleanup
 
@@ -133,7 +160,10 @@ docker compose down -v
 ### Access Services
 
 - **Backend API:** http://localhost:5001
-- **Admin panel:** http://localhost:5001/admin
+- **Web demo & chat:** http://localhost:5001/
+- **Login:** http://localhost:5001/login
+- **Admin panel:** http://localhost:5001/admin (JWT auth required)
+- **Doctor dashboard:** http://localhost:5001/doctor-dashboard (JWT auth required)
 - **Database:** Inside container at `db:5432` (not directly accessible from host)
 
 ### Connect from Local Tools
@@ -226,9 +256,15 @@ One-liner if already setup:
 
 | Variable | Example | Required? | Purpose |
 |----------|---------|-----------|---------|
-| `SECRET_KEY` | `abc123...` | YES (prod) | Flask session encryption |
-| `ADMIN_KEY` | `secret-admin-key` | YES (prod) | Admin API authentication |
-| `DATABASE_URL` | `postgresql://...` | NO | Postgres/Supabase; omit for JSON mode |
+| `SECRET_KEY` | `abc123...` (random hex) | YES (prod) | Flask session encryption + JWT signing key |
+| `DATABASE_URL` | `postgresql://...` | NO (Postgres) | Postgres/Supabase; omit for JSON mode. **REQUIRED for auth** (user accounts need DB) |
+
+### Authentication (New)
+
+| Variable | Example | Default | Purpose |
+|----------|---------|---------|---------|
+| `JWT_EXPIRATION_HOURS` | `24` | `24` | JWT token lifetime in hours |
+| `SECURE_COOKIE` | `true` or `false` | `false` | Set `true` behind HTTPS; enables secure flag on auth_token cookie |
 
 ### LLM Integration (Optional)
 
@@ -253,12 +289,14 @@ One-liner if already setup:
 
 ### Pre-Deployment Checklist
 
-- [ ] `SECRET_KEY` is a random hex string (not demo default)
-- [ ] `ADMIN_KEY` is a random string (not `"admin"`)
-- [ ] `DATABASE_URL` points to production Postgres/Supabase
+- [ ] `SECRET_KEY` is a random hex string (used for JWT signing + Flask sessions)
+- [ ] `DATABASE_URL` points to production Postgres/Supabase (REQUIRED for auth)
+- [ ] `JWT_EXPIRATION_HOURS` set appropriately (default 24)
+- [ ] `SECURE_COOKIE=true` set (only behind HTTPS)
+- [ ] User database seeded: `python -m scripts.seed_users` (or admin/doctor accounts created manually)
 - [ ] `OPENROUTER_API_KEY` set (if using LLM)
 - [ ] Mobile app `config.js` points to production HTTPS URL (not LAN IP)
-- [ ] Firewall allows port 5001 (or use reverse proxy on port 80/443)
+- [ ] **Reverse proxy (Nginx/Caddy) configured** — docker-compose binds to `127.0.0.1:5001` (localhost-only); public access requires reverse proxy on port 80/443
 - [ ] SSL certificate configured (HTTPS required for production)
 - [ ] Backups enabled for database
 - [ ] Monitoring & alerting setup (optional but recommended)
@@ -284,17 +322,26 @@ cd PRF-SHI
 cat > .env << EOF
 POSTGRES_PASSWORD=$(openssl rand -base64 32)
 SECRET_KEY=$(openssl rand -hex 32)
-ADMIN_KEY=$(openssl rand -hex 16)
+JWT_EXPIRATION_HOURS=24
+SECURE_COOKIE=true
 OPENROUTER_API_KEY=<your-key>
 EOF
 
 # Start services
 docker compose up -d
 
+# Initialize user database (one-time)
+docker compose exec web python -m scripts.seed_users
+
+# Verify all services healthy
+docker compose ps  # All should show (healthy)
+
 # Enable auto-restart on reboot
 docker compose config --resolve-image-digests > docker-compose.prod.yml
 # (Or use systemd service)
 ```
+
+**Important:** Docker Compose binds the `web` service to `127.0.0.1:5001` (localhost-only). This is **intentional** — you must place a reverse proxy (Nginx, Caddy, etc.) in front on ports 80/443. See "Reverse Proxy" section below.
 
 #### Option B: Systemd Service (Manual Gunicorn)
 
@@ -331,7 +378,9 @@ systemctl start shi-backend
 systemctl status shi-backend
 ```
 
-### Reverse Proxy (Nginx)
+### Reverse Proxy (Nginx) — REQUIRED for Docker Compose
+
+**Why:** Docker Compose's `web` service binds to `127.0.0.1:5001` (localhost-only, not publicly accessible). A reverse proxy on the public interface handles HTTPS termination and routes requests to the app.
 
 Use Nginx to handle HTTPS and route traffic to gunicorn:
 

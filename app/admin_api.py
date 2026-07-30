@@ -4,25 +4,15 @@ import secrets
 from .booking import service as booking
 from .core.catalog import DEPARTMENTS
 from .core import auth, storage
+from .core import auth
 
 admin_api = Blueprint("admin_api", __name__, url_prefix="/api/admin")
 
 
 def _check_admin():
-    """Xác thực admin qua:
-    JWT token từ cookie (username/password login).
-    """
-    # Chỉ chấp nhận JWT token từ cookie.
-    token = request.cookies.get("auth_token")
-    if token:
-        try:
-            payload = auth.verify_jwt(token)
-            user = storage.get_user_by_id(payload["sub"])
-            if user and user["role"] == "admin":
-                return True
-        except Exception:
-            pass
-    return False
+    """Xác thực admin qua JWT token từ cookie (username/password login)."""
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    return bool(user and user["role"] == "admin")
 
 
 @admin_api.route("/appointments")

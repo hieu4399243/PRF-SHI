@@ -102,39 +102,33 @@ Or use EAS (Expo Application Services) environment variable system.
 
 ---
 
-### 5. Authentication & Admin Key
+### 5. Authentication & User Management
 
-**Gap:** Admin key is a single static value (hardcoded fallback: `"admin"`).
+**Status:** ✅ IMPLEMENTED (Phase 5 complete)
 
-**Problems:**
-- No user management; no audit trail of who accessed what
-- Static key easily leaked
-- No role separation (all admins have same power)
+**What we have:**
+- JWT token-based auth (HS256, signed with `SECRET_KEY`)
+- Password hashing via bcrypt (12 rounds, salt)
+- Role-based access control (admin, doctor, guest)
+- User account management: `create_user()`, `get_user_by_id()`, `get_user_by_username()`
+- Per-route auth decorator: `require_auth(allowed_roles=[...])`
+- Initial user seeding: `scripts/seed_users.py` (Postgres-only, idempotent)
+- Stateless session tokens (24h default, configurable via `JWT_EXPIRATION_HOURS`)
 
-**Production approach:**
+**Mechanism:**
+- Login: POST `/api/login` (username + password) → verified via bcrypt → JWT token → httponly cookie
+- Logout: GET `/api/logout` → clear cookie
+- Token validation: `auth.verify_jwt()` extracts payload, checks signature + expiry
+- Session role enforcement: route handlers check decoded token's `role` field
 
-| Phase | Method | Timeline |
-|-------|--------|----------|
-| **Interim** | Generate random key in `.env`; force HTTPS + header validation | 1 week |
-| **Phase 2** | Add admin login table (bcrypt hash) | 2–3 weeks |
-| **Phase 3** | RBAC: roles (clinic_owner, doctor, receptionist); audit log | 4 weeks |
+**Hard dependency:** User storage in Postgres only (no JSON fallback). Auth non-functional without database.
 
-**Recommended Phase 1 (quick):**
-
-```python
-# app/main.py
-ADMIN_KEY = os.getenv("ADMIN_KEY")
-if not ADMIN_KEY or ADMIN_KEY == "admin":
-    raise ValueError("ADMIN_KEY must be set to a random value in production")
-
-def check_admin_key():
-    key = request.headers.get("X-Admin-Key")
-    if key != ADMIN_KEY:
-        abort(403)
-    # Also check request.remote_addr for localhost allowance in dev
-```
-
-**Dependencies:** None (for Phase 1)
+**Remaining gaps (not implemented):**
+- Admin action audit trail (who did what, when) — audit log currently for chat only
+- Password reset flow (email confirmation)
+- Rate-limiting on login attempts
+- Multi-factor authentication (2FA)
+- Session revocation (all tokens stay valid until expiry)
 
 ---
 
@@ -302,12 +296,14 @@ async def eval_with_llm_parallel():
 
 | Priority | Gap/Feature | Effort | Blocker? | Target Date |
 |----------|-------------|--------|----------|------------|
-| **P0** | Redis session store | 3d | YES (scale) | Week 1–2 |
+| **P0** | Redis session store (JWT stateless, but session dict needs scale) | 3d | YES (scale) | Week 1–2 |
 | **P0** | CORS setup | 2h | MAYBE | Week 1 |
 | **P0** | HTTPS & API_BASE migration | 1d | YES (public) | Week 2 |
-| **P0** | Secure ADMIN_KEY | 1d | YES (prod) | Week 1 |
-| **P0** | Alembic migrations | 2d | Medium | Week 3 |
+| **P0** | Alembic migrations (schema versioning) | 2d | Medium | Week 3 |
+| **P1** | Admin action audit trail (who accessed what) | 3d | Medium | Month 1 |
+| **P1** | Password reset & email verification | 2d | Medium | Month 1 |
 | **P1** | Structured logging | 3d | Medium | Week 3 |
+| **P1** | Login rate-limiting (brute-force protection) | 1d | Medium | Month 1 |
 | **P1** | Email notifications | 2w | Medium | Month 2 |
 | **P2** | Two-way Google Calendar | 3w | Low | Month 3 |
 | **P3** | Multi-clinic support | 4–6w | Low | Quarter 2 |
@@ -318,9 +314,11 @@ async def eval_with_llm_parallel():
 
 1. **Single clinic only** — architectural limitation; multi-clinic needs rewrite
 2. **Vietnamese language only** — NLU dataset/patterns not generalized
-3. **No OAuth for clinic staff** — use ADMIN_KEY for now; upgrade if multi-user clinic
+3. **No OAuth for clinic staff** — use JWT + password login for now; OAuth upgrade if multi-clinic
 4. **No appointment modification** — can only cancel + rebook
 5. **No recurring appointments** — each appointment is one-off booking
+6. **No session revocation** — JWT tokens valid until expiry (24h default); no blacklist
+7. **No multi-factor auth** — single password + username; 2FA can be added later
 
 ---
 

@@ -3,6 +3,7 @@
 import uuid
 
 from app import main
+from app.core import storage
 
 
 def _client():

@@ -15,6 +15,7 @@ WORKDIR /app
 COPY --from=builder /install /usr/local
 
 COPY app/ app/
+COPY scripts/ scripts/
 
 RUN useradd --create-home appuser \
     && mkdir -p app/data/outbox \

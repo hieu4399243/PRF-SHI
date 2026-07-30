@@ -973,13 +973,18 @@ class DuplicateUsernameError(Exception):
     pass
 
 
-def create_user(user_id, username, password_hash, role, email=None, phone=None, address=None, doctor_id=None, patient_id=None):
+def create_user(user_id, username, password_hash, role, email=None, doctor_id=None):
     """Tạo user mới (idempotent nếu đã tồn tại).
 
     Trả về True nếu tạo thành công, False nếu username đã tồn tại.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
     """
     if not USE_DB:
-        return True  # JSON mode không implement, chỉ support DB
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     try:
         with _connect() as conn, conn.cursor() as cur:
@@ -1000,9 +1005,15 @@ def create_user(user_id, username, password_hash, role, email=None, phone=None, 
 
 
 def get_user_by_username(username):
-    """Lấy user theo username. Trả về dict hoặc None."""
+    """Lấy user theo username. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
+    """
     if not USE_DB:
-        return None  # JSON mode không implement
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(
@@ -1029,9 +1040,15 @@ def get_user_by_username(username):
 
 
 def get_user_by_id(user_id):
-    """Lấy user theo id. Trả về dict hoặc None."""
+    """Lấy user theo id. Trả về dict hoặc None.
+
+    Raises:
+        UserStoreUnavailableError: không có DATABASE_URL.
+    """
     if not USE_DB:
-        return None  # JSON mode không implement
+        raise UserStoreUnavailableError(
+            "User accounts cần DATABASE_URL (Postgres) — không hỗ trợ JSON-file mode."
+        )
     init_schema()
     with _connect() as conn, conn.cursor() as cur:
         cur.execute(

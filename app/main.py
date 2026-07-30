@@ -77,25 +77,17 @@ def require_auth(allowed_roles=None):
     def decorator(func):
         @wraps(func)
         def wrapper(*args, **kwargs):
-            token = request.cookies.get("auth_token")
-            if not token:
+            user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+            if not user:
                 return jsonify({"error": "Chưa login"}), 401
 
-            try:
-                payload = auth.verify_jwt(token)
-                user = storage.get_user_by_id(payload["sub"])
-                if not user:
-                    return jsonify({"error": "User không tồn tại"}), 404
+            # Check role nếu cần
+            if allowed_roles and user["role"] not in allowed_roles:
+                return jsonify({"error": "Không có quyền truy cập"}), 403
 
-                # Check role nếu cần
-                if allowed_roles and user["role"] not in allowed_roles:
-                    return jsonify({"error": "Không có quyền truy cập"}), 403
-
-                # Lưu user info vào request context
-                request.current_user = user
-                return func(*args, **kwargs)
-            except auth.AuthError as e:
-                return jsonify({"error": str(e)}), 401
+            # Lưu user info vào request context
+            request.current_user = user
+            return func(*args, **kwargs)
 
         return wrapper
 
@@ -295,15 +287,8 @@ def download_ics(code):
 
 @app.route("/admin")
 def admin_page():
-    token = request.cookies.get("auth_token")
-    if not token:
-        return redirect("/login")
-    try:
-        payload = auth.verify_jwt(token)
-        user = storage.get_user_by_id(payload["sub"])
-        if not user or user.get("role") != "admin":
-            return redirect("/login")
-    except auth.AuthError:
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if not user or user.get("role") != "admin":
         return redirect("/login")
     return render_template("admin.html")
 
@@ -347,6 +332,9 @@ def api_login():
         return resp
     except auth.InvalidCredentialsError:
         return jsonify({"error": "Username hoặc password sai"}), 401
+    except storage.UserStoreUnavailableError:
+        print("[auth] api_login lỗi: user store cần DATABASE_URL nhưng chưa cấu hình")
+        return jsonify({"error": "Lỗi hệ thống, vui lòng thử lại sau."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -428,6 +416,9 @@ def api_register():
         }), 201
     except auth.UserAlreadyExistsError as e:
         return jsonify({"error": str(e)}), 409
+    except storage.UserStoreUnavailableError:
+        print("[auth] api_register lỗi: user store cần DATABASE_URL nhưng chưa cấu hình")
+        return jsonify({"error": "Lỗi hệ thống, vui lòng thử lại sau."}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -435,8 +426,8 @@ def api_register():
 @app.route("/api/me", methods=["GET"])
 def api_me():
     """Lấy thông tin user hiện tại từ JWT token."""
-    token = request.cookies.get("auth_token")
-    if not token:
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if not user:
         return jsonify({"error": "Chưa login"}), 401
 
     try:

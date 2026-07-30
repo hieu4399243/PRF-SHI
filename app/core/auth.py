@@ -173,6 +173,8 @@ def create_user_account(username: str, password: str, role: str, email: str = No
         )
     except storage.DuplicateUsernameError:
         raise UserAlreadyExistsError(f"Username '{username}' đã tồn tại")
+    except storage.UserStoreUnavailableError:
+        raise  # re-raise nguyên vẹn, không bọc thành AuthError chung chung
     except Exception as e:
         raise AuthError(f"Lỗi tạo user: {e}")
 
@@ -220,6 +222,21 @@ def login(username: str, password: str) -> dict:
             "doctor_id": user.get("doctor_id"),
         },
     }
+
+
+def resolve_user_from_token(token: str) -> dict:
+    """Đọc token, verify, load user. Trả None nếu bất kỳ bước nào fail
+    (không token, token invalid/expired, user không tồn tại, lỗi storage
+    bất kỳ kể cả khi chưa cấu hình DB). Không raise — bắt Exception rộng
+    có chủ đích, khớp hành vi fail-safe cũ của _check_admin/_get_current_doctor.
+    """
+    if not token:
+        return None
+    try:
+        payload = verify_jwt(token)
+        return storage.get_user_by_id(payload["sub"])
+    except Exception:
+        return None
 
 
 def get_user_from_token(token: str) -> dict:
