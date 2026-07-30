@@ -396,7 +396,8 @@
                         } else if (data.user.role === 'doctor') {
                             window.location.href = '/doctor-dashboard';
                         } else {
-                            window.location.href = '/home';
+                            // Bệnh nhân đã có tài khoản -> vào thẳng màn gợi ý.
+                            window.location.href = '/recommendations';
                         }
                     }, 1000);
                 } else {
@@ -461,7 +462,7 @@
                     } else if (data.user.role === 'doctor') {
                         window.location.href = '/doctor-dashboard';
                     } else {
-                        window.location.href = '/home';
+                        window.location.href = '/recommendations';
                     }
                 }
             } catch (err) {

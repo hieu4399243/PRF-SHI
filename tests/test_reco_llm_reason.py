@@ -40,8 +40,8 @@ def _items():
 def _fake_llm(monkeypatch, payload):
     calls = []
 
-    def _chat_json(system, user, max_tokens=None):
-        calls.append({"system": system, "user": user})
+    def _chat_json(system, user, max_tokens=None, temperature=None):
+        calls.append({"system": system, "user": user, "temperature": temperature})
         return payload
 
     monkeypatch.setattr(llm_reason.llm, "chat_json", _chat_json)
@@ -306,3 +306,20 @@ def test_van_loai_dich_vu_khong_duoc_tham_chieu(monkeypatch):
         {"i": 0, "text": "Bạn nên niềng răng chỉnh nha cho đều hơn nhé."},
     ]})
     assert llm_reason.polish(items)[0]["reason_source"] == "template"
+
+
+def test_dung_temperature_cao_hon_0_khi_viet_cau(monkeypatch):
+    """Sinh văn bản với temperature=0 cho ra câu rập khuôn. `reason_text` không
+    tham gia xếp hạng nên nâng temperature vẫn giữ được tính tái lập của gợi ý."""
+    calls = _fake_llm(monkeypatch, {"reasons": [{"i": 0, "text": "Câu mới hợp lệ."}]})
+    llm_reason.polish(_items())
+    assert calls[0]["temperature"] == llm_reason.TEMPERATURE
+    assert 0 < llm_reason.TEMPERATURE <= 0.7
+
+
+def test_prompt_co_vi_du_few_shot(monkeypatch):
+    """Zero-shot chỉ có luật, model không biết văn phong mong muốn."""
+    calls = _fake_llm(monkeypatch, {"reasons": [{"i": 0, "text": "Câu mới hợp lệ."}]})
+    llm_reason.polish(_items())
+    assert "VÍ DỤ" in calls[0]["system"]
+    assert calls[0]["system"].count("ra  :") >= 3

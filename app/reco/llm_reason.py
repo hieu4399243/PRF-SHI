@@ -35,6 +35,11 @@ from . import reasons
 
 MAX_TOKENS = 700
 
+# Viết văn bản chứ không phân loại -> temperature 0 làm câu rập khuôn, 4 gợi ý ra
+# gần như cùng một khuôn mẫu. Nâng vừa phải cho tự nhiên hơn. An toàn vì `reason_text`
+# KHÔNG tham gia xếp hạng: kết quả gợi ý vẫn tái lập được, chỉ câu chữ khác đi.
+TEMPERATURE = 0.45
+
 _cache = {}
 _CACHE_MAX = 512
 _CACHE_LOCK = threading.Lock()
@@ -58,6 +63,16 @@ _SYSTEM_PROMPT = (
     "6. Giữ đúng ý nghĩa mốc thời gian. \"nên làm lại MỖI 3 tháng\" (chu kỳ lặp) "
     'KHÁC "hẹn lại SAU 3 tháng nữa" (một mốc trong tương lai) — không được đổi.\n'
     "7. Tối đa 100 ký tự mỗi câu.\n\n"
+    "VÍ DỤ (học phong cách, đừng chép lại nội dung):\n"
+    "  vào : 0. [Khám tổng quát & Cạo vôi] Đã 7 tháng kể từ lần khám tổng quát & "
+    "cạo vôi gần nhất — đã tới hạn kiểm tra lại.\n"
+    "  ra  : Đã 7 tháng kể từ lần kiểm tra gần nhất, bạn nên ghé lại để cạo vôi nhé.\n"
+    "  vào : 1. [Nha khoa thẩm mỹ] Bạn từng dùng dịch vụ này 2 năm trước; dịch vụ "
+    "này nên làm lại mỗi khoảng 12 tháng.\n"
+    "  ra  : Bạn từng làm cách đây 2 năm, trong khi dịch vụ này nên lặp lại mỗi 12 tháng.\n"
+    "  vào : 2. [Trám răng / Sâu răng] 43% bệnh nhân từng khám tổng quát & cạo vôi "
+    "cũng đã dùng dịch vụ này.\n"
+    "  ra  : 43% bệnh nhân có lịch khám giống bạn cũng đã chọn dịch vụ này.\n\n"
     'CHỈ trả JSON: {"reasons": [{"i": <số thứ tự>, "text": "<câu mới>"}]}'
 )
 
@@ -176,7 +191,8 @@ def polish(items):
     numbered = "\n".join(f'{i}. [{item.get("name") or item.get("service_code")}] '
                          f'{item["reason_text"]}'
                          for i, item in enumerate(pending))
-    payload = llm.chat_json(_SYSTEM_PROMPT, numbered, max_tokens=MAX_TOKENS)
+    payload = llm.chat_json(_SYSTEM_PROMPT, numbered, max_tokens=MAX_TOKENS,
+                            temperature=TEMPERATURE)
     if not isinstance(payload, dict):
         return items  # LLM lỗi -> toàn bộ giữ template
 

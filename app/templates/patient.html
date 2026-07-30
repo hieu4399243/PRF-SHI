@@ -150,6 +150,8 @@
       <p id="hello">Đang tải…</p>
     </div>
     <div class="headRight">
+      <button class="btnGhost" id="btnHome" style="display:none"
+              onclick="location.href='/home'">← Tổng quan</button>
       <button class="btnGhost" id="btnLogin" style="display:none"
               onclick="location.href='/login'">Đăng nhập</button>
       <button class="btnGhost" id="btnLogout" style="display:none">Đăng xuất</button>
@@ -164,19 +166,14 @@
       của bạn — bạn vẫn đặt được lịch ngay bằng ô chat ở góc phải.
     </div>
     <!-- ================= PAT-01: tổng quan + lịch sử dịch vụ ================= -->
-    <div class="card">
-      <h2>Lịch sử sử dụng dịch vụ</h2>
+    <!-- Lịch sử điều trị: CHỈ hiện khi đã đăng nhập. Khách chưa đăng nhập thì hệ
+         thống chưa biết là ai, hiện khối này ra là vô nghĩa. -->
+    <div class="card" id="historyCard" style="display:none">
+      <h2>Lịch sử điều trị của bạn</h2>
       <p class="sub">Các lần điều trị đã hoàn tất tại phòng khám.</p>
       <div id="historyBox"><div class="state"><div class="skeleton"></div><div class="skeleton"></div></div></div>
     </div>
 
-    <div class="card">
-      <h2>Lịch hẹn sắp tới</h2>
-      <p class="sub">Lịch đã xác nhận, tính từ hôm nay.</p>
-      <div id="apptBox"><div class="state"><div class="skeleton"></div></div></div>
-    </div>
-
-    <!-- ================= REC-01: gợi ý điều trị ================= -->
     <div class="card">
       <h2 id="recTitle">Gợi ý điều trị</h2>
       <p class="sub" id="recSub">Dựa trên lịch sử điều trị và độ tuổi của bạn.</p>
@@ -269,19 +266,22 @@ async function loadMe(){
       $("hello").textContent =
         `${me.full_name} · ${me.visit_count} lần điều trị đã ghi nhận`;
       $("btnLogout").style.display = "inline-block";
+      $("btnHome").style.display = "inline-block";
+      $("historyCard").style.display = "block";
+      loadHistory();
     }
   } catch (e) { $("hello").textContent = "Không tải được thông tin tài khoản."; }
 }
+
+
 
 async function loadHistory(){
   const box = $("historyBox");
   try {
     const data = await api("/api/patient/history");
     if (!data.count){
-      box.innerHTML = data.is_guest
-        ? `<div class="state">Đăng nhập để xem lịch sử điều trị của bạn.</div>`
-        : `<div class="state">Chưa có lịch sử điều trị nào.
-           Bạn vẫn có thể xem gợi ý dịch vụ phổ biến ở dưới.</div>`;
+      box.innerHTML = `<div class="state">Chưa có lần điều trị nào được ghi nhận.
+        Gợi ý bên dưới đang dựa trên dịch vụ phổ biến.</div>`;
       return;
     }
     box.innerHTML = `<table><thead><tr>
@@ -294,34 +294,7 @@ async function loadHistory(){
         <td>${r.followup_due_date ? fmtDate(r.followup_due_date) : "—"}</td>
       </tr>`).join("")}</tbody></table>`;
   } catch (e) {
-    box.innerHTML = `<div class="state error">Không tải được lịch sử. Vui lòng thử lại.</div>`;
-  }
-}
-
-async function loadAppointments(){
-  const box = $("apptBox");
-  // Endpoint lịch hẹn (bản nhánh quản lý BN) yêu cầu đăng nhập -> khách gọi vào sẽ
-  // bị 401 và `api()` đá về /login. Chặn từ đây thay vì để người dùng bị văng ra.
-  if (isGuest){
-    box.innerHTML = `<div class="state">Đăng nhập để xem lịch hẹn của bạn.</div>`;
-    return;
-  }
-  try {
-    const data = await api("/api/patient/appointments");
-    if (!data.count){
-      box.innerHTML = data.is_guest
-        ? `<div class="state">Đăng nhập để xem lịch hẹn của bạn.</div>`
-        : `<div class="state">Bạn chưa có lịch hẹn nào sắp tới.</div>`;
-      return;
-    }
-    box.innerHTML = `<table><thead><tr>
-        <th>Ngày</th><th>Giờ</th><th>Dịch vụ</th><th>Bác sĩ</th><th>Mã lịch hẹn</th>
-      </tr></thead><tbody>${data.appointments.map(a => `<tr>
-        <td>${fmtDate(a.date)}</td><td>${esc(a.time)}</td>
-        <td>${esc(a.department)}</td><td>${esc(a.doctor)}</td><td>${esc(a.code)}</td>
-      </tr>`).join("")}</tbody></table>`;
-  } catch (e) {
-    box.innerHTML = `<div class="state error">Không tải được lịch hẹn.</div>`;
+    box.innerHTML = `<div class="state error">Không tải được lịch sử điều trị.</div>`;
   }
 }
 
@@ -565,7 +538,7 @@ async function sendChat(message){
     addOptions(data.options);
     // Đặt lịch xong -> làm mới lịch hẹn + gợi ý (dịch vụ vừa đặt sẽ bị lọc khỏi
     // danh sách gợi ý, xem post-filter "đã có lịch hẹn").
-    if (data.done){ loadAppointments(); if (recData) loadRec(); }
+    if (data.done){ if (!isGuest) loadHistory(); if (recData) loadRec(); }
   } catch (e) { addMessage("Có lỗi kết nối. Vui lòng thử lại.", "bot"); }
 }
 
@@ -585,8 +558,13 @@ $("btnLogout").onclick = async () => {
   window.location.href = "/login";
 };
 
-// Thứ tự có chủ đích: loadMe() xác định isGuest trước, các phần sau dựa vào nó.
-loadMe().then(() => { loadHistory(); loadAppointments(); });
+loadMe();
+
+// Vào từ nút "Trợ lý tư vấn" ở trang /home -> mở sẵn widget chat.
+if (new URLSearchParams(location.search).get("chat") === "1"){
+  openChat();
+  startChat();
+}
 </script>
 </body>
 </html>

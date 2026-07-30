@@ -146,10 +146,14 @@ def _extract_json(text: str):
         return None
 
 
-def chat_json(system: str, user: str, max_tokens: int = 300):
-    """Như `chat()` nhưng ép kết quả về dict JSON. None nếu lỗi/không parse được."""
+def chat_json(system: str, user: str, max_tokens: int = 300, temperature: float = 0.0):
+    """Như `chat()` nhưng ép kết quả về dict JSON. None nếu lỗi/không parse được.
+
+    `temperature` mặc định 0.0 để bài toán PHÂN LOẠI (triage) giữ nguyên tính tái
+    lập. Việc SINH VĂN BẢN thì nên nâng lên — xem reco/llm_reason.py.
+    """
     global LAST_ERROR
-    raw = chat(system, user, max_tokens=max_tokens)
+    raw = chat(system, user, max_tokens=max_tokens, temperature=temperature)
     if raw is None:
         return None
     parsed = _extract_json(raw)

@@ -189,10 +189,28 @@ def _rate_limit_guard():
 
 @app.route("/")
 def index():
-    """Chatbot page — guest & authorized users can access."""
+    """Cổng vào — điều hướng theo vai trò. KHÔNG còn là trang chatbot.
+
+    Chatbot là widget nằm trong màn gợi ý (`/recommendations`), không phải một
+    trang riêng: có hai đường vào chatbot thì nó không thực sự "tích hợp vào luồng
+    bệnh nhân".
+
+    Khách chưa đăng nhập -> thẳng tới màn gợi ý (xem được dịch vụ phổ biến và vẫn
+    đặt lịch qua widget). Đã đăng nhập -> trang của đúng vai trò.
+    """
     if "sid" not in session:
         session["sid"] = uuid.uuid4().hex
-    return render_template("index.html")
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if user and user.get("role") == "admin":
+        return redirect("/admin")
+    if user and user.get("role") == "doctor":
+        return redirect("/doctor-dashboard")
+    # Bệnh nhân (và tài khoản 'guest' — thực chất cũng là bệnh nhân) vào thẳng màn
+    # gợi ý. Trang tổng quan `/home` vẫn vào được bằng nút "← Tổng quan".
+    #
+    # ⚠️ LỆCH AC SMMG-131: story đó ghi "sau login BN vào trang tổng quan (không
+    # nhảy thẳng gợi ý AI)". Đây là quyết định của chủ dự án — cần cập nhật AC.
+    return redirect("/recommendations")
 
 
 @app.route("/login")
@@ -208,7 +226,7 @@ def login_page():
             elif user and user["role"] == "doctor":
                 return redirect("/doctor-dashboard")
             elif user:
-                return redirect("/home")
+                return redirect("/recommendations")
         except auth.AuthError:
             pass
     return render_template("login.html")
@@ -451,29 +469,26 @@ def api_register():
 @app.route("/api/me", methods=["GET"])
 def api_me():
     """Lấy thông tin user hiện tại từ JWT token."""
+    # `resolve_user_from_token` đã verify chữ ký + hạn token VÀ nạp user từ DB.
+    # Bản trước còn verify lại lần hai bằng biến `token` không tồn tại (tàn dư của
+    # đợt refactor sang resolve_user_from_token chỉ áp một nửa) -> mọi lần gọi
+    # /api/me đều NameError -> 500.
     user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
     if not user:
         return jsonify({"error": "Chưa login"}), 401
 
-    try:
-        payload = auth.verify_jwt(token)
-        user = storage.get_user_by_id(payload["sub"])
-        if not user:
-            return jsonify({"error": "User không tồn tại"}), 404
-        return jsonify({
-            "user": {
-                "id": user["id"],
-                "username": user["username"],
-                "role": user["role"],
-                "email": user.get("email"),
-                "phone": user.get("phone"),
-                "address": user.get("address"),
-                "doctor_id": user.get("doctor_id"),
-                "patient_id": user.get("patient_id"),
-            }
-        })
-    except auth.AuthError as e:
-        return jsonify({"error": str(e)}), 401
+    return jsonify({
+        "user": {
+            "id": user["id"],
+            "username": user["username"],
+            "role": user["role"],
+            "email": user.get("email"),
+            "phone": user.get("phone"),
+            "address": user.get("address"),
+            "doctor_id": user.get("doctor_id"),
+            "patient_id": user.get("patient_id"),
+        }
+    })
 
 
 @app.route("/api/patient/appointments", methods=["GET"])

@@ -159,21 +159,27 @@ def seed_accounts():
 
     for phone, name, birth_year, _visits in DEMO_PATIENTS:
         username = f"bn{phone[-3:]}"
+        # Hồ sơ bệnh nhân (bảng `patients`) là thực thể chính; tài khoản đăng nhập
+        # chỉ trỏ tới nó qua `users.patient_id`.
+        profile = next((p for p in storage.list_patients()
+                        if (p.get("phone") or "").strip() == phone), None)
+        if not profile:
+            profile = storage.create_patient_profile(name=name, phone=phone,
+                                                     email=f"{username}@shi.local")
+        storage.set_patient_clinical(profile["id"], birth_year=birth_year)
+        ids[phone] = profile["id"]
+
         existing = storage.get_user_by_username(username)
         if existing:
-            ids[phone] = existing.get("patient_id")
-            print(f"  ⏭️  {username} đã tồn tại — bỏ qua")
+            # Tài khoản tạo từ trước khi có mô hình `patients` sẽ chưa có liên kết
+            # -> nối lại, nếu không thì mất tuổi/dị ứng và luật theo tuổi im lặng.
+            if not existing.get("patient_id"):
+                storage.link_user_patient(existing["id"], profile["id"])
+                print(f"  🔗 {username} đã tồn tại — nối vào hồ sơ {profile['id'][:8]}")
+            else:
+                print(f"  ⏭️  {username} đã tồn tại — bỏ qua")
             continue
         try:
-            # Hồ sơ bệnh nhân (bảng `patients`) là thực thể chính; tài khoản đăng
-            # nhập chỉ trỏ tới nó qua `users.patient_id`.
-            profile = next((p for p in storage.list_patients()
-                            if (p.get("phone") or "").strip() == phone), None)
-            if not profile:
-                profile = storage.create_patient_profile(name=name, phone=phone,
-                                                         email=f"{username}@shi.local")
-            storage.set_patient_clinical(profile["id"], birth_year=birth_year)
-
             user = auth.create_user_account(
                 username=username,
                 password=DEMO_PASSWORD,
@@ -182,7 +188,6 @@ def seed_accounts():
                 phone=phone,
                 patient_id=profile["id"],
             )
-            ids[phone] = profile["id"]
             print(f"  ✅ Tạo {username} (patient, {name})")
         except Exception as exc:  # noqa: BLE001
             print(f"  ❌ Lỗi tạo {username}: {exc}")

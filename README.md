@@ -108,7 +108,7 @@ Thử bằng tay — gõ câu, xem hai engine trả lời cạnh nhau:
 
 
 <!-- Đăng nhập thử ở /login (mật khẩu tất cả là test123):
-
+./.venv/bin/python -m app.main
 User	Xem được gì
 bn101	quá hạn tái khám → followup_due
 bn103	vừa nội nha → care_pathway gợi ý phục hình
