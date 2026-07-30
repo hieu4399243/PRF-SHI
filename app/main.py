@@ -120,6 +120,44 @@ def resolve_sid(data=None):
     return sid
 
 
+def _patient_appointments_for_user(user, sid):
+    """Lấy lịch sử đặt lịch của user guest theo session + số điện thoại."""
+    all_appts = booking.all_appointments()
+    phones = set()
+    if user.get("phone"):
+        phones.add(user["phone"])
+
+    patient_id = user.get("patient_id")
+    if patient_id:
+        detail = storage.get_patient_detail(patient_id)
+        if detail and detail.get("phone"):
+            phones.add(detail["phone"])
+
+    matched = []
+    seen_codes = set()
+    for appt in all_appts:
+        code = appt.get("code")
+        by_session = bool(sid) and appt.get("session") == sid
+        by_phone = appt.get("patient_phone") in phones if phones else False
+        if not (by_session or by_phone):
+            continue
+        if code and code in seen_codes:
+            continue
+        if code:
+            seen_codes.add(code)
+        matched.append(appt)
+
+    matched.sort(
+        key=lambda a: (
+            a.get("date", ""),
+            a.get("time", ""),
+            a.get("created_at", ""),
+        ),
+        reverse=True,
+    )
+    return matched
+
+
 _RATE_LOCK = threading.Lock()
 _RATE_BUCKETS = OrderedDict()  # ip -> list[timestamp], LRU-cap giống SESSIONS ở chatbot.py
 _RATE_LIMIT = 30          # request
@@ -175,9 +213,25 @@ def login_page():
                 return redirect("/admin")
             elif user and user["role"] == "doctor":
                 return redirect("/doctor-dashboard")
+            elif user:
+                return redirect("/home")
         except auth.AuthError:
             pass
     return render_template("login.html")
+
+
+@app.route("/home")
+@require_auth()
+def patient_home():
+    """Trang home đơn giản cho patient/guest sau khi login."""
+    user = request.current_user
+    if user.get("role") == "admin":
+        return redirect("/admin")
+    if user.get("role") == "doctor":
+        return redirect("/doctor-dashboard")
+    if "sid" not in session:
+        session["sid"] = uuid.uuid4().hex
+    return render_template("home.html")
 
 
 @app.route("/doctor-dashboard")
@@ -254,6 +308,13 @@ def admin_page():
     return render_template("admin.html")
 
 
+@app.route("/admin/<section>")
+def admin_page_section(section):
+    if section not in {"appointments", "doctor", "patient"}:
+        abort(404)
+    return admin_page()
+
+
 # ===========================================================================
 # AUTHENTICATION API
 # ===========================================================================
@@ -307,38 +368,63 @@ def api_logout():
 
 @app.route("/api/register", methods=["POST"])
 def api_register():
-    """Tạo user mới (admin-only hoặc self-service tuỳ config).
-
-    Để cho đơn giản, ở đây cho phép bất kỳ ai tạo user mới (guest signup).
-    Nếu muốn chỉ admin tạo, kiểm tra JWT token trước.
-    """
+    """Tạo user mới (guest self-service đăng ký)."""
     data = request.get_json(force=True, silent=True) or {}
     username = data.get("username", "").strip()
     password = data.get("password", "")
+    name = data.get("name", "").strip()
     email = data.get("email", "").strip()
-    role = data.get("role", "guest")  # mặc định 'guest', có thể là 'admin' hoặc 'doctor'
-    doctor_id = data.get("doctor_id")  # chỉ cho role='doctor'
+    phone = data.get("phone", "").strip()
+    address = data.get("address", "").strip()
+    # User tự đăng ký luôn là 'guest' — admin/doctor chỉ tạo qua script seed
+    role = "guest"
 
     # Validate
     if not username or not password:
         return jsonify({"error": "Username và password bắt buộc"}), 400
     if len(password) < 6:
         return jsonify({"error": "Password phải tối thiểu 6 ký tự"}), 400
-    if role not in ["admin", "doctor", "guest"]:
-        return jsonify({"error": "Role không hợp lệ"}), 400
 
     try:
+        # Tạo patient profile trước (nếu có phone) để lấy patient_id
+        patient_id = None
+        if phone:
+            try:
+                patient = storage.create_patient_profile(
+                    name=name or username,
+                    phone=phone,
+                    email=email if email else None,
+                    address=address if address else None,
+                )
+                patient_id = patient["id"]
+            except ValueError:
+                # Phone đã tồn tại trong patients — tìm và liên kết sau
+                pass
+
         user = auth.create_user_account(
             username=username,
             password=password,
             role=role,
             email=email if email else None,
-            doctor_id=doctor_id,
+            phone=phone if phone else None,
+            address=address if address else None,
+            patient_id=patient_id,
         )
+
+        # Nếu phone đã có patient profile từ trước, thử liên kết
+        if phone and not patient_id:
+            existing_user = storage.get_user_by_username(phone)
+            if not existing_user:
+                # Tìm patient theo phone để liên kết
+                patients = storage.list_patients(search=phone)
+                matched = [p for p in patients if p.get("phone") == phone]
+                if matched:
+                    storage.link_user_patient(user["id"], matched[0]["id"])
+
         return jsonify({
             "ok": True,
             "user": user,
-            "message": f"Tạo user '{username}' thành công! Vui lòng login."
+            "message": f"Tạo tài khoản '{username}' thành công! Vui lòng đăng nhập."
         }), 201
     except auth.UserAlreadyExistsError as e:
         return jsonify({"error": str(e)}), 409
@@ -364,11 +450,42 @@ def api_me():
                 "username": user["username"],
                 "role": user["role"],
                 "email": user.get("email"),
+                "phone": user.get("phone"),
+                "address": user.get("address"),
                 "doctor_id": user.get("doctor_id"),
+                "patient_id": user.get("patient_id"),
             }
         })
     except auth.AuthError as e:
         return jsonify({"error": str(e)}), 401
+
+
+@app.route("/api/patient/appointments", methods=["GET"])
+@require_auth()
+def api_patient_appointments():
+    """Lịch sử đặt lịch của user guest/patient đang đăng nhập."""
+    user = request.current_user
+    if user.get("role") in {"admin", "doctor"}:
+        return jsonify({"error": "API chỉ dành cho patient"}), 403
+
+    sid = session.get("sid")
+    appointments = _patient_appointments_for_user(user, sid)
+    return jsonify({"appointments": appointments, "count": len(appointments)})
+
+
+@app.route("/api/profile", methods=["PUT"])
+@require_auth()
+def api_update_profile():
+    """Cập nhật thông tin profile của user đang đăng nhập (email, phone, address)."""
+    user = request.current_user
+    data = request.get_json(force=True, silent=True) or {}
+
+    email = data.get("email", "").strip() or None
+    phone = data.get("phone", "").strip() or None
+    address = data.get("address", "").strip() or None
+
+    storage.update_user_profile(user["id"], email=email, phone=phone, address=address)
+    return jsonify({"ok": True, "message": "Cập nhật thông tin thành công"})
 
 
 if __name__ == "__main__":

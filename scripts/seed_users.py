@@ -76,6 +76,51 @@ def seed_users():
                 "doctor_id": doctor["id"],
             })
 
+    # Thêm user mẫu (guest/bệnh nhân)
+    _SEED_GUESTS = [
+        {
+            "username": "nguyen_thi_mai",
+            "password": "test123",
+            "role": "guest",
+            "email": "mai.nguyen@gmail.com",
+            "phone": "0901234567",
+            "address": "123 Nguyễn Huệ, Quận 1, TP.HCM",
+        },
+        {
+            "username": "tran_van_minh",
+            "password": "test123",
+            "role": "guest",
+            "email": "minh.tran@yahoo.com",
+            "phone": "0912345678",
+            "address": "45 Lê Lợi, Quận Hải Châu, Đà Nẵng",
+        },
+        {
+            "username": "le_thi_hoa",
+            "password": "test123",
+            "role": "guest",
+            "email": "hoa.le@outlook.com",
+            "phone": "0923456789",
+            "address": "78 Hoàn Kiếm, Hà Nội",
+        },
+        {
+            "username": "pham_duc_long",
+            "password": "test123",
+            "role": "guest",
+            "email": "long.pham@gmail.com",
+            "phone": "0934567890",
+            "address": "22 Trần Phú, TP. Huế",
+        },
+        {
+            "username": "hoang_thi_thu",
+            "password": "test123",
+            "role": "guest",
+            "email": "thu.hoang@gmail.com",
+            "phone": "0945678901",
+            "address": "56 Bùi Thị Xuân, Quận Hai Bà Trưng, Hà Nội",
+        },
+    ]
+    users_to_create.extend(_SEED_GUESTS)
+
     print("🌱 Seeding users...")
     created_count = 0
     for user_data in users_to_create:
@@ -92,6 +137,8 @@ def seed_users():
                 password=user_data["password"],
                 role=user_data["role"],
                 email=user_data.get("email"),
+                phone=user_data.get("phone"),
+                address=user_data.get("address"),
                 doctor_id=user_data.get("doctor_id"),
             )
             created_count += 1
@@ -105,7 +152,9 @@ def seed_users():
     print(f"\n✨ Hoàn tất! Tạo mới {created_count} user.")
     print("\nThông tin login (mật khẩu của tất cả đều là: test123):")
     print("  - admin (admin)")
-    print("  - guest (guest)")
+    print("\nUser mẫu (guest/bệnh nhân):")
+    for g in _SEED_GUESTS:
+        print(f"  - {g['username']} | {g.get('phone','')} | {g.get('address','')}")
     print("\nBác sĩ (username = doctor_id):")
     for specialty, doctors in _SEED_DOCTORS.items():
         print(f"  {specialty}:")
