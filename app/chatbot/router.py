@@ -19,7 +19,8 @@ from ..triage import nlu, safety
 from .. import triage
 from .reply import reply
 from .session import SESSIONS, get_session, reset_session  # noqa: F401  (re-export)
-from .steps import cancel_step, confirm_step, doctor_step, schedule_step, triage_step
+from .steps import (cancel_step, confirm_step, doctor_step, handoff_step,
+                    schedule_step, triage_step)
 
 # Các bước có thể "dừng giữa chừng" (xem stop_booking).
 _STOPPABLE_STATES = {"TRIAGE", "CONFIRM_DEPT", "PICK_DOCTOR", "PICK_DATE",
@@ -38,14 +39,20 @@ _HANDLERS = {
     "CANCEL_ASK_PHONE": cancel_step.cancel_ask_phone,
     "CANCEL_PICK": cancel_step.cancel_pick,
     "CANCEL_CONFIRM": cancel_step.cancel_confirm,
+    # Đang chờ nhân viên: PHẢI có handler riêng, nếu không lượt kế tiếp rơi vào
+    # nhánh `else` bên dưới và bệnh nhân bị chào lại như phiên mới (CB-05).
+    "HANDOFF": handoff_step.handoff_wait,
+    "HANDOFF_ASK_CONTACT": handoff_step.handoff_ask_contact,
+    "HANDOFF_OFFER": handoff_step.handoff_offer,
 }
 
 
-# Số lượt người dùng giữ lại làm ngữ cảnh cho llm_reply.soften().
+# Số lượt người dùng giữ lại làm ngữ cảnh cho llm_reply.answer().
 _MAX_USER_TURNS = 5
 
 # Ở các bước này, tin nhắn CHÍNH LÀ dữ liệu định danh -> không lưu vào phiên.
-_PII_INPUT_STATES = {"ASK_NAME", "ASK_PHONE", "CANCEL_ASK_PHONE"}
+_PII_INPUT_STATES = {"ASK_NAME", "ASK_PHONE", "CANCEL_ASK_PHONE",
+                     "HANDOFF_ASK_CONTACT"}
 
 
 def _remember_turn(sess, message):
@@ -154,14 +161,16 @@ def handle_message(session_id: str, raw_message: str):
             return resp
 
         # --- GUARDRAIL: yêu cầu gặp người thật (human handoff) ---
-        if safety.needs_human_handoff(message):
-            resp = reply(
-                "Tôi sẽ chuyển bạn tới <b>nhân viên/điều dưỡng</b> kèm toàn bộ nội dung "
-                "trao đổi để được hỗ trợ trực tiếp. Vui lòng chờ trong giây lát. ☎️",
-                state="HANDOFF",
-            )
-            sess["state"] = "HANDOFF"
-            safety.audit(session_id, "bot", resp["reply"], {"flag": "handoff"})
+        # Lớp TỪ KHOÁ, cố ý giữ dù đã có lớp ngữ nghĩa trong llm_reply.answer():
+        # đây là đường thoát sang người thật, không được phụ thuộc API bên thứ ba.
+        # Bỏ qua khi ĐANG ở luồng handoff (đã chuyển rồi, đừng tạo yêu cầu trùng).
+        if sess["state"] not in {"HANDOFF", "HANDOFF_ASK_CONTACT"} \
+                and safety.needs_human_handoff(message):
+            resp = handoff_step.start_handoff(sess, handoff_step.PATIENT_REQUEST)
+            sess["state"] = resp["state"]
+            safety.audit(session_id, "bot", resp["reply"],
+                         {"state": resp["state"], "flag": "handoff",
+                          "handoff_code": sess.get("handoff_code")})
             return resp
 
         # --- Ý định HỦY lịch đã đặt ("hủy lịch", "muốn hủy lịch hẹn"...) ---
@@ -230,6 +239,12 @@ def handle_message(session_id: str, raw_message: str):
             )
         else:
             resp = greeting()
+
+        # Hội thoại NHÍCH được sang bước khác -> bot không còn loay hoay, xoá bộ
+        # đếm "bó tay" (llm_reply.is_stuck). Các nhánh fallback luôn trả về đúng
+        # state cũ, nên "state đổi" là dấu hiệu tiến triển đủ tin cậy.
+        if resp.get("state") and resp["state"] != state:
+            sess["stuck_turns"] = 0
 
         # Lưu trạng thái mới vào phiên để lượt sau định tuyến đúng.
         if resp.get("state"):

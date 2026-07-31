@@ -338,7 +338,7 @@ def admin_page():
 
 @app.route("/admin/<section>")
 def admin_page_section(section):
-    if section not in {"appointments", "doctor", "patient"}:
+    if section not in {"appointments", "doctor", "patient", "handoff"}:
         abort(404)
     return admin_page()
 

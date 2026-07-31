@@ -43,12 +43,14 @@ Orchestrates multi-turn conversation flow and delegates to triage/booking/safety
 | **`router.py`** | Central state dispatcher; guardrail execution | `handle_message()`, state → handler mapping |
 | **`session.py`** | In-memory session store (SESSIONS dict); TTL + per-session lock | `new_session()`, `get_session()`, `reset_session()`, `_evict_if_full_locked()` |
 | **`reply.py`** | Format bot responses; date formatting; phone normalization | `reply()`, `format_date()`, `normalize_phone()` |
-| **`flex.py`** | "Flexible reply": detect backtrack, symptom change, info requests | `flex_intent()`, `maybe_new_symptom()`, `symptom_ack()` |
+| **`flex.py`** | "Flexible reply" (rules): detect backtrack, symptom change, info requests | `flex_intent()`, `maybe_new_symptom()`, `symptom_ack()` |
+| **`llm_reply.py`** | "Flexible reply" (LLM): rewrites the canned line on fallback branches and flags human-handoff intent. Never changes `state`/`options` | `answer()` → `(text, wants_handoff)`, `is_stuck()`, `is_enabled()` |
 | **`steps/triage_step.py`** | TRIAGE & CONFIRM_DEPT states | Calls `triage.classify_symptoms()` |
 | **`steps/doctor_step.py`** | PICK_DOCTOR state | Lists doctors for chosen service |
 | **`steps/schedule_step.py`** | PICK_DATE & PICK_TIME states | Queries available slots |
 | **`steps/confirm_step.py`** | ASK_NAME → ASK_PHONE → CONFIRM_BOOKING | Validates phone; calls `booking.book_appointment()` |
 | **`steps/cancel_step.py`** | Cancellation flow: CANCEL_ASK_PHONE → CANCEL_PICK → CANCEL_CONFIRM | |
+| **`steps/handoff_step.py`** | HANDOFF / HANDOFF_ASK_CONTACT / HANDOFF_OFFER states (CB-05): records the request with a full transcript snapshot, always collects a callback name+phone, books a callback out of hours, and answers status questions from the stored record | `start_handoff()`, `maybe_escalate()`, `handoff_wait()`, `handoff_ask_contact()` |
 
 ---
 
@@ -61,7 +63,7 @@ Classifies patient symptoms into dental services. Three interchangeable engines 
 | **`engine.py`** | Main triage dispatcher; engine selection (v1/v2/llm); LLM call + fallback | `classify_symptoms()`, `confidence_level()`, `default_version()`, `classify_with_llm()` (returns `None` on error/timeout) |
 | **`llm.py`** | Low-level OpenRouter HTTP client (used by `engine.classify_with_llm()`) | `chat()`, `chat_json()`, `is_enabled()` |
 | **`nlu.py`** | Natural language understanding: match dates, times, doctor names, intent | `match_date()`, `match_time()`, `match_doctor()`, `wants_change()`, `is_affirmative()` |
-| **`safety.py`** | Medical guardrails: PII masking, emergency detection, diagnosis block, audit log | `check_emergency()`, `mask_pii()`, `audit()` |
+| **`safety.py`** | Medical guardrails: PII masking, emergency detection, diagnosis block, human-handoff keywords, audit log | `check_emergency()`, `mask_pii()`, `audit()`, `needs_human_handoff()`, `session_transcript()` |
 
 **Engine selection:**
 - `OPENROUTER_API_KEY` env var → `llm` (semantic understanding)

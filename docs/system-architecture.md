@@ -102,7 +102,8 @@ stateDiagram-v2
 
 **Key features:**
 
-- **Flexible flow:** Users can ask for service info, backtrack, or add symptoms anytime (handled in `chatbot/flex.py`).
+- **Flexible flow:** Users can ask for service info, backtrack, or add symptoms anytime (rules in `chatbot/flex.py`); when no rule matches, `chatbot/llm_reply.py` writes the answer with an LLM instead of reading a canned line. The LLM only ever changes wording — `state` and `options` stay with the state machine.
+- **Human handoff (CB-05):** two detection layers — `safety.needs_human_handoff()` keywords (always available, the escape hatch when the LLM is off) and the semantic flag returned by `llm_reply.answer()`. Both funnel into `steps/handoff_step.py`, which persists a `handoff_requests` row with a full transcript snapshot, then **always asks for a name + phone** — the chat has no staff-side reply channel, so staff read the request at **/admin/handoff** and contact the patient out of band. Out of hours it also books a callback at the next opening slot. **Reception hours are configured separately from booking slots** (`CLINIC_HOURS` / `CLINIC_CLOSED_DAYS`, default `08:00-12:00,13:30-17:30`, open all week): `WORK_SLOTS` are appointment *start* times, reception hours are when someone picks up the phone — the latter is always wider.
 - **Guardrail override:** Safety checks run before state handlers (not after).
 - **Conflict recovery:** If slot is taken, offer to cancel the old appointment and rebook.
 
@@ -118,7 +119,7 @@ flowchart TD
     RESET -->|no| EMERG{"Emergency<br/>signs?"}
     EMERG -->|yes| E115["▶ Advise 115,<br/>stop advising"]
     EMERG -->|no| HANDOFF{"Request<br/>human?"}
-    HANDOFF -->|yes| HO["▶ Escalate to staff"]
+    HANDOFF -->|yes| HO["▶ Record handoff_request<br/>+ transcript, wait or callback"]
     HANDOFF -->|no| INTENT{"Cancel/stop<br/>intent?"}
     INTENT -->|yes| SPECIAL["▶ Handle special<br/>intent"]
     INTENT -->|no| DIAG{"Diagnosis<br/>request?"}

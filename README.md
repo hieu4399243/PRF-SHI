@@ -119,3 +119,5 @@ admin / bs_sr_01	trang admin / nha sĩ như trước
 Hai lưu ý khi test: .venv/bin/pip hỏng shebang (venv tạo từ đường dẫn cũ Desktop/PRF-SHI) → dùng .venv/bin/python -m pip. Và luôn đặt DATABASE_URL= khi chạy pytest — bộ test giả định JSON mode, chạy thiếu biến này sẽ ghi thật vào Supabase.
 
 Muốn tắt LLM (chạy nhanh hơn, kết quả tái lập được): REC_LLM_REASON=0. -->
+
+<!-- // "gặp bác sĩ" → dẫn đặt lịch, "gặp y tá/nhân viên" → chuyển người thật -->

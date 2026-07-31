@@ -32,6 +32,7 @@ USE_DB = bool(DATABASE_URL)
 from .paths import (  # noqa: F401  (re-export cho code cũ)
     APPOINTMENTS_PATH,
     DOCTORS_PATH,
+    HANDOFF_PATH,
     PATIENT_PREFS_PATH,
     PATIENTS_PATH,
     REC_LOG_PATH,
@@ -210,6 +211,24 @@ CREATE TABLE IF NOT EXISTS patient_preference (
     service_ratings         JSONB NOT NULL DEFAULT '{}'::jsonb,
     updated_at              TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS handoff_requests (
+    code            TEXT PRIMARY KEY,
+    session_id      TEXT NOT NULL,
+    reason          TEXT NOT NULL,   -- 'patient_request' | 'bot_stuck'
+    status          TEXT NOT NULL,   -- 'new' | 'handled'
+    created_at      TEXT NOT NULL,
+    within_hours    BOOLEAN NOT NULL DEFAULT TRUE,
+    callback_at     TEXT,            -- mốc hẹn gọi lại khi tạo ngoài giờ làm việc
+    patient_name    TEXT,
+    patient_phone   TEXT,
+    last_message    TEXT,
+    transcript      JSONB NOT NULL DEFAULT '[]'::jsonb,
+    handled_at      TEXT,
+    handled_by      TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_handoff_status_created
+    ON handoff_requests (status, created_at DESC);
 """
 
 # Tách riêng khỏi SCHEMA_SQL vì KHÔNG idempotent theo kiểu `IF NOT EXISTS`:
@@ -1718,5 +1737,186 @@ def set_patient_clinical(patient_id, birth_year=None, allergies=None):
                 if allergies is not None:
                     p["allergies"] = allergies
                 _json_save(PATIENTS_PATH, items)
+                return True
+    return False
+
+
+# ---------------------------------------------------------------------------
+# YÊU CẦU CHUYỂN TIẾP SANG NHÂN VIÊN (CB-05 / SMMG-52)
+# ---------------------------------------------------------------------------
+_HANDOFF_COLS = ["code", "session_id", "reason", "status", "created_at",
+                 "within_hours", "callback_at", "patient_name", "patient_phone",
+                 "last_message", "transcript", "handled_at", "handled_by"]
+
+_JSONB_HANDOFF_FIELDS = ("transcript",)
+
+# Bản JSON (chế độ không DB) chỉ giữ ngần này yêu cầu gần nhất — file demo, không
+# phải kho lưu trữ. Bản Postgres không cắt.
+_HANDOFF_JSON_MAX = 500
+
+
+def _row_to_handoff(row):
+    entry = dict(zip(_HANDOFF_COLS, row))
+    for field in _JSONB_HANDOFF_FIELDS:
+        if isinstance(entry.get(field), str):
+            entry[field] = json.loads(entry[field])
+    return entry
+
+
+def add_handoff(entry):
+    """Ghi 1 yêu cầu chuyển tiếp. Trả về `code`."""
+    if USE_DB:
+        init_schema()
+        values = []
+        for col in _HANDOFF_COLS:
+            val = entry.get(col)
+            if col in _JSONB_HANDOFF_FIELDS and val is not None:
+                val = json.dumps(val, ensure_ascii=False)
+            values.append(val)
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"INSERT INTO handoff_requests ({', '.join(_HANDOFF_COLS)}) "
+                "VALUES (" + ",".join(["%s"] * len(_HANDOFF_COLS)) + ")",
+                tuple(values),
+            )
+            conn.commit()
+        return entry.get("code")
+    with _JSON_LOCK:
+        items = _json_load(HANDOFF_PATH, [])
+        items.append({c: entry.get(c) for c in _HANDOFF_COLS})
+        _json_save(HANDOFF_PATH, items[-_HANDOFF_JSON_MAX:])
+    return entry.get("code")
+
+
+def list_handoffs(status=None, limit=200):
+    """Danh sách yêu cầu chuyển tiếp, MỚI NHẤT TRƯỚC (nhân viên xử lý từ trên xuống)."""
+    if USE_DB:
+        init_schema()
+        sql = f"SELECT {', '.join(_HANDOFF_COLS)} FROM handoff_requests"
+        params = []
+        if status:
+            sql += " WHERE status = %s"
+            params.append(status)
+        sql += " ORDER BY created_at DESC LIMIT %s"
+        params.append(int(limit))
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            return [_row_to_handoff(r) for r in cur.fetchall()]
+    items = _json_load(HANDOFF_PATH, [])
+    if status:
+        items = [h for h in items if h.get("status") == status]
+    items.sort(key=lambda h: h.get("created_at") or "", reverse=True)
+    return items[:limit]
+
+
+def get_handoff(code):
+    """Đọc 1 yêu cầu theo mã. Trả dict hoặc None."""
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"SELECT {', '.join(_HANDOFF_COLS)} FROM handoff_requests "
+                "WHERE code = %s", (code,))
+            row = cur.fetchone()
+            return _row_to_handoff(row) if row else None
+    for entry in _json_load(HANDOFF_PATH, []):
+        if entry.get("code") == code:
+            return entry
+    return None
+
+
+def append_handoff_message(code, role, message, update_last=True):
+    """Nối 1 lượt vào transcript của yêu cầu ĐANG CHỜ.
+
+    Bệnh nhân vẫn gõ tiếp sau khi được báo "đang chuyển nhân viên"; những câu đó
+    phải nằm trong bản ghi nhân viên đọc, nếu không họ tiếp nhận thiếu ngữ cảnh.
+    Yêu cầu đã `handled` thì thôi — cuộc trao đổi đã sang kênh khác.
+
+    `update_last=False` cho các lượt KHÔNG phải nội dung thật của bệnh nhân —
+    hiện chỉ có lượt nhập tên/SĐT, vốn được thay bằng nhãn ẩn PII trước khi ghi.
+    Không có cờ này thì cột "Câu cuối" ở trang nhân viên hiện "[LIÊN HỆ ĐÃ ẨN]"
+    thay vì câu bệnh nhân thật sự nói, tức mất đúng thứ cột đó sinh ra để hiển thị.
+    """
+    turn = {"role": role, "message": message}
+    if USE_DB:
+        init_schema()
+        sql = ("UPDATE handoff_requests SET transcript = transcript || %s::jsonb"
+               + (", last_message = %s" if update_last else "")
+               + " WHERE code = %s AND status = 'new'")
+        params = [json.dumps([turn], ensure_ascii=False)]
+        if update_last:
+            params.append(message)
+        params.append(code)
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(sql, tuple(params))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        items = _json_load(HANDOFF_PATH, [])
+        for h in items:
+            if h.get("code") == code and h.get("status") == "new":
+                h.setdefault("transcript", []).append(turn)
+                if update_last:
+                    h["last_message"] = message
+                _json_save(HANDOFF_PATH, items)
+                return True
+    return False
+
+
+def set_handoff_handled(code, handled_by=None):
+    """Đánh dấu đã tiếp nhận. Trả True nếu có cập nhật.
+
+    CHỈ ghi khi còn 'new': hai nhân viên cùng bấm thì người đầu tiên là người
+    tiếp nhận, không được ghi đè tên nhau.
+    """
+    now = _now_iso()
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE handoff_requests SET status = 'handled', handled_at = %s, "
+                "handled_by = %s WHERE code = %s AND status = 'new'",
+                (now, handled_by, code))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        items = _json_load(HANDOFF_PATH, [])
+        for h in items:
+            if h.get("code") == code and h.get("status") == "new":
+                h["status"] = "handled"
+                h["handled_at"] = now
+                h["handled_by"] = handled_by
+                _json_save(HANDOFF_PATH, items)
+                return True
+    return False
+
+
+def set_handoff_contact(code, name, phone):
+    """Ghi tên + SĐT liên hệ lên yêu cầu đã tạo (bệnh nhân để lại sau khi chuyển).
+
+    Tên rỗng thì GIỮ NGUYÊN tên cũ thay vì xoá: bệnh nhân có thể chỉ gõ mỗi số
+    điện thoại, mà tên có sẵn (từ lịch hẹn trước đó) vẫn hữu ích cho nhân viên.
+    """
+    if USE_DB:
+        init_schema()
+        with _connect() as conn, conn.cursor() as cur:
+            cur.execute(
+                "UPDATE handoff_requests SET patient_phone = %s, "
+                "patient_name = COALESCE(NULLIF(%s, ''), patient_name) "
+                "WHERE code = %s",
+                (phone, name or "", code))
+            updated = cur.rowcount
+            conn.commit()
+        return updated > 0
+    with _JSON_LOCK:
+        items = _json_load(HANDOFF_PATH, [])
+        for h in items:
+            if h.get("code") == code:
+                h["patient_phone"] = phone
+                if name:
+                    h["patient_name"] = name
+                _json_save(HANDOFF_PATH, items)
                 return True
     return False

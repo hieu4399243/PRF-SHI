@@ -23,3 +23,6 @@ OUTBOX_DIR = os.path.join(DATA_DIR, "outbox")
 TREATMENT_HISTORY_PATH = os.path.join(DATA_DIR, "treatment_history.json")
 REC_LOG_PATH = os.path.join(DATA_DIR, "recommendation_log.json")
 PATIENT_PREFS_PATH = os.path.join(DATA_DIR, "patient_preference.json")
+
+# Yêu cầu chuyển tiếp sang nhân viên (CB-05) — xem app/chatbot/steps/handoff_step.py
+HANDOFF_PATH = os.path.join(DATA_DIR, "handoff_requests.json")

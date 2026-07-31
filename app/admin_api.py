@@ -253,3 +253,42 @@ def admin_patient_detail(patient_id):
     if not detail:
         return jsonify({"ok": False, "error": "Không tìm thấy bệnh nhân"}), 404
     return jsonify({"ok": True, "patient": detail})
+
+# ---------------------------------------------------------------------------
+# YÊU CẦU CHUYỂN TIẾP SANG NHÂN VIÊN (CB-05 / SMMG-52)
+# ---------------------------------------------------------------------------
+@admin_api.route("/handoffs")
+def admin_handoffs():
+    """Danh sách yêu cầu chuyển tiếp, mới nhất trước. ?status=new để lọc việc cần làm."""
+    if not _check_admin():
+        abort(401)
+    items = storage.list_handoffs(status=request.args.get("status") or None)
+    return jsonify({
+        "handoffs": items,
+        "count": len(items),
+        "new_count": sum(1 for h in items if h.get("status") == "new"),
+    })
+
+
+@admin_api.route("/handoffs/<code>")
+def admin_handoff_detail(code):
+    """Chi tiết 1 yêu cầu, kèm TOÀN BỘ transcript hội thoại (AC: lịch sử chuyển kèm)."""
+    if not _check_admin():
+        abort(401)
+    entry = storage.get_handoff(code)
+    if not entry:
+        return jsonify({"ok": False, "error": "Không tìm thấy yêu cầu"}), 404
+    return jsonify({"ok": True, "handoff": entry})
+
+
+@admin_api.route("/handoffs/<code>/handled", methods=["POST"])
+def admin_handoff_handled(code):
+    """Nhân viên nhận việc. Yêu cầu đã có người nhận -> 409, không ghi đè."""
+    if not _check_admin():
+        abort(401)
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    if not storage.get_handoff(code):
+        return jsonify({"ok": False, "error": "Không tìm thấy yêu cầu"}), 404
+    if not storage.set_handoff_handled(code, handled_by=(user or {}).get("username")):
+        return jsonify({"ok": False, "error": "Yêu cầu này đã được tiếp nhận"}), 409
+    return jsonify({"ok": True, "handoff": storage.get_handoff(code)})

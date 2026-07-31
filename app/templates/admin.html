@@ -81,6 +81,17 @@
   .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:11px;font-weight:600}
   .pill.confirmed{background:#e2f4f0;color:var(--teal-deep)}
   .pill.cancelled{background:#f7e4e4;color:var(--cancel)}
+  .pill.new{background:#fdf0dc;color:#9a6414}
+  .pill.handled{background:#e2f4f0;color:var(--teal-deep)}
+  .muted{color:var(--muted)}
+  .badge{display:inline-block;min-width:18px;padding:1px 6px;border-radius:20px;
+         background:var(--cancel);color:#fff;font-size:11px;font-weight:700;text-align:center}
+  /* Transcript hội thoại trong modal chi tiết yêu cầu hỗ trợ */
+  .chatLog{max-height:46vh;overflow-y:auto;border:1px solid var(--line);border-radius:8px;padding:10px}
+  .chatTurn{margin-bottom:8px;font-size:13px;line-height:1.45}
+  .chatTurn .who{font-size:11px;color:var(--muted);display:block}
+  .chatTurn.user .what{background:#eef5ff;border-radius:8px;padding:6px 9px;display:inline-block}
+  .chatTurn.bot .what{background:#f4f6f5;border-radius:8px;padding:6px 9px;display:inline-block}
   .slot{display:flex;justify-content:space-between;align-items:center;padding:10px 12px;
         border:1px solid var(--line);border-radius:8px;margin-bottom:6px}
   .slot.free{background:#fafdfc;color:var(--muted)}
@@ -196,6 +207,7 @@
       <button id="sideAppt" class="sideItem active" onclick="showSection('appointments')">Lịch hẹn</button>
       <button id="sideDoctor" class="sideItem" onclick="showSection('doctors')">Quản lý bác sĩ</button>
       <button id="sidePatient" class="sideItem" onclick="showSection('patients')">Quản lý bệnh nhân</button>
+      <button id="sideHandoff" class="sideItem" onclick="showSection('handoffs')">Yêu cầu hỗ trợ <span id="handoffBadge" class="badge hide">0</span></button>
     </div>
   </aside>
 
@@ -303,6 +315,35 @@
           </table>
         </div>
         <div id="patientEmpty" class="empty hide">Không có bệnh nhân nào.</div>
+      </div>
+    </div>
+
+    <!-- CB-05: yêu cầu chuyển tiếp từ chatbot sang nhân viên thật -->
+    <div id="sectionHandoffs" class="hide">
+      <div class="card">
+        <div class="sectionHead">
+          <h2>Yêu cầu chuyển tiếp từ chatbot</h2>
+          <div class="inlineTools">
+            <select id="handoffStatus" onchange="loadHandoffs()">
+              <option value="new">Chờ tiếp nhận</option>
+              <option value="">Tất cả</option>
+              <option value="handled">Đã tiếp nhận</option>
+            </select>
+            <button class="ghost" onclick="loadHandoffs()">Tải lại</button>
+          </div>
+        </div>
+        <div class="tableScroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Mã</th><th>Thời điểm</th><th>Lý do</th><th>Bệnh nhân</th>
+                <th>SĐT</th><th>Câu cuối</th><th>Trạng thái</th><th></th>
+              </tr>
+            </thead>
+            <tbody id="handoffRows"></tbody>
+          </table>
+        </div>
+        <div id="handoffEmpty" class="empty hide">Không có yêu cầu nào.</div>
       </div>
     </div>
   </main>
@@ -453,6 +494,7 @@ const SECTION_TO_PATH = {
   appointments: "/admin/appointments",
   doctors: "/admin/doctor",
   patients: "/admin/patient",
+  handoffs: "/admin/handoff",
 };
 
 const PATH_TO_SECTION = {
@@ -460,6 +502,7 @@ const PATH_TO_SECTION = {
   "/admin/appointments": "appointments",
   "/admin/doctor": "doctors",
   "/admin/patient": "patients",
+  "/admin/handoff": "handoffs",
 };
 
 let loadingCount = 0;
@@ -559,14 +602,17 @@ function showSection(section, options = {}){
   const isAppt = section === "appointments";
   const isDoctor = section === "doctors";
   const isPatient = section === "patients";
+  const isHandoff = section === "handoffs";
 
   $("sideAppt").classList.toggle("active", isAppt);
   $("sideDoctor").classList.toggle("active", isDoctor);
   $("sidePatient").classList.toggle("active", isPatient);
+  $("sideHandoff").classList.toggle("active", isHandoff);
 
   $("sectionAppointments").classList.toggle("hide", !isAppt);
   $("sectionDoctors").classList.toggle("hide", !isDoctor);
   $("sectionPatients").classList.toggle("hide", !isPatient);
+  $("sectionHandoffs").classList.toggle("hide", !isHandoff);
 
   if(syncUrl){
     syncSectionUrl(section, historyMode);
@@ -584,6 +630,10 @@ function showSection(section, options = {}){
   }
   if(isPatient){
     loadPatients();
+    return;
+  }
+  if(isHandoff){
+    loadHandoffs();
   }
 }
 
@@ -1013,6 +1063,97 @@ function renderPatientDetail(p){
 function closeByBackdrop(event, id){
   if(event.target.id === id){
     $(id).classList.remove("show");
+  }
+}
+
+// --- CB-05: yêu cầu chuyển tiếp sang nhân viên --------------------------
+const HANDOFF_REASON_LABEL = {
+  patient_request: "Bệnh nhân yêu cầu",
+  bot_stuck: "Chatbot không xử lý được",
+};
+
+async function loadHandoffs(){
+  const status = $("handoffStatus").value;
+  const qs = status ? `?status=${encodeURIComponent(status)}` : "";
+  const data = await api(`/api/admin/handoffs${qs}`);
+  const rows = data.handoffs || [];
+  $("handoffRows").innerHTML = rows.map(renderHandoffRow).join("");
+  $("handoffEmpty").classList.toggle("hide", rows.length > 0);
+  updateHandoffBadge(data.new_count || 0);
+}
+
+function updateHandoffBadge(count){
+  const badge = $("handoffBadge");
+  badge.textContent = count;
+  badge.classList.toggle("hide", count === 0);
+}
+
+function renderHandoffRow(h){
+  const when = (h.created_at || "").replace("T", " ").slice(0, 16);
+  // Ngoài giờ thì mốc hẹn gọi lại quan trọng hơn giờ tạo -> nêu ngay ở cột này.
+  const callback = h.callback_at
+    ? `<br><span class="muted" style="font-size:11px">Hẹn gọi lại: ${escapeHtml(h.callback_at.replace("T", " "))}</span>`
+    : "";
+  const handled = h.status === "handled";
+  return `<tr>
+    <td><b>${escapeHtml(h.code || "")}</b></td>
+    <td>${escapeHtml(when)}${callback}</td>
+    <td>${escapeHtml(HANDOFF_REASON_LABEL[h.reason] || h.reason || "")}</td>
+    <td>${escapeHtml(h.patient_name || "—")}</td>
+    <td>${escapeHtml(h.patient_phone || "—")}</td>
+    <td>${escapeHtml((h.last_message || "").slice(0, 60))}</td>
+    <td><span class="pill ${escapeHtml(h.status)}">${handled ? "Đã tiếp nhận" : "Chờ tiếp nhận"}</span></td>
+    <td><button class="ghost" onclick="openHandoffModal('${escapeHtml(h.code)}')">Xem hội thoại</button></td>
+  </tr>`;
+}
+
+async function openHandoffModal(code){
+  $("detailModalBack").classList.add("show");
+  $("detailModalTitle").textContent = `Yêu cầu ${code}`;
+  $("detailModalBody").innerHTML = '<div style="padding:24px;text-align:center;color:var(--muted)"><span class="spinner" style="display:inline-block;margin:auto"></span></div>';
+  try {
+    const data = await api(`/api/admin/handoffs/${encodeURIComponent(code)}`, { skipLoading: true });
+    $("detailModalBody").innerHTML = renderHandoffDetail(data.handoff);
+  } catch(e) {
+    $("detailModalBody").innerHTML = `<div class="empty">Không tải được: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderHandoffDetail(h){
+  const turns = (h.transcript || []).map(t => `
+    <div class="chatTurn ${t.role === "user" ? "user" : "bot"}">
+      <span class="who">${t.role === "user" ? "Bệnh nhân" : "Chatbot"} · ${escapeHtml((t.ts || "").replace("T", " ").slice(0, 16))}</span>
+      <span class="what">${escapeHtml(t.message || "")}</span>
+    </div>`).join("") || '<p style="font-size:12px;color:var(--muted)">Chưa có nội dung hội thoại.</p>';
+
+  const action = h.status === "handled"
+    ? `<p style="font-size:12px;color:var(--muted)">Đã tiếp nhận bởi <b>${escapeHtml(h.handled_by || "—")}</b> lúc ${escapeHtml((h.handled_at || "").replace("T", " ").slice(0, 16))}.</p>`
+    : `<div class="modalActions"><button onclick="markHandoffHandled('${escapeHtml(h.code)}')">Tôi tiếp nhận yêu cầu này</button></div>`;
+
+  return `<div class="detailGrid" style="margin-bottom:12px">
+      <div class="detailRow"><label>Lý do</label><span>${escapeHtml(HANDOFF_REASON_LABEL[h.reason] || h.reason || "")}</span></div>
+      <div class="detailRow"><label>Tạo lúc</label><span>${escapeHtml((h.created_at || "").replace("T", " ").slice(0, 16))}</span></div>
+      <div class="detailRow"><label>Trong giờ làm việc</label><span>${h.within_hours ? "Có" : "Không"}</span></div>
+      <div class="detailRow"><label>Hẹn gọi lại</label><span>${escapeHtml((h.callback_at || "—").replace("T", " "))}</span></div>
+      <div class="detailRow"><label>Bệnh nhân</label><span>${escapeHtml(h.patient_name || "—")}</span></div>
+      <div class="detailRow"><label>SĐT gọi lại</label><span>${escapeHtml(h.patient_phone || "—")}</span></div>
+    </div>
+    <h4 style="font-size:12px;text-transform:uppercase;color:var(--muted);margin:0 0 6px">Toàn bộ hội thoại</h4>
+    <div class="chatLog">${turns}</div>
+    <p style="font-size:11px;color:var(--muted);margin-top:6px">Số điện thoại / email trong hội thoại đã được ẩn theo quy định bảo vệ dữ liệu cá nhân — dùng ô “SĐT gọi lại” ở trên để liên hệ.</p>
+    ${action}`;
+}
+
+async function markHandoffHandled(code){
+  try {
+    await api(`/api/admin/handoffs/${encodeURIComponent(code)}/handled`, {
+      method: "POST", skipLoading: true,
+    });
+    showToast("Đã tiếp nhận yêu cầu");
+    closeDetailModal();
+    loadHandoffs();
+  } catch(e) {
+    showToast(e.message, "err");
   }
 }
 

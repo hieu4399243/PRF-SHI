@@ -37,6 +37,7 @@ import re
 # ngôn ngữ, `triage/safety.py` giữ bộ chặn nội dung. `chatbot/` vốn được phép
 # điều phối các module nghiệp vụ nên ở đây không phá quy tắc biên module.
 from ..core.catalog import DEPARTMENTS
+from ..core.text import normalize, strip_accents
 from ..triage import llm, safety
 
 MAX_TOKENS = 400
@@ -88,6 +89,16 @@ _SCHEDULE_RE = re.compile(r"\b\d{1,2}\s*(h|giờ)\b|\b\d{1,2}:\d{2}\b|\b\d{1,2}/
 # Chat bubble chỉ render được vài thẻ này (xem templates/). Thẻ lạ -> loại.
 _BAD_TAG_RE = re.compile(r"<(?!/?(?:b|i|br)\s*/?>)", re.IGNORECASE)
 
+# Ba bước được phép viết lại đều nằm TRƯỚC bước chọn ngày giờ, nên câu trả lời
+# không bao giờ được hỏi sang việc của bước sau. Lỗi quan sát thực tế: ở TRIAGE
+# (chưa chốt dịch vụ nào) LLM hỏi "Bạn muốn đặt lịch vào ngày nào?", người dùng
+# đáp "ngày mai đi" và rơi thẳng vào ngõ cụt vì máy trạng thái vẫn đứng ở TRIAGE.
+# KHÔNG chặn "khi nào"/"bao lâu": đó là câu hỏi triệu chứng hợp lệ ("đau từ khi nào").
+_WRONG_STEP_ASK_RE = re.compile(
+    r"ngày nào|mấy giờ|giờ nào|khung giờ|buổi nào|"
+    r"tên của bạn|họ và tên|họ tên|số điện thoại|sđt",
+    re.IGNORECASE)
+
 _TAG_RE = re.compile(r"<[^>]+>")
 
 _SYSTEM_PROMPT = (
@@ -114,6 +125,33 @@ _SYSTEM_PROMPT = (
     "7. Xưng \"mình\", gọi \"bạn\". Tối đa 3 câu, dưới 300 ký tự. Thân thiện, "
     "không nhõng nhẽo, không dùng emoji.\n"
     "8. Chỉ được dùng thẻ HTML <b>, <i>, <br>. Không markdown, không danh sách.\n\n"
+    "9. TUYỆT ĐỐI không hỏi sang việc của BƯỚC KHÁC. Ở các bước này bạn CHƯA "
+    "được hỏi ngày, giờ, họ tên hay số điện thoại — muốn đặt lịch thì phải chốt "
+    "dịch vụ trước đã. Chỉ hỏi về triệu chứng, dịch vụ, hoặc bác sĩ.\n\n"
+    "NGOÀI RA, bạn phải quyết định có nên CHUYỂN TIẾP SANG NHÂN VIÊN THẬT không "
+    "(trường \"handoff\").\n\n"
+    "QUY TẮC GỐC — đọc kỹ, đây là NGUYÊN TẮC chứ không phải danh sách:\n"
+    "  Bệnh nhân muốn tiếp xúc với MỘT CON NGƯỜI ở phòng khám  ->  handoff = TRUE.\n"
+    "Không quan trọng họ gọi người đó là gì: nhân viên, y tá, điều dưỡng, lễ tân, "
+    "trợ lý, quản lý, người phụ trách, tổng đài, \"ai đó\", \"người thật\"... "
+    "Bạn KHÔNG có quyền từ chối vì \"không có chức năng hẹn gặp người đó\" — luôn "
+    "có nhân viên phòng khám tiếp nhận, và việc nối họ với nhau là của hệ thống, "
+    "không phải của bạn.\n\n"
+    "NGOẠI LỆ DUY NHẤT: \"gặp bác sĩ\", \"gặp nha sĩ\", \"muốn đi khám\" — ở phòng "
+    "khám thì đó là muốn ĐẶT LỊCH KHÁM, tức việc chính của bạn -> handoff = FALSE, "
+    "hãy giúp họ chọn dịch vụ rồi đặt lịch. (Nhưng \"tôi muốn phàn nàn về bác sĩ\" "
+    "thì vẫn là TRUE — đó là khiếu nại, không phải đặt lịch.)\n\n"
+    "Ngoài quy tắc gốc, cũng đặt handoff = true khi:\n"
+    "  - họ bực bội, thất vọng với bot (\"bot này chả hiểu gì\", \"chán quá\");\n"
+    "  - họ khiếu nại, phàn nàn về dịch vụ;\n"
+    "  - việc họ cần nằm NGOÀI khả năng của bạn (giá cả, bảo hiểm, hóa đơn, hồ sơ "
+    "bệnh án, đổi/khiếu nại lịch đã đặt, câu hỏi chuyên môn sâu, vấn đề sức khoẻ "
+    "KHÔNG thuộc răng miệng);\n"
+    "  - đã hỏi đi hỏi lại mà vẫn không giúp được họ.\n\n"
+    "Đặt handoff = false cho trường hợp bình thường: họ chỉ đang tả triệu chứng "
+    "chưa rõ, hỏi vu vơ, hoặc nói chuyện ngoài lề nhẹ nhàng. Khi handoff = true "
+    "thì phần \"reply\" KHÔNG cần viết nữa (hệ thống dùng câu chuyển tiếp riêng), "
+    "cứ để chuỗi rỗng.\n\n"
     # Ví dụ cố ý CHỌN TÌNH HUỐNG KHÁC với các ca đã biết hỏng (\"bạn có chắc không\",
     # \"ăn cơm không ngon\"). Đặt đúng câu đó vào đây thì model chép lại gần nguyên
     # văn — nhìn thì hay nhưng là khớp mẫu, không phải hiểu.
@@ -128,9 +166,48 @@ _SYSTEM_PROMPT = (
     "giúp mình rõ hơn nhé: khó chịu ở chỗ nào, và là đau, ê buốt hay sưng?\"\n"
     "  Bệnh nhân: \"phòng khám có xa trung tâm không\"\n"
     "  Trả lời  : \"Phần địa chỉ bạn hỏi lễ tân giúp mình nhé, mình chỉ hỗ trợ chọn "
-    "dịch vụ và đặt lịch thôi. Quay lại việc chính, bạn muốn chọn dịch vụ nào?\"\n\n"
-    "CHỈ trả JSON: {\"reply\": \"<câu trả lời>\"}"
+    "dịch vụ và đặt lịch thôi. Quay lại việc chính, bạn muốn chọn dịch vụ nào?\"\n"
+    "  Bệnh nhân: \"nói mãi mà chả đâu vào đâu, cho tôi hỏi ai đó biết việc đi\"\n"
+    "  -> handoff = true\n"
+    "  Bệnh nhân: \"tôi cần gặp bác sĩ\"\n"
+    "  -> handoff = FALSE (họ muốn đi khám!). Trả lời: \"Được, mình giúp bạn đặt "
+    "lịch với bác sĩ nhé. Bạn đang gặp vấn đề gì về răng miệng để mình chọn đúng "
+    "dịch vụ ạ?\"\n"
+    "  Bệnh nhân: \"tôi cần gặp y tá\"\n"
+    "  -> handoff = TRUE. Họ muốn gặp một CON NGƯỜI — không được từ chối bằng câu "
+    "\"mình không có chức năng hẹn gặp y tá\".\n\n"
+    "CHỈ trả JSON: {\"reply\": \"<câu trả lời>\", \"handoff\": true|false}"
 )
+
+
+# --- "gặp bác sĩ" KHÁC "gặp nhân viên" -------------------------------------
+# Lỗi quan sát thực tế: "Tôi cần gặp bác sĩ" bị LLM đọc thành "muốn thoát khỏi
+# chatbot" và chuyển thẳng sang nhân viên — trong khi đó chính là luồng ĐẶT LỊCH,
+# việc chính của bot. Prompt đã dặn rõ, nhưng ý định thoát khỏi bot là thứ không
+# được phó mặc cho một câu dặn: chặn thêm ở đây bằng luật.
+# Ở phòng khám, đây là NGƯỜI ĐIỀU TRỊ — muốn gặp họ nghĩa là muốn đi khám.
+# Danh sách này CỐ Ý CHỈ CÓ 2 TỪ và không được nới rộng: nó là NGOẠI LỆ khoét vào
+# quy tắc "muốn gặp con người thì chuyển tiếp", nên mỗi từ thêm vào đây là một
+# đường bệnh nhân bị giữ lại với bot trong khi họ đang cần người thật.
+_CLINICIAN_WORDS = ("bac si", "nha si")
+
+
+def _is_booking_not_escalation(message: str) -> bool:
+    """Câu này là "muốn đi khám" chứ không phải "muốn thoát khỏi chatbot"?
+
+    True khi có nhắc bác sĩ/nha sĩ mà KHÔNG kèm dấu hiệu cần người hỗ trợ. Việc
+    xét "có dấu hiệu cần người hỗ trợ không" giao lại cho
+    `safety.needs_human_handoff()` — giữ MỘT nguồn sự thật duy nhất, để thêm một
+    cách gọi nhân viên ("y tá", "lễ tân"...) chỉ phải sửa đúng bảng
+    `safety_patterns` chứ không phải nhớ sửa thêm một danh sách thứ hai ở đây.
+
+    Nhờ vậy "cho tôi gặp bác sĩ chứ không phải nhân viên" và "tôi muốn phàn nàn
+    về bác sĩ" đều ra False -> vẫn chuyển tiếp được như thường.
+    """
+    if safety.needs_human_handoff(message):
+        return False
+    low = strip_accents(normalize(message))
+    return any(word in low for word in _CLINICIAN_WORDS)
 
 
 def is_enabled() -> bool:
@@ -188,6 +265,8 @@ def _acceptable(text, template) -> bool:
         return False
     if _TECH_TERMS.search(text) or _BAD_TAG_RE.search(text):
         return False
+    if _WRONG_STEP_ASK_RE.search(text):
+        return False
     if _PHONE_RE.search(text) or _PRICE_RE.search(text) or _SCHEDULE_RE.search(text):
         return False
     # Bộ chặn câu HỎI chẩn đoán của dự án: rẻ, và bắt được dạng LLM lỡ viết
@@ -197,42 +276,63 @@ def _acceptable(text, template) -> bool:
     return True
 
 
-def soften(sess, message, state, template, facts=None):
-    """Viết lại `template` cho tự nhiên và trả lời đúng câu người dùng vừa hỏi.
+def answer(sess, message, state, template, facts=None):
+    """Viết lại `template` cho tự nhiên, ĐỒNG THỜI xét có nên chuyển người thật.
 
     Không bao giờ raise. Mọi sự cố (LLM tắt, timeout, JSON hỏng, câu vi phạm bộ
     kiểm duyệt) đều trả về CHÍNH `template` — tức hội thoại lùi về đúng hành vi
     rule-based cũ.
 
+    Gộp hai việc vào MỘT lượt gọi là có chủ đích: lượt này đã phải gọi LLM để
+    viết câu rồi, nên việc nhận diện ý định "muốn gặp người thật" đi kèm không
+    tốn thêm request nào. Nhận diện bằng ngữ nghĩa bắt được những câu mà bộ từ
+    khoá `safety.HANDOFF_PATTERNS` không bao giờ bắt được ("bot này chả hiểu gì",
+    "chán quá") — nhưng bộ từ khoá VẪN được giữ ở router làm đường thoát khi LLM
+    tắt hoặc lỗi (xem module docstring của triage/llm.py).
+
     Args:
-        sess: session dict (đọc dept_code, candidates, user_turns — không ghi).
+        sess: session dict. Đọc dept_code/candidates/user_turns, và GHI
+            `stuck_turns` — số lượt liên tiếp bộ luật bó tay (xem `is_stuck`).
         message: câu người dùng vừa gõ.
         state: bước hiện tại, phải nằm trong `_ALLOWED_STATES`.
         template: câu mặc định của bước (HTML), cũng là fallback.
         facts: dict {nhãn: giá trị} dữ kiện thêm của bước, vd. danh sách bác sĩ.
 
     Returns:
-        Chuỗi HTML để đưa vào `reply()`.
+        (text, wants_handoff) — text là chuỗi HTML để đưa vào `reply()`.
     """
+    # Đếm ở đây vì đây là NƠI DUY NHẤT mọi nhánh fallback đi qua. Bộ đếm là
+    # đường thoát tất định cho AC "chatbot chủ động đề xuất chuyển tiếp": LLM tắt
+    # thì vẫn phải nhận ra mình đang loay hoay.
+    sess["stuck_turns"] = sess.get("stuck_turns", 0) + 1
+
     if not is_enabled() or state not in _ALLOWED_STATES:
-        return template
+        return template, False
     message = (message or "").strip()
     if not message:
-        return template
+        return template, False
     # Phòng thủ nhiều lớp: router đã chặn cấp cứu/handoff trước khi tới bước, còn
     # yêu cầu chẩn đoán thì template đã chứa sẵn câu từ chối chuẩn — không giao
     # cho LLM diễn đạt lại lời từ chối.
     if safety.check_emergency(message) or safety.is_diagnosis_request(message):
-        return template
+        return template, False
 
     payload = llm.chat_json(_SYSTEM_PROMPT,
                             _context(sess, message, state, template, facts),
                             max_tokens=MAX_TOKENS, temperature=TEMPERATURE)
     if not isinstance(payload, dict):
-        return template
+        return template, False
+
+    # Cờ handoff đọc ĐỘC LẬP với chất lượng câu trả lời: câu chữ bị bộ kiểm duyệt
+    # loại không có nghĩa là ý định của bệnh nhân đọc sai, mà chuyển sang người
+    # thật thì luôn là hướng an toàn.
+    wants_handoff = payload.get("handoff") is True
+    if wants_handoff and _is_booking_not_escalation(message):
+        wants_handoff = False  # "gặp bác sĩ" = muốn đi khám, xem _CLINICIAN_WORDS
+
     candidate = payload.get("reply")
     if not _acceptable(candidate, template):
-        return template
+        return template, wants_handoff
     text = candidate.strip()
 
     # Ở CONFIRM_DEPT, câu người dùng hỏi hầu như luôn là "sao lại là dịch vụ này?"
@@ -241,4 +341,20 @@ def soften(sess, message, state, template, facts=None):
     # và không giao việc đó cho LLM nhớ hộ.
     if state == "CONFIRM_DEPT" and sess.get("dept_code"):
         text = safety.add_disclaimer(text)
-    return text
+    return text, wants_handoff
+
+
+# Bao nhiêu lượt LIÊN TIẾP rơi vào nhánh fallback thì coi là bot đang loay hoay.
+# 3 chứ không phải 2: lượt đầu người dùng có thể chỉ gõ lạc đề một câu, lượt hai
+# hỏi lại là bình thường; tới lượt ba mà vẫn không nhích được bước nào thì đề nghị
+# người thật là đúng lúc, chưa tới mức bỏ mặc mà cũng không vội vã.
+STUCK_LIMIT = 3
+
+
+def is_stuck(sess) -> bool:
+    """Bộ luật đã bó tay đủ nhiều lượt liên tiếp để nên đề nghị gặp nhân viên chưa?
+
+    Bộ đếm tăng trong `answer()` và được `router.handle_message()` đặt lại về 0
+    mỗi khi hội thoại NHÍCH ĐƯỢC sang bước khác.
+    """
+    return sess.get("stuck_turns", 0) >= STUCK_LIMIT

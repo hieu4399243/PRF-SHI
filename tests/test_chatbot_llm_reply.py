@@ -185,3 +185,58 @@ def test_luat_hieu_duoc_thi_khong_goi_llm(llm_on):
     assert "Trám răng / Sâu răng" in resp["reply"]
     assert chatbot.handle_message("rule", "yes")["state"] == "PICK_DOCTOR"
     assert not llm_on
+
+
+# --- "gặp bác sĩ" KHÁC "gặp nhân viên" -------------------------------------
+# Bug quan sát trên demo: "Tôi cần gặp bác sĩ" bị đẩy thẳng sang nhân viên,
+# trong khi đó chính là luồng ĐẶT LỊCH — việc chính của bot.
+@pytest.mark.parametrize("msg", [
+    "Tôi cần gặp bác sĩ",
+    "tôi cần gặp bác sĩ để biết chi tiết hơn",
+    "cho tôi gặp nha sĩ",
+])
+def test_muon_gap_bac_si_thi_khong_phai_chuyen_nhan_vien(llm_on, monkeypatch, msg):
+    monkeypatch.setattr(llm_reply.llm, "chat_json",
+                        lambda *a, **k: {"reply": "", "handoff": True})  # LLM đọc SAI
+    chatbot.start("doc")
+    assert not chatbot.handle_message("doc", msg)["state"].startswith("HANDOFF")
+
+
+@pytest.mark.parametrize("msg", [
+    "cho tôi gặp nhân viên",
+    "tôi muốn khiếu nại về bác sĩ",      # có "bác sĩ" nhưng là khiếu nại
+    "cho tôi gặp người thật chứ không phải bác sĩ",
+])
+def test_van_chuyen_khi_that_su_can_nguoi_ho_tro(llm_on, monkeypatch, msg):
+    monkeypatch.setattr(llm_reply.llm, "chat_json",
+                        lambda *a, **k: {"reply": "", "handoff": True})
+    chatbot.start("staff")
+    # Sau khi chuyển tiếp, bot còn xin tên+SĐT (HANDOFF_ASK_CONTACT) rồi mới về
+    # HANDOFF — cả hai đều nghĩa là "đã chuyển sang nhân viên".
+    assert chatbot.handle_message("staff", msg)["state"].startswith("HANDOFF")
+
+
+# --- Không được hỏi sang việc của BƯỚC KHÁC --------------------------------
+# Bug: ở TRIAGE (chưa chốt dịch vụ) LLM hỏi "Bạn muốn đặt lịch vào ngày nào?",
+# người dùng đáp "ngày mai đi" -> ngõ cụt vì máy trạng thái vẫn đứng ở TRIAGE.
+@pytest.mark.parametrize("bad", [
+    "Được rồi, bạn muốn đặt lịch vào ngày nào?",
+    "Bạn muốn khám vào khung giờ nào ạ?",
+    "Cho mình xin số điện thoại của bạn nhé.",
+    "Bạn cho mình xin họ tên nhé.",
+])
+def test_cau_hoi_sai_buoc_bi_loai(llm_on, monkeypatch, bad):
+    monkeypatch.setattr(llm_reply.llm, "chat_json", lambda *a, **k: {"reply": bad})
+    chatbot.start("step")
+    assert "chưa rõ triệu chứng" in _reply_of("step", UNKNOWN)
+
+
+def test_cau_hoi_trieu_chung_van_duoc_nhan(llm_on, monkeypatch):
+    """"khi nào / bao lâu" là câu hỏi triệu chứng hợp lệ, đừng chặn nhầm.
+
+    (Câu mẫu tránh cụm "bạn bị" — cụm đó bị bộ chặn khẳng định bệnh loại từ trước.)
+    """
+    ok = "Tình trạng này kéo dài bao lâu rồi, và ê buốt tăng lên khi nào ạ?"
+    monkeypatch.setattr(llm_reply.llm, "chat_json", lambda *a, **k: {"reply": ok})
+    chatbot.start("sym")
+    assert _reply_of("sym", UNKNOWN) == ok

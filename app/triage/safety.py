@@ -73,9 +73,26 @@ _SEED_DIAGNOSIS_REQUEST_PATTERNS = [
 ]
 
 # Từ khóa cho biết người dùng muốn gặp NHÂN VIÊN THẬT (human handoff).
+#
+# Nguyên tắc khi thêm: liệt kê MỌI CÁCH GỌI CON NGƯỜI ở phòng khám, trừ
+# "bác sĩ"/"nha sĩ" — hai từ đó ở đây nghĩa là muốn ĐI KHÁM, tức luồng đặt lịch
+# bình thường (xem chatbot/llm_reply.py::_is_booking_not_escalation).
+#
+# Bài học từ lỗi thật: bản đầu chỉ có 7 mục nên "tôi cần gặp y tá" rơi tọt qua cả
+# lớp từ khoá lẫn lớp LLM, và bot trả lời "mình không có chức năng hẹn gặp y tá"
+# — đúng chữ nhưng sai hẳn nghiệp vụ, vì AC là "yêu cầu gặp nhân viên BẤT CỨ LÚC
+# NÀO". Danh sách này cố ý RỘNG: nhận nhầm thì cùng lắm chuyển sang người thật,
+# còn bỏ sót thì bệnh nhân bị bỏ rơi.
 _SEED_HANDOFF_PATTERNS = [
-    "gặp người", "nhân viên", "tư vấn viên", "gọi cho tôi",
-    "khiếu nại", "không hài lòng", "nói chuyện với người thật",
+    # Cách gọi người hỗ trợ
+    "gặp người", "nhân viên", "tư vấn viên", "y tá", "điều dưỡng", "lễ tân",
+    "trợ lý", "quản lý", "người phụ trách", "người hỗ trợ", "tổng đài",
+    "chăm sóc khách hàng", "người thật", "người trực",
+    # Cách diễn đạt ý muốn thoát khỏi bot
+    "nói chuyện với người thật", "gọi cho tôi", "gọi lại cho tôi",
+    "gặp ai đó", "có ai đó không", "có ai không",
+    # Bất mãn -> cũng phải tới người thật
+    "khiếu nại", "phàn nàn", "không hài lòng",
 ]
 
 
@@ -179,3 +196,38 @@ def audit(session_id: str, role: str, message: str, meta: dict | None = None):
     except Exception:
         pass  # log lỗi (bất kỳ loại nào, kể cả TypeError từ json.dumps trên meta
               # không serialize được) không được làm gián đoạn hội thoại.
+
+
+def session_transcript(session_id: str, limit: int = 100):
+    """Dựng lại hội thoại của MỘT phiên từ audit log, cũ trước mới sau.
+
+    Dùng khi chuyển tiếp sang nhân viên (CB-05): nhân viên phải đọc được toàn bộ
+    những gì đã trao đổi. Đọc lại từ audit log thay vì giữ thêm một bản lịch sử
+    trong `SESSIONS` vì audit log MỚI là bản ghi đầy đủ (cả hai phía, đã ẩn PII,
+    có timestamp) và không mất khi phiên hết TTL.
+
+    Hệ quả phải chấp nhận: transcript đã ẩn PII, nên nhân viên KHÔNG thấy tên/SĐT
+    trong đó — hai trường ấy đi riêng trong bản ghi handoff (xem handoff_step).
+    Lượt ngoài cùng bên phải là mới nhất; `limit` cắt bớt phần đầu nếu quá dài.
+
+    Trả [] nếu chưa có log (lần chạy đầu) hoặc file hỏng — không bao giờ raise:
+    thiếu transcript không được phép làm hỏng việc chuyển tiếp.
+    """
+    turns = []
+    for path in (AUDIT_LOG_PATH + ".1", AUDIT_LOG_PATH):  # bản xoay vòng trước
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        entry = json.loads(line)
+                    except json.JSONDecodeError:
+                        continue  # dòng ghi dở (crash giữa chừng) -> bỏ qua
+                    if entry.get("session") == session_id:
+                        turns.append({
+                            "ts": entry.get("ts"),
+                            "role": entry.get("role"),
+                            "message": entry.get("message"),
+                        })
+        except OSError:
+            continue
+    return turns[-limit:]

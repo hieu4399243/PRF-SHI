@@ -12,7 +12,7 @@ from ...core.catalog import DEPARTMENTS
 from ...triage import nlu
 from .. import flex, llm_reply
 from ..reply import reply
-from . import schedule_step
+from . import handoff_step, schedule_step
 
 
 def start_doctor_pick(sess, prefix=""):
@@ -81,13 +81,13 @@ def pick_doctor(sess, message):
         "Mình chưa rõ bạn muốn khám với bác sĩ nào. Bạn có thể <b>bấm nút</b>, gõ "
         "<b>tên bác sĩ</b> (vd. <i>“bác sĩ Châu”</i>), gõ <b>“ai cũng được”</b> để mình "
         "xếp giúp, hoặc <b>“đổi dịch vụ”</b> nếu muốn chọn dịch vụ khác.")
-    return reply(
-        llm_reply.soften(sess, message, "PICK_DOCTOR", template,
-                         facts={"BÁC SĨ CỦA DỊCH VỤ NÀY (chỉ được nhắc các tên này)":
-                                ", ".join(d["name"] for d in doctors)}),
-        options=doctor_options(doctors),
-        state="PICK_DOCTOR",
-    )
+    text, wants_handoff = llm_reply.answer(
+        sess, message, "PICK_DOCTOR", template,
+        facts={"BÁC SĨ CỦA DỊCH VỤ NÀY (chỉ được nhắc các tên này)":
+               ", ".join(d["name"] for d in doctors)})
+    escalated = handoff_step.maybe_escalate(sess, wants_handoff)
+    return escalated or reply(text, options=doctor_options(doctors),
+                              state="PICK_DOCTOR")
 
 
 def doctor_options(doctors):

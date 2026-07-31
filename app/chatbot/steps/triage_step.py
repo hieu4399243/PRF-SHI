@@ -10,6 +10,7 @@ from ...core.catalog import DEPARTMENTS, SERVICE_INFO
 from ...triage import nlu, safety
 from ... import triage
 from .. import llm_reply
+from . import handoff_step
 from ..reply import reply
 
 
@@ -50,12 +51,11 @@ def do_triage(sess, message):
             diag_note + "Mình chưa rõ triệu chứng của bạn. "
             + triage.FOLLOWUP_QUESTIONS[0]
             + "<br><i>Bạn có thể mô tả cụ thể hơn, ví dụ vị trí đau, thời gian, mức độ.</i>")
-        return reply(
-            llm_reply.soften(sess, message, "TRIAGE", template,
-                             facts={"CÂU HỎI GỢI Ý ĐỂ LÀM RÕ":
-                                    " | ".join(triage.FOLLOWUP_QUESTIONS)}),
-            state="TRIAGE",
-        )
+        text, wants_handoff = llm_reply.answer(
+            sess, message, "TRIAGE", template,
+            facts={"CÂU HỎI GỢI Ý ĐỂ LÀM RÕ": " | ".join(triage.FOLLOWUP_QUESTIONS)})
+        escalated = handoff_step.maybe_escalate(sess, wants_handoff)
+        return escalated or reply(text, state="TRIAGE")
 
     sess["candidates"] = results
     top = results[0]
@@ -185,12 +185,11 @@ def confirm_dept(sess, message):
     template = (
         "Bạn vui lòng chọn một dịch vụ ở các nút bên trên, gõ <b>tên dịch vụ</b>, hoặc "
         "<b>mô tả lại triệu chứng</b> nhé. Nếu không cần đặt lịch nữa, gõ <b>“thôi”</b>.")
-    return reply(
-        llm_reply.soften(sess, message, "CONFIRM_DEPT", template,
-                         facts={"NÚT ĐANG HIỂN THỊ":
-                                " | ".join(o["label"] for o in options)}),
-        options=options,
-        state="CONFIRM_DEPT")
+    text, wants_handoff = llm_reply.answer(
+        sess, message, "CONFIRM_DEPT", template,
+        facts={"NÚT ĐANG HIỂN THỊ": " | ".join(o["label"] for o in options)})
+    escalated = handoff_step.maybe_escalate(sess, wants_handoff)
+    return escalated or reply(text, options=options, state="CONFIRM_DEPT")
 
 
 def advance_after_dept(sess):
