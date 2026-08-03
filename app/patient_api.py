@@ -3,8 +3,8 @@ API cho trang bệnh nhân — PAT-01 (tổng quan + lịch sử) và REC-01/02 
 
 Hai chế độ:
 
-  - **Đã đăng nhập** (role='patient'): lịch sử, lịch hẹn, gợi ý cá nhân hoá, và
-    hành động (bỏ qua gợi ý) được lưu bền.
+  - **Đã đăng nhập** (role='patient' hoặc 'guest' — xem `PATIENT_ROLES`): lịch sử,
+    lịch hẹn, gợi ý cá nhân hoá, và hành động (bỏ qua gợi ý) được lưu bền.
   - **Khách chưa đăng nhập**: vẫn xem được trang gợi ý, nhưng hệ thống chưa biết là
     ai nên luôn rơi vào nhánh cold-start (dịch vụ phổ biến). Không đọc được lịch
     sử/lịch hẹn của bất kỳ ai, và không ghi được gì bền. Khách vẫn đặt lịch qua
@@ -32,10 +32,19 @@ patient_api = Blueprint("patient_api", __name__, url_prefix="/api/patient")
 PATIENT_ACTIONS = ("book", "dismiss", "skip_all", "view_detail", "no_action")
 
 
+# Role của tài khoản bệnh nhân. Có HAI tên cho cùng một thứ: `/api/register` và
+# `scripts/seed_users.py` tạo tài khoản bệnh nhân với role='guest' (tên cũ, còn
+# trong CHECK constraint gốc của bảng users), còn role='patient' là tên mới thêm
+# sau. Chỉ nhận 'patient' ở đây thì MỌI tài khoản đăng ký thật đều rơi vào nhánh
+# khách -> đăng nhập xong màn gợi ý vẫn hiện "khách chưa đăng nhập".
+# "Khách" = KHÔNG có token hợp lệ, không phải "role tên là guest".
+PATIENT_ROLES = {"patient", "guest"}
+
+
 def current_patient():
     """Bệnh nhân đang đăng nhập, hoặc None. Không raise khi thiếu DB/token."""
     user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
-    if not user or user.get("role") != "patient":
+    if not user or user.get("role") not in PATIENT_ROLES:
         return None
     return user
 

@@ -128,15 +128,27 @@ def test_man_goi_y_mo_duoc_ca_khi_chua_dang_nhap(client):
     assert "chatPanel" in html
 
 
-def test_role_khac_khong_duoc_coi_la_benh_nhan(monkeypatch):
-    """current_patient() phải từ chối cả user đã đăng nhập nhưng role khác."""
-    for role in ("admin", "doctor", "guest"):
+def test_role_nhan_vien_khong_duoc_coi_la_benh_nhan(monkeypatch):
+    """current_patient() phải từ chối user đã đăng nhập nhưng là admin/nha sĩ."""
+    for role in ("admin", "doctor"):
         monkeypatch.setattr(
             patient_api_module.auth, "resolve_user_from_token",
             lambda _t, role=role: {"id": "u9", "role": role})
         main.app.config["TESTING"] = True
         with main.app.test_request_context("/api/patient/me"):
             assert patient_api_module.current_patient() is None
+
+
+def test_tai_khoan_dang_ky_role_guest_van_la_benh_nhan(monkeypatch):
+    """`/api/register` tạo role='guest' — đó là bệnh nhân có tài khoản, KHÔNG phải
+    khách vãng lai. Nhận nhầm thì đăng nhập xong màn gợi ý vẫn báo "khách"."""
+    for role in ("patient", "guest"):
+        monkeypatch.setattr(
+            patient_api_module.auth, "resolve_user_from_token",
+            lambda _t, role=role: {"id": "u9", "role": role})
+        main.app.config["TESTING"] = True
+        with main.app.test_request_context("/api/patient/me"):
+            assert patient_api_module.current_patient() is not None
 
 
 # ---------------------------------------------------------------------------
