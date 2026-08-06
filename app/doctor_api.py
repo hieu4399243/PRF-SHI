@@ -5,7 +5,7 @@ from flask import Blueprint, abort, jsonify, request
 from . import reco
 from .booking import service as booking
 from .core import auth, storage
-from .core.catalog import DEPARTMENTS
+from .core.catalog import DEPARTMENTS, WORK_SLOTS
 
 
 doctor_api = Blueprint("doctor_api", __name__, url_prefix="/api/doctor")
@@ -96,6 +96,10 @@ def doctor_meta():
         "doctor": _doctor_profile(doctor_id),
         "dates": _doctor_known_dates(doctor_id),
         "summary": summary,
+        # Lưới lịch khám dựng hàng theo khung giờ chuẩn. Client KHÔNG tự hardcode:
+        # `WORK_SLOTS` đổi thì lưới phải đổi theo, không thì có lịch hẹn rơi vào
+        # khung không tồn tại trên lưới và biến mất khỏi màn hình.
+        "work_slots": list(WORK_SLOTS),
     })
 
 

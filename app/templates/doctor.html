@@ -99,6 +99,9 @@
   .modal .row{display:flex;gap:8px;align-items:center;margin-top:12px}
   .modal .row input[type="checkbox"]{width:auto}
   .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  .txDetail{border:1px solid var(--line);border-radius:8px;padding:10px 12px;
+            display:grid;grid-template-columns:1fr 1fr;gap:8px 14px;font-size:13px}
+  .txDetail label{margin:0 0 2px}
   .modal .ghost{background:#fff;color:var(--body);border:1px solid var(--line)}
   .modal .ghost:hover{background:#f5f7f7}
   .modal.wide{max-width:660px;max-height:86vh;overflow-y:auto}
@@ -126,6 +129,64 @@
   .reason{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
   .coldNote{background:#fdf3e6;border:1px solid #f0d5aa;color:#8a5a12;border-radius:8px;
             padding:9px 11px;font-size:12px;line-height:1.45;margin-bottom:10px}
+
+  /* Lưới lịch khám (BS-01): hàng = khung giờ, cột = ngày trong tuần */
+  .gridBar{display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
+  .gridBar b{font-size:13px;color:var(--ink);min-width:190px;text-align:center}
+  .navBtn{background:#fff;color:var(--body);border:1px solid var(--line);
+          padding:4px 11px;font-size:15px;line-height:1.1}
+  .navBtn:hover{background:#f3f5f7}
+  .chips{display:flex;gap:0;margin-left:auto;border:1px solid var(--line);border-radius:8px;
+         overflow:hidden}
+  .chip{background:#fff;color:var(--muted);border:0;border-radius:0;padding:5px 13px;font-size:12px}
+  .chip.on{background:var(--teal);color:#fff}
+  .chip:hover{background:#f3f5f7}
+  .chip.on:hover{background:var(--teal)}
+  .ghostBtn{background:#fff;color:var(--body);border:1px solid var(--line);
+            padding:5px 12px;font-size:12px}
+  .ghostBtn:hover{background:#f3f5f7}
+  table.grid{table-layout:fixed;min-width:760px}
+  table.grid th,table.grid td{border:1px solid var(--line);padding:0;vertical-align:top}
+  table.grid th{background:var(--teal-tint);color:var(--teal-deep);font-size:11px;
+                text-align:center;padding:7px 4px;text-transform:none;letter-spacing:0}
+  table.grid th.today{background:var(--teal);color:#fff}
+  td.hour{background:#f7f9f9;color:var(--muted);font-size:11px;font-weight:600;
+          text-align:center;padding:10px 4px;width:64px}
+  td.cell{height:52px}
+  .ev{display:block;width:100%;height:100%;min-height:52px;text-align:left;border:0;
+      border-left:3px solid var(--teal);border-radius:0;background:#f4faf9;color:var(--body);
+      padding:5px 7px;font-size:11px;line-height:1.35;cursor:pointer}
+  .ev:hover{background:#e7f4f1}
+  .ev b{display:block;color:var(--ink);font-size:11.5px;white-space:nowrap;
+        overflow:hidden;text-overflow:ellipsis}
+  .ev span{color:var(--muted);display:block;white-space:nowrap;overflow:hidden;
+           text-overflow:ellipsis}
+  .ev.recorded{border-left-color:#146c43;background:#eef7f1}
+  .ev.recorded:hover{background:#e3f1e8}
+  .ev.cancelled{border-left-color:var(--cancel);background:#fbf3f3;opacity:.75}
+  .ev.cancelled:hover{background:#f7e9e9}
+  /* Lớp phủ chờ: GIỮ lưới cũ mờ đi thay vì xoá trắng — đổi tuần mà bảng trống
+     một nhịp thì nhìn như mất dữ liệu. */
+  .gridWrap{position:relative}
+  .loadOverlay{position:absolute;inset:0;background:rgba(255,255,255,.72);
+               display:flex;align-items:center;justify-content:center;gap:9px;
+               font-size:12px;color:var(--muted);z-index:5}
+  /* Cùng bẫy với .modalBack ở trên: `.hide` đứng TRƯỚC và cùng độ ưu tiên (0,1,0)
+     nên display:flex thắng -> lớp phủ chờ đứng mãi dù dữ liệu đã về. */
+  .loadOverlay.hide{display:none}
+  .spinner{width:16px;height:16px;border:2px solid var(--line);
+           border-top-color:var(--teal);border-radius:50%;display:inline-block;
+           animation:spin .7s linear infinite}
+  .btnMini .spinner,button .spinner{width:12px;height:12px;border-width:2px;
+           border-color:rgba(255,255,255,.45);border-top-color:#fff;
+           vertical-align:-2px;margin-right:6px}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .legend{display:flex;gap:16px;margin-top:10px;font-size:11px;color:var(--muted)}
+  .legend i{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:5px;
+            vertical-align:-1px}
+  .sw.confirmed{background:var(--teal)}
+  .sw.recorded{background:#146c43}
+  .sw.cancelled{background:var(--cancel)}
 
   @media (max-width: 640px){
     .head{padding:14px 12px}
@@ -170,7 +231,7 @@
 
   <div class="tabs">
     <button id="tabList" class="active" onclick="showTab('list')">📋 Lịch hẹn của tôi</button>
-    <button id="tabSched" onclick="showTab('sched')">🗓️ Lịch làm việc trong ngày</button>
+    <button id="tabSched" onclick="showTab('sched')">🗓️ Lịch khám</button>
   </div>
 
   <div id="viewList">
@@ -205,15 +266,29 @@
 
   <div id="viewSched" class="hide">
     <div class="card">
-      <h2>Chọn ngày</h2>
-      <div class="filters">
-        <div><label>Ngày</label><select id="sDate"></select></div>
-        <div><button onclick="loadSched()">Xem lịch làm việc</button></div>
+      <div class="gridBar">
+        <button class="navBtn" onclick="shiftPeriod(-1)" aria-label="Kỳ trước">‹</button>
+        <b id="schedTitle">Lịch khám</b>
+        <button class="navBtn" onclick="shiftPeriod(1)" aria-label="Kỳ sau">›</button>
+        <span class="chips">
+          <button id="chipWeek" class="chip on" onclick="setMode('week')">Tuần</button>
+          <button id="chipDay" class="chip" onclick="setMode('day')">Ngày</button>
+        </span>
+        <button class="ghostBtn" onclick="goToday()">Hôm nay</button>
       </div>
-    </div>
-    <div class="card">
-      <h2 id="schedTitle">Lịch làm việc</h2>
-      <div id="slots"></div>
+      <div class="gridWrap">
+        <div class="tableScroll">
+          <table class="grid" id="schedGrid"></table>
+        </div>
+        <div class="loadOverlay hide" id="schedLoading">
+          <span class="spinner"></span> Đang tải lịch…
+        </div>
+      </div>
+      <div class="legend">
+        <span><i class="sw confirmed"></i>Đã xác nhận</span>
+        <span><i class="sw recorded"></i>Đã khám</span>
+        <span><i class="sw cancelled"></i>Đã hủy</span>
+      </div>
     </div>
   </div>
 </div>
@@ -225,26 +300,30 @@
      cold-start), nên bỏ trống bảng này là màn gợi ý không bao giờ cá nhân hoá. -->
 <div id="txModal" class="modalBack hide">
   <div class="modal" role="dialog" aria-modal="true" aria-labelledby="txTitle">
-    <h3 id="txTitle">Ghi kết quả khám</h3>
+    <h3 id="txTitle">Chi tiết lịch</h3>
     <div class="sub" id="txSub"></div>
-    <label for="txOutcome">Kết quả</label>
-    <select id="txOutcome">
-      <option value="success">Hoàn tất</option>
-      <option value="partial">Hoàn tất một phần</option>
-      <option value="failed">Không thực hiện được</option>
-    </select>
-    <div class="row">
-      <input type="checkbox" id="txFollowup" onchange="txToggleFollowup()">
-      <label for="txFollowup" style="margin:0;text-transform:none;font-size:13px;color:var(--body)">
-        Hẹn tái khám</label>
-    </div>
-    <div id="txDueWrap" class="hide">
-      <label for="txDue">Ngày tái khám</label>
-      <input type="date" id="txDue">
+    <div class="txDetail" id="txDetail"></div>
+    <div id="txWhy" class="coldNote hide"></div>
+    <div id="txForm">
+      <label for="txOutcome">Kết quả</label>
+      <select id="txOutcome">
+        <option value="success">Hoàn tất</option>
+        <option value="partial">Hoàn tất một phần</option>
+        <option value="failed">Không thực hiện được</option>
+      </select>
+      <div class="row">
+        <input type="checkbox" id="txFollowup" onchange="txToggleFollowup()">
+        <label for="txFollowup" style="margin:0;text-transform:none;font-size:13px;color:var(--body)">
+          Hẹn tái khám</label>
+      </div>
+      <div id="txDueWrap" class="hide">
+        <label for="txDue">Ngày tái khám</label>
+        <input type="date" id="txDue">
+      </div>
     </div>
     <div class="actions">
-      <button class="ghost" onclick="txClose()">Hủy</button>
-      <button id="txSave" onclick="txSubmit()">Lưu</button>
+      <button class="ghost" onclick="txClose()">Đóng</button>
+      <button id="txSave" onclick="txSubmit()">Confirm đã khám</button>
     </div>
   </div>
 </div>
@@ -328,7 +407,8 @@ function fillMeta(meta){
 
   const dateOpts = (meta.dates || []).map(dv => `<option value="${dv}">${dv}</option>`).join("");
   $("fDate").innerHTML = '<option value="">Tất cả</option>' + dateOpts;
-  $("sDate").innerHTML = dateOpts || '<option value="">Không có ngày</option>';
+  // Khung giờ của lưới do server quyết định — xem `work_slots` ở /api/doctor/meta.
+  workSlots = meta.work_slots || [];
 }
 
 async function loadList(){
@@ -338,6 +418,7 @@ async function loadList(){
     phone:$("fPhone").value.trim(),
   });
   const data = await api("/api/doctor/appointments?"+q);
+  data.appointments.forEach(a => { apptByCode[a.code] = a; });
   $("count").textContent = data.count;
   $("listEmpty").classList.toggle("hide", data.count>0);
   $("rows").innerHTML = data.appointments.map(a => `
@@ -375,28 +456,52 @@ function txCell(a){
     const why = TX_BLOCKER_LABEL[a.record_blocker] || "—";
     return `<span style="color:var(--muted);font-size:11px">${why}</span>`;
   }
-  return `<button class="btnMini" data-tx="${esc(a.code)}"
-            data-name="${esc(a.patient_name||"")}"
-            data-date="${esc(a.date||"")}">Ghi kết quả</button>`;
+  return `<button class="btnMini" data-tx="${esc(a.code)}">Ghi kết quả</button>`;
 }
 
 let txCode = null;
+const apptByCode = {};            // gộp từ CẢ bảng lịch hẹn lẫn lưới lịch khám
 
 document.addEventListener("click", e => {
-  const tx = e.target.closest("[data-tx]");
-  if(tx){ txOpen(tx.dataset.tx, tx.dataset.name, tx.dataset.date); return; }
+  const btn = e.target.closest("[data-tx]") || e.target.closest("[data-ev]");
+  if(btn){ txOpen(btn.dataset.tx || btn.dataset.ev); return; }
   const px = e.target.closest("[data-px]");
   if(px) pxOpen(px.dataset.px);
 });
 
-function txOpen(code, name, date){
+/** Modal chi tiết lịch (BS-04). Mở được cho MỌI lịch — kể cả lịch đã ghi hoặc đã
+ *  hủy — vì trên lưới, ô lịch là chỗ duy nhất xem được chi tiết. Phần nhập kết
+ *  quả chỉ hiện khi server nói ghi được (`can_record_treatment`). */
+function txOpen(code){
+  const a = apptByCode[code];
+  if(!a) return;
   txCode = code;
-  $("txSub").textContent = `${code} · ${name || "bệnh nhân"} · ${date}`;
+  $("txSub").textContent = `${code} · ${a.date || ""}`;
+  $("txDetail").innerHTML = `
+    <div><label>Giờ</label>${esc(a.time || "—")}</div>
+    <div><label>Bệnh nhân</label>${patientLink(a)}</div>
+    <div><label>Dịch vụ</label>${esc(a.department || "—")}</div>
+    <div><label>Trạng thái</label>${txTrangThai(a)}</div>`;
+
+  const ghiDuoc = a.can_record_treatment;
+  $("txForm").classList.toggle("hide", !ghiDuoc);
+  $("txSave").classList.toggle("hide", !ghiDuoc);
+  $("txWhy").classList.toggle("hide", ghiDuoc || a.treatment_recorded);
+  if(!ghiDuoc && !a.treatment_recorded){
+    $("txWhy").textContent = "Chưa ghi được kết quả: "
+      + (TX_BLOCKER_LABEL[a.record_blocker] || "không rõ lý do") + ".";
+  }
   $("txOutcome").value = "success";
   $("txFollowup").checked = false;
   $("txDue").value = "";
   txToggleFollowup();
   $("txModal").classList.remove("hide");
+}
+
+function txTrangThai(a){
+  if(a.treatment_recorded) return '<span class="pill confirmed">Đã khám</span>';
+  if(a.status === "cancelled") return '<span class="pill cancelled">Đã hủy</span>';
+  return '<span class="pill confirmed">Đã xác nhận</span>';
 }
 
 function txClose(){
@@ -419,6 +524,7 @@ async function txSubmit(){
   }
   const btn = $("txSave");
   btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Đang lưu…';
   try {
     const r = await fetch("/api/doctor/treatment", {
       method: "POST",
@@ -445,32 +551,106 @@ async function txSubmit(){
     showToast("Lỗi kết nối: " + err.message, "err");
   } finally {
     btn.disabled = false;
+    btn.textContent = "Confirm đã khám";
     setTimeout(hideToast, 2600);
   }
 }
 
-async function loadSched(){
-  const date = $("sDate").value;
-  if(!date){
-    $("slots").innerHTML = '<div class="empty">Chưa có ngày khả dụng.</div>';
-    return;
-  }
-  const data = await api(`/api/doctor/schedule?date=${date}`);
-  $("schedTitle").textContent = `Lịch làm việc — ${date}`;
-  $("slots").innerHTML = data.slots.map(slotHTML).join("")
-    || '<div class="empty">Ngày này không có khung giờ làm việc.</div>';
+// ===========================================================================
+// Lưới lịch khám (BS-01): hàng = khung giờ, cột = ngày
+// ===========================================================================
+const DOW = ["CN", "T2", "T3", "T4", "T5", "T6", "T7"];
+let workSlots = [];
+let schedMode = "week";
+let anchor = new Date();          // ngày bất kỳ nằm trong kỳ đang xem
+let apptsByCell = {};             // "YYYY-MM-DD 08:00" -> lịch hẹn
+let schedToken = 0;               // chống response về trễ vẽ đè lưới mới
+
+const iso = d => d.toLocaleDateString("sv");          // 'sv' -> YYYY-MM-DD
+const addDays = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
+const ddmm = d => `${String(d.getDate()).padStart(2,"0")}/${String(d.getMonth()+1).padStart(2,"0")}`;
+
+/** Thứ 2 của tuần chứa `d`. JS coi CN là 0 nên phải lùi 6 ngày, không phải 1. */
+function mondayOf(d){
+  const wd = (d.getDay() + 6) % 7;
+  return addDays(d, -wd);
 }
 
-// Ghi kết quả ngay tại slot vừa khám xong: đó là thao tác tự nhiên của nha sĩ,
-// và cũng là nơi duy nhất `treatment_history` có thể lớn lên trong lúc chạy.
-function slotHTML(s){
-  const a = s.appt;
-  if(!a) return `<div class="slot free"><span><b>${esc(s.time)}</b></span><span>Trống</span></div>`;
-  return `<div class="slot busy">
-    <span><b>${esc(s.time)}</b> — ${patientLink(a)}
-      (${esc(a.patient_phone||"—")}) · ${esc(a.department||"")}</span>
-    <span class="slotActions">${txCell(a)}</span>
-  </div>`;
+function periodDays(){
+  if(schedMode === "day") return [new Date(anchor)];
+  const mon = mondayOf(anchor);
+  return Array.from({length: 7}, (_, i) => addDays(mon, i));
+}
+
+function setMode(mode){
+  schedMode = mode;
+  $("chipWeek").classList.toggle("on", mode === "week");
+  $("chipDay").classList.toggle("on", mode === "day");
+  loadSched();
+}
+
+function shiftPeriod(step){
+  anchor = addDays(anchor, schedMode === "day" ? step : step * 7);
+  loadSched();
+}
+
+function goToday(){
+  anchor = new Date();
+  loadSched();
+}
+
+/** Lịch hẹn của cả kỳ lấy trong MỘT lượt gọi `/appointments` (đã kèm sẵn cờ ghi
+ *  kết quả) thay vì 7 lượt `/schedule?date=` — cùng dữ liệu, ít request hơn. */
+async function loadSched(){
+  const days = periodDays();
+  const from = iso(days[0]), to = iso(days[days.length - 1]);
+  $("schedTitle").textContent = schedMode === "day"
+    ? `Ngày ${ddmm(days[0])}/${days[0].getFullYear()}`
+    : `Tuần ${ddmm(days[0])} – ${ddmm(days[6])}/${days[6].getFullYear()}`;
+
+  // Bấm ‹ › liên tục thì các request về KHÔNG theo thứ tự gửi. Chỉ lượt mới nhất
+  // được phép vẽ, nếu không lưới có thể dừng ở một tuần người dùng đã rời khỏi.
+  const token = ++schedToken;
+  $("schedLoading").classList.remove("hide");
+  try {
+    const data = await api("/api/doctor/appointments");
+    if(token !== schedToken) return;
+    apptsByCell = {};
+    for(const a of data.appointments){
+      apptByCode[a.code] = a;
+      if(!a.date || a.date < from || a.date > to) continue;
+      apptsByCell[`${a.date} ${a.time}`] = a;
+    }
+    renderGrid(days);
+  } finally {
+    if(token === schedToken) $("schedLoading").classList.add("hide");
+  }
+}
+
+function renderGrid(days){
+  const today = iso(new Date());
+  const head = `<thead><tr><th></th>${days.map(d =>
+    `<th class="${iso(d) === today ? "today" : ""}">${DOW[d.getDay()]} ${ddmm(d)}</th>`
+  ).join("")}</tr></thead>`;
+
+  const body = workSlots.map(time => `<tr>
+    <td class="hour">${esc(time)}</td>
+    ${days.map(d => `<td class="cell">${cellHTML(apptsByCell[`${iso(d)} ${time}`])}</td>`).join("")}
+  </tr>`).join("");
+
+  $("schedGrid").innerHTML = head + `<tbody>${body}</tbody>`;
+}
+
+function cellHTML(a){
+  if(!a) return "";
+  const cls = a.treatment_recorded ? "recorded" : (a.status === "cancelled" ? "cancelled" : "");
+  const trangThai = a.treatment_recorded ? "Đã khám"
+    : (a.status === "cancelled" ? "Đã hủy" : "Đã xác nhận");
+  return `<button class="ev ${cls}" data-ev="${esc(a.code)}">
+    <b>${esc(a.patient_name || "—")}</b>
+    <span>${esc(a.department || "")}</span>
+    <span>${trangThai}</span>
+  </button>`;
 }
 
 // ===========================================================================
