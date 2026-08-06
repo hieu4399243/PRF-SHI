@@ -102,19 +102,16 @@ docker compose up --build -d
 # Must run BEFORE first login; creates admin + doctor accounts
 docker compose exec web python -m scripts.seed_users
 
-# 5. (Demo/staging only) Seed the demo patients bn101..bn108
-# seed_users.py does NOT create these — they come from a separate script.
-# Skip this on a real production database.
-docker compose exec web python -m scripts.seed_reco_demo
-
-# 6. Verify services are running
+# 5. Verify services are running
 docker compose ps
 # Should show: db, web, worker all in "running" state with (healthy)
 ```
 
-**Important:** Step 4 (`seed_users.py`) is required before the app is usable with auth. This creates one admin account (`username=admin, password=test123`) and 11 doctor accounts.
+**Important:** Step 4 (`seed_users.py`) is required before the app is usable with auth. This creates one admin account (`username=admin, password=test123`), 11 doctor accounts, and five named sample patients (`nguyen_thi_mai`, …).
 
-**Demo patient accounts are a separate step.** `seed_users.py` creates admin, doctors, and five named sample patients (`nguyen_thi_mai`, …) — it does **not** create `bn101..bn108`. Those, along with the treatment history that drives the recommendation demo (cold-start for `bn107`, follow-up overdue for `bn101`, etc.), only exist after `scripts/seed_reco_demo.py`. Forgetting it is why the README's demo logins work locally but return "Username hoặc password sai" on a fresh deploy. It is idempotent, requires `DATABASE_URL`, and can be undone with `--purge`.
+**Recommendation data is not seeded — it is earned through the app.** A patient's `visit_count` only grows when a dentist records a completed visit, so the path on a fresh deploy is: book appointments through the chatbot widget → log in as that dentist at `/doctor` → **Lịch làm việc trong ngày** → **Ghi kết quả** on each slot → click the patient's name to open their profile and see the recommendations. Three recorded visits is the cold-start threshold (`reco.COLD_START_MIN_VISITS`). Today is inside the booking window, so all three can be done in one sitting.
+
+`scripts/seed_reco_demo.py` (the old `bn101..bn108` demo fixtures) still exists for `eval/`, but is deliberately **not** part of the deploy flow any more: it manufactures a treatment history nobody actually performed and hides the one link — dentist records the visit — that this deploy needs to prove works.
 
 ### Monitoring Logs
 
@@ -301,7 +298,7 @@ One-liner if already setup:
 - [ ] `JWT_EXPIRATION_HOURS` set appropriately (default 24)
 - [ ] `SECURE_COOKIE=true` set (only behind HTTPS)
 - [ ] User database seeded: `python -m scripts.seed_users` (or admin/doctor accounts created manually)
-- [ ] Demo patients (`bn101..bn108`) seeded if this is a demo/staging deploy: `python -m scripts.seed_reco_demo` — `seed_users.py` does not create them
+- [ ] Recommendation demo verified through the app, not seeded: book → **Ghi kết quả** at `/doctor` → patient profile (see "Recommendation data is not seeded" above)
 - [ ] `OPENROUTER_API_KEY` set (if using LLM)
 - [ ] Mobile app `config.js` points to production HTTPS URL (not LAN IP)
 - [ ] **Reverse proxy (Nginx/Caddy) configured** — docker-compose binds to `127.0.0.1:5001` (localhost-only); public access requires reverse proxy on port 80/443

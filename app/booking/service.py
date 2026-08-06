@@ -113,13 +113,17 @@ def _confirmed_at(doctor_id, date_str, time_str):
 
 
 def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
-                     patient_name="", patient_phone=""):
+                     patient_name="", patient_phone="", booked_by_user_id=None):
     """Ghi nhận lịch hẹn. Trả về (ok, payload).
 
     payload là dict thông tin lịch nếu thành công, hoặc {error: ...} nếu lỗi.
     Khung giờ đã bị chiếm (đối chiếu DB lúc xác nhận):
       - cùng SĐT   -> {duplicate: True, existing: {...}} (chính người này đã đặt).
       - người khác -> {error: ...} (mời chọn giờ khác).
+
+    `booked_by_user_id`: tài khoản đang đăng nhập, lấy từ JWT ở tầng HTTP — KHÔNG
+    nhận từ body. None = khách. Đây là thứ quyết định lịch này thuộc bệnh án ai;
+    `patient_phone` là số người dùng tự gõ nên không dùng để suy chủ nhân được.
     """
     # Khung giờ phải hợp lệ theo lịch làm việc.
     if time_str not in generate_available_slots().get(date_str, []):
@@ -153,6 +157,7 @@ def book_appointment(session_id, dept_code, doctor_id, date_str, time_str,
         "time": time_str,
         "created_at": datetime.now().isoformat(timespec="seconds"),
         "status": "confirmed",
+        "booked_by_user_id": booked_by_user_id,
     }
 
     return _insert_with_race_guard(appointment, date_str, time_str, patient_phone,

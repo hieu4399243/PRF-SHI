@@ -211,5 +211,20 @@
     "created_at": "2026-07-29T10:11:28",
     "status": "cancelled",
     "reminders_sent": []
+  },
+  {
+    "code": "SHI-TEXKQV",
+    "session": "test-session",
+    "patient_name": "Bệnh nhân Test",
+    "patient_phone": "0900000101",
+    "department": "Khám tổng quát & Cạo vôi",
+    "department_code": "kham_tong_quat",
+    "doctor": "BS. Nguyễn Văn An",
+    "doctor_id": "bs_tq_01",
+    "date": "2026-07-27",
+    "time": "09:00",
+    "created_at": "2026-07-27T08:00:00",
+    "status": "confirmed",
+    "reminders_sent": []
   }
 ]

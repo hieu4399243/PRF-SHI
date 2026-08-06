@@ -10,7 +10,7 @@ Trong sản phẩm thật, phần này sẽ được thay bằng cơ sở dữ l
 """
 
 import os
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 # ---------------------------------------------------------------------------
 # DANH MỤC DỊCH VỤ NHA KHOA  (mỗi dịch vụ có mã, tên, mô tả và bộ từ khóa)
@@ -436,14 +436,31 @@ def next_working_time(when):
     return cursor
 
 
-def generate_available_slots(num_days: int = 5):
-    """Sinh khung giờ trống cho vài ngày tới (bỏ qua Chủ nhật).
+def generate_available_slots(num_days: int = 5, now=None):
+    """Sinh khung giờ trống cho hôm nay (phần còn lại) + `num_days` ngày tới.
 
     Trả về dict: { 'YYYY-MM-DD': ['08:00', '08:30', ...] }
     Trong thực tế dữ liệu này lấy từ lịch thật của bác sĩ.
+    `now` (datetime) để cố định thời gian khi test.
+
+    Hôm nay CỐ Ý được tính vào: nha sĩ chỉ ghi được kết quả khám cho lịch hẹn đã
+    tới ngày (`chua_toi_ngay` trong doctor_api._treatment_blocker). Nếu ngày sớm
+    nhất đặt được là ngày mai thì mọi lịch đặt qua app đều nằm ở tương lai, không
+    lịch nào ghi được kết quả, `treatment_history` rỗng vĩnh viễn và màn gợi ý kẹt
+    ở cold-start — đứt ngay mắt xích đầu của luồng đặt lịch -> khám -> gợi ý.
+    Khung giờ đã trôi qua trong ngày thì không hiện, nên vẫn không đặt được lịch
+    vào quá khứ; hết giờ làm thì hôm nay biến mất khỏi danh sách như trước.
     """
     slots = {}
-    d = date.today() + timedelta(days=1)  # bắt đầu từ ngày mai
+    now = now or datetime.now()
+    today = now.date()
+    if today.weekday() != 6:
+        hhmm = now.strftime("%H:%M")
+        remaining = [s for s in WORK_SLOTS if s > hhmm]
+        if remaining:
+            slots[today.isoformat()] = remaining
+
+    d = today + timedelta(days=1)
     added = 0
     while added < num_days:
         if d.weekday() != 6:  # 6 = Chủ nhật

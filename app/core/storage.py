@@ -97,6 +97,12 @@ CREATE TABLE IF NOT EXISTS appointments (
     reminders_sent  JSONB NOT NULL DEFAULT '[]'::jsonb
 );
 ALTER TABLE appointments ADD COLUMN IF NOT EXISTS patient_phone TEXT;
+-- Tài khoản đã đặt lịch này (NULL = khách chưa đăng nhập). Đóng dấu từ JWT lúc
+-- đặt, client không truyền được. Đây là câu trả lời DUY NHẤT đáng tin cho "lịch
+-- này của ai": SĐT trên lịch hẹn là số người dùng TỰ GÕ, và đặt hộ bằng số của
+-- người khác là hợp lệ — suy chủ nhân từ SĐT làm ca khám chui vào bệnh án người
+-- khác. Không FK sang users(id) để xoá tài khoản không kéo theo mất lịch hẹn.
+ALTER TABLE appointments ADD COLUMN IF NOT EXISTS booked_by_user_id TEXT;
 CREATE TABLE IF NOT EXISTS device_tokens (
     session TEXT,
     token   TEXT,
@@ -264,7 +270,7 @@ DROP INDEX IF EXISTS ux_appointments_slot;
 
 _APPT_COLS = ["code", "session", "patient_name", "patient_phone", "department",
               "department_code", "doctor", "doctor_id", "date", "time", "created_at",
-              "status", "reminders_sent"]
+              "status", "reminders_sent", "booked_by_user_id"]
 _DOCTOR_COLS = ["id", "service_code", "name", "phone", "email", "created_at", "updated_at"]
 _PATIENT_COLS = ["id", "name", "phone", "email", "address", "notes", "created_at", "updated_at"]
 
@@ -399,14 +405,15 @@ def add_appointment(appt):
             cur.execute(
                 "INSERT INTO appointments "
                 "(code, session, patient_name, patient_phone, department, department_code, "
-                " doctor, doctor_id, date, time, created_at, status, reminders_sent) "
-                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
+                " doctor, doctor_id, date, time, created_at, status, reminders_sent, "
+                " booked_by_user_id) "
+                "VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)",
                 (appt["code"], appt.get("session"), appt.get("patient_name"),
                  appt.get("patient_phone"), appt.get("department"),
                  appt.get("department_code"), appt.get("doctor"),
                  appt.get("doctor_id"), appt.get("date"), appt.get("time"),
                  appt.get("created_at"), appt.get("status"),
-                 json.dumps(appt["reminders_sent"])),
+                 json.dumps(appt["reminders_sent"]), appt.get("booked_by_user_id")),
             )
             conn.commit()
         return
@@ -1250,6 +1257,36 @@ def get_user_by_patient_id(patient_id):
             "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
             "FROM users WHERE patient_id = %s",
             (patient_id,),
+        )
+        row = cur.fetchone()
+        if row:
+            return {
+                "id": row[0], "username": row[1], "password_hash": row[2],
+                "role": row[3], "email": row[4], "phone": row[5],
+                "address": row[6], "doctor_id": row[7], "patient_id": row[8],
+                "created_at": row[9], "updated_at": row[10],
+            }
+    return None
+
+
+def get_user_by_phone(phone):
+    """Tài khoản đang dùng SĐT này (role bất kỳ). None nếu chưa ai dùng.
+
+    SĐT là KHOÁ ĐỊNH DANH của lịch sử điều trị: `list_treatments()` gộp theo
+    (patient_id OR patient_phone), nên hai tài khoản mang cùng một SĐT nghĩa là hai
+    người đăng nhập cùng đọc được một lịch sử điều trị. Cột `users.phone` không có
+    ràng buộc UNIQUE (SĐT có thể trống, và tài khoản nha sĩ/admin dùng SĐT nội bộ),
+    nên chỗ chặn phải nằm ở luồng đăng ký — đây là hàm tra cho nó.
+    """
+    p = (phone or "").strip()
+    if not p or not USE_DB:
+        return None
+    init_schema()
+    with _connect() as conn, conn.cursor() as cur:
+        cur.execute(
+            "SELECT id, username, password_hash, role, email, phone, address, doctor_id, patient_id, created_at, updated_at "
+            "FROM users WHERE phone = %s ORDER BY created_at LIMIT 1",
+            (p,),
         )
         row = cur.fetchone()
         if row:

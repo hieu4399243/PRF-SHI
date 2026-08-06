@@ -81,6 +81,51 @@
          transition:opacity .2s, transform .2s;z-index:30}
   .toast.show{opacity:1;transform:translateY(0)}
   .toast.ok{background:#146c43}
+  .toast.err{background:#8a2c2c}
+  .btnMini{padding:4px 10px;font-size:11px;border-radius:6px}
+  .btnMini.done{background:#eef1f0;color:var(--muted);cursor:default}
+  .btnMini.done:hover{background:#eef1f0}
+  .modalBack{position:fixed;inset:0;background:rgba(15,23,32,.45);display:flex;
+             align-items:center;justify-content:center;z-index:40;padding:16px}
+  /* `.hide` đứng TRƯỚC rule này và cùng độ ưu tiên (0,1,0) -> display:flex thắng
+     và modal hiện thường trực. Cần selector nặng hơn để trạng thái ẩn thắng. */
+  .modalBack.hide{display:none}
+  .modal{background:#fff;border-radius:12px;padding:18px 20px;width:100%;max-width:420px}
+  .modal h3{margin:0 0 4px;font-size:16px;color:var(--ink)}
+  .modal .sub{font-size:12px;color:var(--muted);margin-bottom:14px}
+  .modal label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.03em;
+               color:var(--muted);margin:10px 0 4px}
+  .modal select,.modal input{width:100%}
+  .modal .row{display:flex;gap:8px;align-items:center;margin-top:12px}
+  .modal .row input[type="checkbox"]{width:auto}
+  .modal .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+  .modal .ghost{background:#fff;color:var(--body);border:1px solid var(--line)}
+  .modal .ghost:hover{background:#f5f7f7}
+  .modal.wide{max-width:660px;max-height:86vh;overflow-y:auto}
+  .modalHead{display:flex;align-items:flex-start;gap:12px;margin-bottom:14px}
+  .modalHead .ghost{margin-left:auto;padding:4px 10px;font-size:12px;flex:none}
+  .pxSection{margin-top:16px}
+  .pxSection h4{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);
+                margin:0 0 8px;border-bottom:1px solid var(--line);padding-bottom:4px}
+  .linkBtn{background:none;border:0;padding:0;color:var(--teal-deep);font:inherit;
+           cursor:pointer;text-decoration:underline}
+  .linkBtn:hover{background:none;color:var(--teal)}
+  .slotActions{display:flex;gap:8px;align-items:center;flex:none}
+  .rec{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-bottom:8px}
+  .rec.top{border-color:var(--teal);background:#fafdfc}
+  .recTop{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .rank{background:var(--teal-tint);color:var(--teal-deep);font-size:11px;font-weight:700;
+        border-radius:6px;padding:1px 7px}
+  .recName{font-weight:600;color:var(--ink);font-size:13px}
+  .badge{font-size:10.5px;font-weight:600;border-radius:20px;padding:2px 8px;margin-left:auto}
+  .badge.high{background:#fbe6e6;color:#a12b2b}
+  .badge.medium{background:#fdf1dd;color:#8a5a12}
+  .badge.low{background:#eef1f0;color:var(--muted)}
+  .fit{font-size:12px;color:var(--body);margin-top:6px}
+  .meta{font-size:11.5px;color:var(--muted)}
+  .reason{font-size:12px;color:var(--muted);margin-top:6px;line-height:1.45}
+  .coldNote{background:#fdf3e6;border:1px solid #f0d5aa;color:#8a5a12;border-radius:8px;
+            padding:9px 11px;font-size:12px;line-height:1.45;margin-bottom:10px}
 
   @media (max-width: 640px){
     .head{padding:14px 12px}
@@ -150,7 +195,7 @@
       <div class="tableScroll">
         <table>
           <thead><tr><th>Mã</th><th>Ngày</th><th>Giờ</th><th>Bệnh nhân</th>
-            <th>SĐT</th><th>Dịch vụ</th><th>Trạng thái</th></tr></thead>
+            <th>SĐT</th><th>Dịch vụ</th><th>Trạng thái</th><th>Kết quả</th></tr></thead>
           <tbody id="rows"></tbody>
         </table>
       </div>
@@ -175,9 +220,56 @@
 
 <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
+<!-- Ghi kết quả khám -> tạo 1 dòng treatment_history. Đây là nguồn dữ liệu DUY
+     NHẤT lúc chạy cho gợi ý cá nhân hoá của bệnh nhân (dưới 3 lượt vẫn là
+     cold-start), nên bỏ trống bảng này là màn gợi ý không bao giờ cá nhân hoá. -->
+<div id="txModal" class="modalBack hide">
+  <div class="modal" role="dialog" aria-modal="true" aria-labelledby="txTitle">
+    <h3 id="txTitle">Ghi kết quả khám</h3>
+    <div class="sub" id="txSub"></div>
+    <label for="txOutcome">Kết quả</label>
+    <select id="txOutcome">
+      <option value="success">Hoàn tất</option>
+      <option value="partial">Hoàn tất một phần</option>
+      <option value="failed">Không thực hiện được</option>
+    </select>
+    <div class="row">
+      <input type="checkbox" id="txFollowup" onchange="txToggleFollowup()">
+      <label for="txFollowup" style="margin:0;text-transform:none;font-size:13px;color:var(--body)">
+        Hẹn tái khám</label>
+    </div>
+    <div id="txDueWrap" class="hide">
+      <label for="txDue">Ngày tái khám</label>
+      <input type="date" id="txDue">
+    </div>
+    <div class="actions">
+      <button class="ghost" onclick="txClose()">Hủy</button>
+      <button id="txSave" onclick="txSubmit()">Lưu</button>
+    </div>
+  </div>
+</div>
+
+<!-- Hồ sơ bệnh nhân phía nha sĩ (trigger `dentist_view`): lịch sử điều trị đã ghi
+     + gợi ý dịch vụ từ chính engine của màn bệnh nhân. Dưới 3 lượt vẫn là
+     cold-start — đó là lý do khối "Đã khám" nằm ngay cạnh khối gợi ý. -->
+<div id="pxModal" class="modalBack hide">
+  <div class="modal wide" role="dialog" aria-modal="true" aria-labelledby="pxName">
+    <div class="modalHead">
+      <div>
+        <h3 id="pxName">Hồ sơ bệnh nhân</h3>
+        <div class="sub" id="pxSub" style="margin:0"></div>
+      </div>
+      <button class="ghost" onclick="pxClose()">✕ Đóng</button>
+    </div>
+    <div id="pxBody"></div>
+  </div>
+</div>
+
 <script>
 const $ = id => document.getElementById(id);
 const stat = (n,l) => `<div class="stat"><b>${n}</b><span>${l}</span></div>`;
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({ "&":"&amp;", "<":"&lt;", ">":"&gt;", '"':"&quot;", "'":"&#39;" }[c]));
 
 async function api(path){
   const r = await fetch(path, { credentials: "include" });
@@ -250,11 +342,111 @@ async function loadList(){
   $("listEmpty").classList.toggle("hide", data.count>0);
   $("rows").innerHTML = data.appointments.map(a => `
     <tr>
-      <td><b>${a.code}</b></td><td>${a.date}</td><td>${a.time}</td>
-      <td>${a.patient_name||""}</td><td>${a.patient_phone||""}</td>
-      <td>${a.department||""}</td>
-      <td><span class="pill ${a.status}">${a.status==="confirmed"?"Đã xác nhận":"Đã hủy"}</span></td>
+      <td><b>${esc(a.code)}</b></td><td>${esc(a.date)}</td><td>${esc(a.time)}</td>
+      <td>${patientLink(a)}</td><td>${esc(a.patient_phone||"")}</td>
+      <td>${esc(a.department||"")}</td>
+      <td><span class="pill ${esc(a.status)}">${a.status==="confirmed"?"Đã xác nhận":"Đã hủy"}</span></td>
+      <td>${txCell(a)}</td>
     </tr>`).join("");
+}
+
+// Tên bệnh nhân là đường vào hồ sơ + gợi ý. Không có SĐT thì không tra được hồ sơ
+// (SĐT là thứ duy nhất nối lịch hẹn với bệnh nhân) -> để chữ thường.
+function patientLink(a){
+  const name = esc(a.patient_name || "—");
+  if(!a.patient_phone) return name;
+  return `<button class="linkBtn" data-px="${esc(a.patient_phone)}">${name}</button>`;
+}
+
+// Server quyết định ghi được hay không (`can_record_treatment`) — client KHÔNG tự
+// suy. Bản đầu tự đoán theo status + ngày, nên nút vẫn hiện cho lịch mang mã khoa
+// cũ (ho_hap, tieu_hoa) rồi bấm vào chỉ nhận 400.
+const TX_BLOCKER_LABEL = {
+  da_ghi: null,                                   // hiện pill "Đã ghi" riêng
+  khong_phai_cua_ban: "Của bác sĩ khác",
+  chua_xac_nhan: "Đã hủy",
+  chua_toi_ngay: "Chưa tới ngày",
+  dich_vu_da_bo: "Dịch vụ đã ngừng",
+};
+
+function txCell(a){
+  if(a.treatment_recorded) return '<span class="pill confirmed">Đã ghi</span>';
+  if(!a.can_record_treatment){
+    const why = TX_BLOCKER_LABEL[a.record_blocker] || "—";
+    return `<span style="color:var(--muted);font-size:11px">${why}</span>`;
+  }
+  return `<button class="btnMini" data-tx="${esc(a.code)}"
+            data-name="${esc(a.patient_name||"")}"
+            data-date="${esc(a.date||"")}">Ghi kết quả</button>`;
+}
+
+let txCode = null;
+
+document.addEventListener("click", e => {
+  const tx = e.target.closest("[data-tx]");
+  if(tx){ txOpen(tx.dataset.tx, tx.dataset.name, tx.dataset.date); return; }
+  const px = e.target.closest("[data-px]");
+  if(px) pxOpen(px.dataset.px);
+});
+
+function txOpen(code, name, date){
+  txCode = code;
+  $("txSub").textContent = `${code} · ${name || "bệnh nhân"} · ${date}`;
+  $("txOutcome").value = "success";
+  $("txFollowup").checked = false;
+  $("txDue").value = "";
+  txToggleFollowup();
+  $("txModal").classList.remove("hide");
+}
+
+function txClose(){
+  txCode = null;
+  $("txModal").classList.add("hide");
+}
+
+function txToggleFollowup(){
+  $("txDueWrap").classList.toggle("hide", !$("txFollowup").checked);
+}
+
+async function txSubmit(){
+  if(!txCode){ txClose(); return; }   // không mở từ nút nào -> không có gì để lưu
+  const followup = $("txFollowup").checked;
+  const due = $("txDue").value;
+  if(followup && !due){
+    showToast("Cần chọn ngày tái khám.", "err");
+    setTimeout(hideToast, 2600);
+    return;
+  }
+  const btn = $("txSave");
+  btn.disabled = true;
+  try {
+    const r = await fetch("/api/doctor/treatment", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        appointment_code: txCode,
+        outcome: $("txOutcome").value,
+        followup_required: followup,
+        followup_due_date: followup ? due : null,
+      }),
+    });
+    const body = await r.json();
+    if(r.ok){
+      showToast("Đã ghi kết quả khám.");
+      txClose();
+      // Cùng một lịch hẹn xuất hiện ở CẢ hai tab và ở hồ sơ bệnh nhân đang mở —
+      // làm mới hết, nếu không thì slot vừa ghi vẫn mời bấm lần nữa (rồi 409).
+      await Promise.all([loadList(), loadSched(), pxRefresh()]);
+    } else {
+      showToast(body.error || "Không ghi được kết quả.", "err");
+    }
+  } catch (err) {
+    showToast("Lỗi kết nối: " + err.message, "err");
+  } finally {
+    btn.disabled = false;
+    setTimeout(hideToast, 2600);
+  }
 }
 
 async function loadSched(){
@@ -265,12 +457,142 @@ async function loadSched(){
   }
   const data = await api(`/api/doctor/schedule?date=${date}`);
   $("schedTitle").textContent = `Lịch làm việc — ${date}`;
-  $("slots").innerHTML = data.slots.map(s => s.appt
-    ? `<div class="slot busy"><span><b>${s.time}</b> — ${s.appt.patient_name}
-         (${s.appt.patient_phone||"—"}) · ${s.appt.department}</span>
-         <span class="pill confirmed">Đã đặt</span></div>`
-    : `<div class="slot free"><span><b>${s.time}</b></span><span>Trống</span></div>`
-  ).join("") || '<div class="empty">Ngày này không có khung giờ làm việc.</div>';
+  $("slots").innerHTML = data.slots.map(slotHTML).join("")
+    || '<div class="empty">Ngày này không có khung giờ làm việc.</div>';
+}
+
+// Ghi kết quả ngay tại slot vừa khám xong: đó là thao tác tự nhiên của nha sĩ,
+// và cũng là nơi duy nhất `treatment_history` có thể lớn lên trong lúc chạy.
+function slotHTML(s){
+  const a = s.appt;
+  if(!a) return `<div class="slot free"><span><b>${esc(s.time)}</b></span><span>Trống</span></div>`;
+  return `<div class="slot busy">
+    <span><b>${esc(s.time)}</b> — ${patientLink(a)}
+      (${esc(a.patient_phone||"—")}) · ${esc(a.department||"")}</span>
+    <span class="slotActions">${txCell(a)}</span>
+  </div>`;
+}
+
+// ===========================================================================
+// Hồ sơ bệnh nhân + gợi ý (dentist_view)
+// ===========================================================================
+let pxPhone = null;
+
+function money(n){
+  if(n == null) return null;
+  if(n >= 1000000) return (n/1000000).toFixed(n % 1000000 ? 1 : 0).replace(".0","") + " triệu";
+  return Math.round(n/1000) + "k";
+}
+
+function priceText(item){
+  const lo = money(item.price_from), hi = money(item.price_to);
+  if(lo && hi) return `${lo}–${hi}`;
+  if(lo) return `từ ${lo}`;
+  return "liên hệ";
+}
+
+const OUTCOME_LABEL = {success:"Hoàn tất", partial:"Hoàn tất một phần",
+                       failed:"Không thực hiện được"};
+const URGENCY_LABEL = {high:"Cần thiết", medium:"Nên làm", low:"Tham khảo"};
+
+function pxClose(){
+  pxPhone = null;
+  $("pxModal").classList.add("hide");
+}
+
+async function pxOpen(phone){
+  pxPhone = phone;
+  $("pxName").textContent = "Đang tải…";
+  $("pxSub").textContent = phone;
+  $("pxBody").innerHTML = '<div class="empty">Đang tải hồ sơ…</div>';
+  $("pxModal").classList.remove("hide");
+  await pxRefresh();
+}
+
+/** Tải lại hồ sơ đang mở. Không mở gì thì không làm gì — dùng sau khi ghi kết quả. */
+async function pxRefresh(){
+  if(!pxPhone) return;
+  const phone = pxPhone;
+  try {
+    const r = await fetch(`/api/doctor/patient?phone=${encodeURIComponent(phone)}`,
+                          { credentials: "include" });
+    const body = await r.json();
+    if(phone !== pxPhone) return;   // nha sĩ đã mở hồ sơ khác trong lúc chờ
+    if(!r.ok){
+      $("pxName").textContent = "Không xem được hồ sơ";
+      $("pxBody").innerHTML = `<div class="empty">${esc(body.error || "Lỗi không rõ.")}</div>`;
+      return;
+    }
+    pxRender(body);
+  } catch (err) {
+    $("pxBody").innerHTML = `<div class="empty">Lỗi kết nối: ${esc(err.message)}</div>`;
+  }
+}
+
+function pxRender(d){
+  const p = d.patient || {};
+  $("pxName").textContent = p.name || "Bệnh nhân";
+  $("pxSub").textContent = [p.phone, p.birth_year ? `sinh ${p.birth_year}` : null,
+                            `${d.visit_count} lượt đã khám`,
+                            `${d.appointment_count} lịch hẹn với bạn`]
+                            .filter(Boolean).join(" · ");
+  $("pxBody").innerHTML = pxHistoryHTML(d.treatments) + pxRecoHTML(d.recommendations);
+}
+
+function pxHistoryHTML(rows){
+  const body = rows.length
+    ? `<div class="tableScroll"><table>
+         <thead><tr><th>Ngày</th><th>Dịch vụ</th><th>Nha sĩ</th><th>Kết quả</th>
+           <th>Hẹn tái khám</th></tr></thead>
+         <tbody>${rows.map(t => `<tr>
+           <td>${esc(t.date)}</td><td>${esc(t.service_name)}</td><td>${esc(t.doctor)}</td>
+           <td>${esc(OUTCOME_LABEL[t.outcome] || t.outcome || "—")}</td>
+           <td>${esc(t.followup_due_date || "—")}</td></tr>`).join("")}</tbody>
+       </table></div>`
+    : `<div class="empty">Chưa có lượt khám nào được ghi nhận. Ghi kết quả ở tab
+         lịch làm việc để lịch sử này lớn lên.</div>`;
+  return `<div class="pxSection"><h4>Lượt điều trị đã ghi (${rows.length})</h4>${body}</div>`;
+}
+
+function pxRecoHTML(reco){
+  if(!reco) return "";
+  // Nói thẳng ngưỡng ra màn hình: nha sĩ nhìn card cold-start mà không biết vì sao
+  // thì sẽ tưởng engine hỏng, chứ không nghĩ tới việc còn thiếu lượt khám đã ghi.
+  // Đủ 3 lượt mà lịch sử chỉ có MỘT loại dịch vụ thì mọi card đều là card bù:
+  // dịch vụ đã làm bị lọc vì chưa tới chu kỳ, còn đồng xuất hiện chưa có gì để
+  // dựa vào. Không nói ra thì nha sĩ tưởng engine hỏng.
+  const allFiller = reco.items.length && reco.items.every(i => i.is_filler);
+  const note = reco.is_cold_start
+    ? `<div class="coldNote">Chưa đủ 3 lượt điều trị đã ghi nên đây là gợi ý theo
+         dịch vụ phổ biến, chưa cá nhân hoá.${
+           reco.cold_start_note ? " " + esc(reco.cold_start_note) : ""}</div>`
+    : (allFiller
+      ? `<div class="coldNote">Lịch sử của bệnh nhân chưa đủ đa dạng để cá nhân hoá:
+           dịch vụ đã làm thì chưa tới chu kỳ nhắc lại, nên đây vẫn là gợi ý theo
+           dịch vụ phổ biến.</div>`
+      : "");
+  const cards = reco.items.length
+    ? reco.items.map(pxCardHTML).join("")
+    : `<div class="empty">${esc(reco.empty_text || "Chưa có gợi ý nào.")}</div>`;
+  return `<div class="pxSection"><h4>Gợi ý dịch vụ cho bệnh nhân</h4>${note}${cards}</div>`;
+}
+
+function pxCardHTML(item, i){
+  // Card cold-start / card bù không có "% phù hợp": điểm của chúng đến từ độ phổ
+  // biến chung, hiện một con số ở đây sẽ đọc như mức phù hợp cá nhân.
+  const fit = item.fit_percent == null
+    ? `<div class="meta">${item.duration_min} phút · ${priceText(item)}</div>`
+    : `<div class="fit">Phù hợp <b>${item.fit_percent}%</b>
+         <span class="meta">· ${item.duration_min} phút · ${priceText(item)}</span></div>`;
+  return `<div class="rec ${i === 0 && item.fit_percent != null ? "top" : ""}">
+    <div class="recTop">
+      <span class="rank">#${item.rank}</span>
+      <span class="recName">${esc(item.name)}</span>
+      <span class="badge ${esc(item.urgency)}">${esc(URGENCY_LABEL[item.urgency] || item.urgency)}</span>
+    </div>
+    ${fit}
+    <div class="reason">${esc(item.reason_text)}</div>
+  </div>`;
 }
 
 async function refreshStats(){

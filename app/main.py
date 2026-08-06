@@ -114,8 +114,18 @@ def resolve_sid(data=None):
     return sid
 
 
-def _patient_appointments_for_user(user, sid):
-    """Lấy lịch sử đặt lịch của user guest theo session + số điện thoại."""
+def _patient_appointments_for_user(user):
+    """Lịch hẹn của một tài khoản: theo TÀI KHOẢN đã đặt, rồi mới tới SĐT.
+
+    `session` (id trình duyệt) CỐ TÌNH không còn được dùng để nhận lịch. Nó từng
+    kéo vào cả lịch đặt bằng SĐT của người khác trong cùng tab: lịch hiện ra trong
+    danh sách, nhưng trạng thái "đã khám" và lịch sử điều trị lại tra theo
+    patient_id/SĐT nên không bao giờ khớp — lịch kẹt vĩnh viễn ở "Đang chờ khám"
+    mà không có dấu hiệu nào giải thích (đúng ca `SHI-ELBICD`).
+
+    Lịch cũ (trước khi có `booked_by_user_id`) vẫn nhận được qua SĐT — đó là lý do
+    nhánh SĐT còn ở đây, không phải để đoán chủ nhân của lịch mới.
+    """
     all_appts = booking.all_appointments()
     phones = set()
     if user.get("phone"):
@@ -131,9 +141,14 @@ def _patient_appointments_for_user(user, sid):
     seen_codes = set()
     for appt in all_appts:
         code = appt.get("code")
-        by_session = bool(sid) and appt.get("session") == sid
-        by_phone = appt.get("patient_phone") in phones if phones else False
-        if not (by_session or by_phone):
+        booked_by = appt.get("booked_by_user_id")
+        if booked_by:
+            # Lịch đã biết chủ: chỉ chủ của nó mới thấy. SĐT trên lịch không có
+            # quyền nói gì thêm — nếu không, đặt hộ bằng số người khác là người đó
+            # nhìn thấy lịch hẹn mình không đặt.
+            if booked_by != user.get("id"):
+                continue
+        elif not (phones and appt.get("patient_phone") in phones):
             continue
         if code and code in seen_codes:
             continue
@@ -282,16 +297,32 @@ def start():
     """
     data = request.get_json(force=True, silent=True) or {}
     sid = resolve_sid(data)
+    _stamp_session_user(sid)
     service = data.get("service")
     resp = chatbot.start_with_service(sid, service) if service else chatbot.start(sid)
     resp["session"] = sid  # trả về để app native lưu lại
     return jsonify(resp)
 
 
+def _stamp_session_user(sid):
+    """Đóng dấu tài khoản đang đăng nhập lên phiên chat, lấy từ JWT.
+
+    Đóng dấu ở MỌI lượt chứ không chỉ lúc mở phiên: người dùng có thể mở chat lúc
+    chưa đăng nhập rồi đăng nhập giữa chừng, và phiên chat sống lâu hơn một request.
+    Lịch hẹn đặt trong phiên sẽ mang tài khoản này — đó là câu trả lời đáng tin duy
+    nhất cho "lịch của ai", vì ô SĐT là số người dùng tự gõ (đặt hộ được).
+    """
+    user = auth.resolve_user_from_token(request.cookies.get("auth_token"))
+    sess = chatbot.get_session(sid)
+    with sess["_lock"]:
+        sess["_user_id"] = user["id"] if user else None
+
+
 @app.route("/api/chat", methods=["POST"])
 def chat():
     data = request.get_json(force=True, silent=True) or {}
     sid = resolve_sid(data)
+    _stamp_session_user(sid)
     resp = chatbot.handle_message(sid, data.get("message", ""))
     resp["session"] = sid
     return jsonify(resp)
@@ -417,6 +448,16 @@ def api_register():
         return jsonify({"error": "Password phải tối thiểu 6 ký tự"}), 400
 
     try:
+        # SĐT là định danh của LỊCH SỬ ĐIỀU TRỊ (list_treatments gộp theo
+        # patient_id OR patient_phone), nên hai tài khoản cùng SĐT = hai người đăng
+        # nhập cùng đọc được một lịch sử. Đó chính là lỗi quan sát được: đăng ký
+        # tài khoản mới bằng SĐT đã dùng, đăng nhập vào thấy nguyên lịch sử điều
+        # trị của tài khoản trước. Chặn TRƯỚC khi tạo bất cứ thứ gì, nếu không sẽ
+        # để lại tài khoản mồ côi.
+        if phone and storage.get_user_by_phone(phone):
+            return jsonify({"error": "Số điện thoại này đã có tài khoản. "
+                                     "Hãy đăng nhập, hoặc dùng số khác."}), 409
+
         # Tạo patient profile trước (nếu có phone) để lấy patient_id
         patient_id = None
         if phone:
@@ -429,8 +470,14 @@ def api_register():
                 )
                 patient_id = patient["id"]
             except ValueError:
-                # Phone đã tồn tại trong patients — tìm và liên kết sau
-                pass
+                # SĐT đã có HỒ SƠ bệnh nhân ở phòng khám (admin tạo sẵn, hoặc
+                # người này từng đặt lịch trước khi có tài khoản). KHÔNG tự nối:
+                # biết một số điện thoại không chứng minh được mình là chủ số đó,
+                # mà hồ sơ thì kéo theo cả lịch sử điều trị. Việc nối tài khoản
+                # vào hồ sơ có sẵn để phòng khám làm qua trang admin.
+                return jsonify({"error": "Số điện thoại này đã có hồ sơ tại phòng khám. "
+                                         "Vui lòng liên hệ phòng khám để được cấp tài "
+                                         "khoản, hoặc dùng số khác."}), 409
 
         user = auth.create_user_account(
             username=username,
@@ -441,16 +488,6 @@ def api_register():
             address=address if address else None,
             patient_id=patient_id,
         )
-
-        # Nếu phone đã có patient profile từ trước, thử liên kết
-        if phone and not patient_id:
-            existing_user = storage.get_user_by_username(phone)
-            if not existing_user:
-                # Tìm patient theo phone để liên kết
-                patients = storage.list_patients(search=phone)
-                matched = [p for p in patients if p.get("phone") == phone]
-                if matched:
-                    storage.link_user_patient(user["id"], matched[0]["id"])
 
         return jsonify({
             "ok": True,
@@ -491,6 +528,27 @@ def api_me():
     })
 
 
+def _recorded_codes_for(user):
+    """Mã lịch hẹn mà nha sĩ ĐÃ ghi kết quả khám, giới hạn trong dữ liệu user này.
+
+    Không bao giờ gọi `list_treatments()` trần: không tham số nào thì nó trả lịch
+    sử của CẢ phòng khám, và mọi lịch hẹn sẽ hiện "đã khám".
+    """
+    patient_id = user.get("patient_id")
+    phone = user.get("phone")
+    if patient_id:
+        phone = (storage.get_patient_clinical(patient_id) or {}).get("phone") or phone
+    if not patient_id and not phone:
+        return set()
+    try:
+        return {t.get("appointment_code") for t in
+                storage.list_treatments(patient_id=patient_id, patient_phone=phone)
+                if t.get("appointment_code")}
+    except Exception as exc:  # noqa: BLE001 - mất nhãn trạng thái, không được sập trang
+        print(f"[patient] Không đọc được lịch sử điều trị: {exc}")
+        return set()
+
+
 @app.route("/api/patient/appointments", methods=["GET"])
 @require_auth()
 def api_patient_appointments():
@@ -499,9 +557,13 @@ def api_patient_appointments():
     if user.get("role") in {"admin", "doctor"}:
         return jsonify({"error": "API chỉ dành cho patient"}), 403
 
-    sid = session.get("sid")
-    appointments = _patient_appointments_for_user(user, sid)
-    return jsonify({"appointments": appointments, "count": len(appointments)})
+    appointments = _patient_appointments_for_user(user)
+    # "Đã khám" đến từ `treatment_history` (nha sĩ bấm Ghi kết quả), KHÔNG suy từ
+    # ngày: lịch đã qua mà nha sĩ chưa ghi thì bệnh nhân chưa được coi là đã khám —
+    # đó cũng chính là dữ liệu quyết định gợi ý cá nhân hoá.
+    recorded = _recorded_codes_for(user)
+    out = [{**a, "treatment_recorded": a.get("code") in recorded} for a in appointments]
+    return jsonify({"appointments": out, "count": len(out)})
 
 
 @app.route("/api/profile", methods=["PUT"])
@@ -514,6 +576,14 @@ def api_update_profile():
     email = data.get("email", "").strip() or None
     phone = data.get("phone", "").strip() or None
     address = data.get("address", "").strip() or None
+
+    # Cùng lý do với `/api/register`: SĐT là khoá định danh của lịch sử điều trị,
+    # nên đổi SĐT sang số của người khác là đọc được lịch sử của họ. Chặn ở đây
+    # nữa, không thì chốt chặn lúc đăng ký chỉ là cửa trước, còn đây là cửa sau.
+    if phone:
+        chu_so = storage.get_user_by_phone(phone)
+        if chu_so and chu_so["id"] != user["id"]:
+            return jsonify({"error": "Số điện thoại này đã thuộc về tài khoản khác."}), 409
 
     storage.update_user_profile(user["id"], email=email, phone=phone, address=address)
     return jsonify({"ok": True, "message": "Cập nhật thông tin thành công"})

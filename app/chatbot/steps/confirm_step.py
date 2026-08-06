@@ -80,6 +80,9 @@ def finalize_booking(sess):
         time_str=sess["time"],
         patient_name=sess["patient_name"],
         patient_phone=sess["patient_phone"],
+        # Ai ĐANG ĐĂNG NHẬP, không phải ai được gõ vào ô SĐT. main.chat() đóng dấu
+        # vào phiên từ JWT — xem `_user_id` ở app/chatbot/session.py.
+        booked_by_user_id=sess.get("_user_id"),
     )
     if not ok:
         if payload.get("duplicate"):

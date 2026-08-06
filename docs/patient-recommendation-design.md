@@ -273,16 +273,33 @@ khoá này thì **không** bị gợi ý lặp lại.
 Doc gốc v2 nói đầu vào là "lịch sử dịch vụ đã dùng / **hoàn tất**", nhưng
 `appointments` không có trạng thái hoàn tất. Cần đúng hai thứ tối thiểu:
 
-1. **Endpoint nha sĩ đánh dấu hoàn tất** — `POST /api/doctor/treatment`, tạo 1
-   dòng `treatment_history` (outcome, followup_required, followup_due_date). Đây
-   là phần **ngoài AC của SMMG-65/131** nhưng bắt buộc, vì `reason_code`
+1. **Endpoint nha sĩ đánh dấu hoàn tất** — `POST /api/doctor/treatment` ✅ đã làm
+   ([app/doctor_api.py](../app/doctor_api.py), nút "Ghi kết quả" trên **cả** bảng
+   lịch hẹn lẫn lưới lịch làm việc của dashboard nha sĩ). Tạo 1 dòng
+   `treatment_history` (outcome, followup_required, followup_due_date). Đây là
+   phần **ngoài AC của SMMG-65/131** nhưng bắt buộc, vì `reason_code`
    `followup_due` — chính là card 91% trong wireframe — không có nguồn dữ liệu nào
-   khác.
-2. **`scripts/backfill_treatment_history.py`** — suy ra lịch sử từ các lịch hẹn
-   `confirmed` có `date < today`, bỏ qua dòng có `department_code` không còn trong
-   `DEPARTMENTS` (11/13 dòng hiện tại). Cộng với
-   `scripts/seed_reco_demo.py` sinh ~8 bệnh nhân có lịch sử nhiều mốc thời gian
-   để demo và eval có dữ liệu thật.
+   khác. Chỉ ghi được cho lịch hẹn của CHÍNH nha sĩ đó, đang `confirmed`, và đã
+   tới ngày.
+
+   Cho tới khi endpoint này tồn tại, `treatment_history` chỉ được ghi bởi script
+   chạy tay — nghĩa là `visit_count` của bệnh nhân đứng yên ở 0 dù họ đặt lịch bao
+   nhiêu lần, và màn gợi ý cold-start vĩnh viễn. Đó là lỗi đã xảy ra thật trên bản
+   deploy.
+2. **Cửa sổ đặt lịch phải bao gồm HÔM NAY** —
+   `catalog.generate_available_slots()` trả hôm nay (phần khung giờ còn lại) rồi
+   mới tới các ngày sau. Bản đầu bắt đầu từ *ngày mai*, nên mọi lịch đặt qua app
+   đều nằm ở tương lai và endpoint trên luôn từ chối với `chua_toi_ngay`: không
+   lịch nào ghi được kết quả **trong ngày**, `treatment_history` không lớn lên, và
+   luồng đặt lịch → khám → gợi ý cá nhân hoá đứt ngay mắt xích đầu.
+
+**Không dùng script để dựng dữ liệu gợi ý nữa.**
+`scripts/backfill_treatment_history.py` (suy lịch sử từ lịch hẹn `confirmed` đã
+qua) và `scripts/seed_reco_demo.py` (8 hồ sơ demo nhiều mốc thời gian) vẫn còn
+trong repo cho `eval/` và cho dữ liệu cũ, nhưng **không** còn là đường đi để có
+gợi ý: chúng dựng ra một lịch sử không ai khám thật, và che mất đúng cái mắt xích
+cần kiểm chứng. Đường duy nhất từ giờ: bệnh nhân đặt lịch → nha sĩ ghi kết quả
+khám → đủ 3 lượt thì gợi ý rời cold-start.
 
 ---
 
@@ -300,10 +317,30 @@ Theo AC PAT-01 *"Chỉ role Patient truy cập được sau login"* và SEQ 1.x
 - **Nối lịch hẹn cũ về tài khoản:** khi tài khoản patient có `phone` khớp
   `appointments.patient_phone`, coi các lịch hẹn đó là của BN này. Đây là cách
   duy nhất để BN đã từng đặt qua chatbot (không có tài khoản) thấy được lịch sử.
-  Rủi ro: ai đăng ký với SĐT của người khác sẽ thấy lịch sử người đó → **phải**
-  xác thực quyền sở hữu SĐT trước khi nối. Vòng này chưa có SMS/OTP, nên yêu cầu
-  **SĐT + một mã lịch hẹn hợp lệ** (`SHI-XXXXXX`) mới nối. Ghi rõ đây là mức
-  demo-grade, và OTP nằm ở AUTH-01.
+  Rủi ro: ai đăng ký với SĐT của người khác sẽ thấy lịch sử người đó.
+
+  **Tự đăng ký chỉ tạo được BỆNH NHÂN MỚI HOÀN TOÀN.** `list_treatments()` gộp theo
+  `patient_id OR patient_phone`, nên SĐT chính là khoá đọc lịch sử điều trị. Ba
+  chốt, tất cả trả 409:
+
+  1. `POST /api/register` — SĐT đã thuộc một **tài khoản** → *"đã có tài khoản"*.
+  2. `POST /api/register` — SĐT đã có **hồ sơ bệnh nhân** (dù chưa ai đăng nhập
+     bằng nó) → *"đã có hồ sơ tại phòng khám"*. Cố tình **không** tự nối tài khoản
+     vào hồ sơ có sẵn: biết một số điện thoại không chứng minh được mình là chủ số
+     đó, mà hồ sơ thì kéo theo toàn bộ lịch sử điều trị.
+  3. `PUT /api/profile` — đổi SĐT sang số của tài khoản khác. Thiếu chốt này thì
+     (1) và (2) chỉ là cửa trước.
+
+  Lỗi đã xảy ra thật: đăng ký tài khoản thứ hai bằng SĐT cũ, đăng nhập vào thấy
+  nguyên lịch sử điều trị của tài khoản trước (hai tài khoản trỏ chung một
+  `patient_id`).
+
+  **Hệ quả nghiệp vụ:** người đã đặt lịch qua chatbot (nên đã có hồ sơ theo SĐT)
+  **không** tự đăng ký được nữa — phòng khám phải cấp/nối tài khoản cho họ qua trang
+  admin. Đây là đánh đổi có chủ ý: thà thêm một bước thủ công còn hơn để người lạ
+  nhận hồ sơ lâm sàng của người khác. Bỏ được bước thủ công này khi có SMS/OTP
+  (AUTH-01), hoặc mức demo-grade: cho tự nối nếu nhập kèm **một mã lịch hẹn hợp lệ**
+  (`SHI-XXXXXX`) của chính SĐT đó.
 
 Trong `reco/`, mọi hàm nhận `patient_id` (kiểu `TEXT`), không nhận SĐT — SĐT chỉ
 là chi tiết của tầng nối dữ liệu ở §6.4.
@@ -462,6 +499,7 @@ bộ, và ghi chú lệch tiền tố này lên Confluence.
 | `POST` | `/api/patient/recommendations/action` | patient | `{rec_log_id, action, service_code, rank}` — `book`/`dismiss`/`skip_all`/`view_detail` |
 | `POST` | `/api/patient/recommendations/reset` | patient | Xoá `dismissed_service_codes` |
 | `POST` | `/api/doctor/treatment` | doctor | Đánh dấu hoàn tất điều trị (§6.4) |
+| `GET` | `/api/doctor/patient?phone=` | doctor | Hồ sơ + lịch sử điều trị + gợi ý (`trigger=dentist_view`). Chỉ xem được bệnh nhân đã từng có lịch hẹn với chính nha sĩ đó |
 
 `GET /api/patient/recommendations` trả **luôn** phần chi tiết (`reason_detail`,
 `duration_min`, `price_from/to`, bác sĩ phụ trách) để REC-02 mở modal không cần
@@ -657,10 +695,19 @@ Tài khoản bệnh nhân nằm ở `users`, mà bảng đó **không có JSON-m
 
 ```bash
 .venv/bin/python -c "from app.core import storage; storage.init_schema()"  # tạo bảng + role
-.venv/bin/python scripts/backfill_treatment_history.py                     # lịch sử từ lịch hẹn cũ
-.venv/bin/python scripts/seed_reco_demo.py                                 # 8 hồ sơ demo + tài khoản
-PORT=5001 .venv/bin/python -m app.main                                     # login bn101 / test123
+.venv/bin/python scripts/seed_users.py                                     # admin + nha sĩ + BN mẫu
+PORT=5001 .venv/bin/python -m app.main
 ```
+
+Lịch sử điều trị thì **đi qua luồng thật**, không seed:
+
+1. Bệnh nhân đặt 3 lịch với cùng một nha sĩ (widget chatbot ở `/`). Hôm nay đặt
+   được nên cả 3 lịch có thể rơi vào trong ngày.
+2. Nha sĩ đăng nhập `/doctor` → tab **Lịch làm việc trong ngày** → mỗi slot bấm
+   **Ghi kết quả**.
+3. Bấm tên bệnh nhân (ở lưới lịch hoặc bảng lịch hẹn) → hồ sơ bệnh nhân phía nha
+   sĩ: lịch sử điều trị + gợi ý (`trigger=dentist_view`). Đủ 3 lượt thì dải
+   cold-start biến mất và các card có "% phù hợp".
 
 ---
 

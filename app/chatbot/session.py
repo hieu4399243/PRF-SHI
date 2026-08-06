@@ -41,6 +41,11 @@ def new_session(reuse_lock=None):
         "cancel_phone": "",  # SĐT dùng khi tra cứu để hủy lịch
         "cancel_code": None,  # mã lịch hẹn đang chờ xác nhận hủy
         "resume_booking": False,  # hủy lịch trùng xong thì đặt tiếp lịch đang dở
+        # Tài khoản đang đăng nhập, do tầng HTTP đóng dấu từ JWT mỗi lượt (xem
+        # main.chat/start). Lịch hẹn đặt trong phiên này sẽ mang đúng tài khoản đó
+        # -> ca khám về đúng bệnh án, kể cả khi người dùng gõ SĐT của người khác.
+        # KHÔNG reset bởi "làm lại": đăng nhập không mất đi khi hội thoại bắt đầu lại.
+        "_user_id": None,
         "_last_seen": time.time(),  # không phải dữ liệu nghiệp vụ, chỉ dùng cho eviction
         # _lock KHÔNG serialize được (threading.Lock) — nếu sau này chuyển SESSIONS
         # sang Redis/DB, phải loại bỏ field này khỏi payload lưu trữ, tái tạo Lock khi đọc lại.
@@ -64,6 +69,9 @@ def reset_in_place(sess, reuse_lock):
     những thay đổi đó biến mất (không bao giờ được ghi vào bản mà các request
     sau đọc). Reset tại chỗ tránh được lớp bug "mất trạng thái hội thoại" này."""
     fresh = new_session(reuse_lock=reuse_lock)
+    # "Làm lại" xoá hội thoại, KHÔNG xoá phiên đăng nhập: mất `_user_id` là lịch
+    # đặt sau đó thành lịch của khách, và ca khám không về được bệnh án nào.
+    fresh["_user_id"] = sess.get("_user_id")
     sess.clear()
     sess.update(fresh)
     return sess

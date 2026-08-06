@@ -4,6 +4,8 @@ Bug gốc: đang ở bước chọn bác sĩ, gõ bất cứ thứ gì khác id 
 "Bạn chọn giúp mình một bác sĩ ở các nút bên trên nhé."
 """
 
+from datetime import date, timedelta
+
 import pytest
 
 from app import chatbot, triage
@@ -58,15 +60,22 @@ def _den_buoc_chon_ngay(sid):
 
 
 def test_chon_ngay_bang_ngon_ngu_tu_nhien(sid):
+    """'mai' phải ra đúng NGÀY MAI. Hôm nay cũng đặt được (xem
+    `catalog.generate_available_slots`) nên `get_available_dates()[0]` là hôm nay —
+    so với phần tử đầu là test tự nói dối."""
     _den_buoc_chon_ngay(sid)
     resp = chatbot.handle_message(sid, "mai")
     assert resp["state"] == "PICK_TIME"
-    assert chatbot.get_session(sid)["date"] == booking.get_available_dates()[0]
+    assert chatbot.get_session(sid)["date"] == (date.today() + timedelta(days=1)).isoformat()
 
 
 def test_chon_gio_bang_9h(sid):
+    """Khung của HÔM NAY chỉ còn phần chưa trôi qua, nên chọn ngày còn đủ 09:00
+    thay vì 'sớm nhất' — nếu không, test đúng/sai tùy giờ chạy."""
     _den_buoc_chon_ngay(sid)
-    chatbot.handle_message(sid, "sớm nhất")
+    ngay = next(d for d in booking.get_available_dates()
+                if "09:00" in booking.get_available_times(d))
+    chatbot.handle_message(sid, ngay)
     resp = chatbot.handle_message(sid, "9h")
     assert resp["state"] == "ASK_NAME"
     assert chatbot.get_session(sid)["time"] == "09:00"
@@ -95,11 +104,15 @@ def test_hoi_thong_tin_dich_vu_giua_luc_dat_lich(sid):
 
 
 def test_parser_ngay_giu_dau_gach_cheo():
-    """_normalize() xóa dấu câu -> '20/7' từng bị hiểu thành '20 7' và parse hỏng."""
+    """_normalize() xóa dấu câu -> '20/7' từng bị hiểu thành '20 7' và parse hỏng.
+
+    Ngày thử lấy từ chính cửa sổ đặt lịch. Bản cũ dò ngày mùng 20 nên chỉ chạy được
+    vào vài ngày trong tháng, còn lại là StopIteration."""
     dates = booking.get_available_dates()
-    target = next(d for d in dates if d.endswith("-20"))
-    assert nlu.match_date("20/7", dates) == target
-    assert nlu.match_time("9:30", booking.get_available_times(dates[0])) == "09:30"
+    target = dates[-1]
+    d = date.fromisoformat(target)
+    assert nlu.match_date(f"{d.day}/{d.month}", dates) == target
+    assert nlu.match_time("9:30", booking.get_available_times(target)) == "09:30"
 
 
 def test_ten_bac_si_mo_ho_thi_khong_doan_bua():

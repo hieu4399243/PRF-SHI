@@ -43,16 +43,18 @@ Hướng dẫn đầy đủ (Docker Compose, biến môi trường, production, 
 Mở `http://127.0.0.1:5001` — đó là **portal bệnh nhân**. Khách chưa đăng nhập vẫn
 xem được gợi ý (dịch vụ phổ biến) và vẫn đặt được lịch qua ô chat góc phải.
 
-Đăng nhập ở `/login` để thấy gợi ý cá nhân hoá (mật khẩu tất cả: `test123`):
+Đăng nhập ở `/login` (mật khẩu tất cả: `test123`) — `scripts/seed_users.py` tạo
+`admin`, 11 tài khoản nha sĩ (`bs_sr_01`, …) và vài bệnh nhân mẫu.
 
-| User | Xem được gì |
-|------|-------------|
-| `bn101` | quá hạn tái khám → `followup_due` |
-| `bn103` | vừa nội nha → `care_pathway` gợi ý phục hình |
-| `bn104` | `similar_patients` (đồng xuất hiện) |
-| `bn107` | **cold-start** — không hiện %, chỉ thời lượng + giá |
-| `bn108` | trẻ em → chỉ gợi ý nha khoa trẻ em |
-| `admin` / `bs_sr_01` | tự chuyển sang trang admin / nha sĩ |
+**Gợi ý cá nhân hoá không seed sẵn — phải đi qua luồng thật**, vì `visit_count`
+chỉ tăng khi nha sĩ ghi nhận một lượt khám đã hoàn tất:
+
+1. Đặt **3 lịch hẹn** cho cùng một bệnh nhân với cùng một nha sĩ qua ô chat. Hôm
+   nay nằm trong cửa sổ đặt lịch nên cả 3 có thể rơi vào trong ngày.
+2. Đăng nhập tài khoản nha sĩ đó ở `/doctor` → tab **Lịch làm việc trong ngày** →
+   mỗi slot bấm **Ghi kết quả**.
+3. Bấm **tên bệnh nhân** → hồ sơ phía nha sĩ: lịch sử điều trị + gợi ý. Đủ 3 lượt
+   thì dải cold-start biến mất và card hiện "% phù hợp".
 
 Cơ chế gợi ý (6 luật, noisy-OR, bộ lọc an toàn):
 **[docs/patient-recommendation-design.md](docs/patient-recommendation-design.md)**.

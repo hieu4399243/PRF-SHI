@@ -124,3 +124,36 @@ def test_dich_vu_dinh_ky_co_chu_ky_hop_ly():
     for code in ("kham_tong_quat", "nha_chu", "tham_my", "nha_nhi"):
         cycle = catalog.service_meta(code)["recurring_months"]
         assert cycle and 1 <= cycle <= 24, code
+
+
+# ---------------------------------------------------------------------------
+# generate_available_slots — mắt xích đầu của luồng đặt lịch -> khám -> gợi ý
+# ---------------------------------------------------------------------------
+from datetime import datetime  # noqa: E402
+
+
+def test_hom_nay_dat_duoc_lich():
+    """Nha sĩ chỉ ghi được kết quả cho lịch hẹn ĐÃ TỚI NGÀY. Nếu ngày sớm nhất đặt
+    được là ngày mai thì không lịch nào ghi được kết quả trong ngày, và
+    `treatment_history` không bao giờ lớn lên -> gợi ý kẹt ở cold-start."""
+    # 2026-08-06 là thứ Năm, 07:00 là trước giờ làm -> còn nguyên khung.
+    slots = catalog.generate_available_slots(now=datetime(2026, 8, 6, 7, 0))
+    assert list(slots)[0] == "2026-08-06"
+    assert slots["2026-08-06"] == catalog.WORK_SLOTS
+
+
+def test_khung_gio_da_troi_qua_khong_dat_duoc():
+    """Đặt lịch vào quá khứ vẫn phải chặn — chỉ mở phần CÒN LẠI của hôm nay."""
+    slots = catalog.generate_available_slots(now=datetime(2026, 8, 6, 14, 15))
+    assert slots["2026-08-06"] == ["14:30", "15:00", "15:30", "16:00"]
+
+
+def test_het_gio_lam_thi_hom_nay_bien_mat():
+    slots = catalog.generate_available_slots(now=datetime(2026, 8, 6, 20, 0))
+    assert "2026-08-06" not in slots
+    assert list(slots)[0] == "2026-08-07"
+
+
+def test_chu_nhat_khong_co_khung_gio():
+    slots = catalog.generate_available_slots(now=datetime(2026, 8, 9, 7, 0))
+    assert "2026-08-09" not in slots

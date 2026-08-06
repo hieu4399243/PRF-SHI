@@ -173,7 +173,9 @@ def test_buoc_chon_ngay_gio_khong_dung_llm(llm_on):
     chatbot.handle_message("sched", "tôi bị sâu răng")
     chatbot.handle_message("sched", "yes")
     chatbot.handle_message("sched", "ai cũng được")   # -> PICK_DATE
-    resp = chatbot.handle_message("sched", "hôm nay trời đẹp nhỉ")
+    # KHÔNG dùng "hôm nay ...": hôm nay đã là một ngày đặt được (xem
+    # `catalog.generate_available_slots`) nên bộ luật sẽ nhận ra ngày thật.
+    resp = chatbot.handle_message("sched", "trời đẹp nhỉ")
     assert "chưa nhận ra ngày" in resp["reply"]
     assert not llm_on
 
